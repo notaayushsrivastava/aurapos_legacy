@@ -1,10 +1,12 @@
-from flask import Flask, jsonify, request, render_template, flash, redirect, url_for
+from flask import Flask, jsonify, request, render_template, flash, redirect, url_for, session
 import razorpay
 from uuid import uuid4
+from backend import *
 
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
+authRepo = AuthorizationRepository()
 
 rzp_client = razorpay.Client(
     auth=("rzp_test_SxU2RG4SoMaOcI", "nYTCHgr6NQy1b5X0VDEXcELO")
@@ -12,7 +14,7 @@ rzp_client = razorpay.Client(
 
 @app.route('/', methods=['GET'])
 def index():
-    return render_template('base.html')
+    return render_template('intro/about.html')
 
 @app.route('/services')
 def services():
@@ -20,20 +22,68 @@ def services():
 
 @app.route('/billing')
 def billing():
-    return
+    return render_template('service/billing.html')
+
+@app.route('/billing-data')
+def billing_data():
+    return {
+        "services": [
+            {
+                "id": 1,
+                "name": "Hair Cut",
+                "price": 250
+            },
+            {
+                "id": 2,
+                "name": "Hair Spa",
+                "price": 900
+            }
+        ],
+        "staff": [
+            {
+                "id": 1,
+                "name": "Rahul"
+            },
+            {
+                "id": 2,
+                "name": "Priya"
+            }
+        ],
+        "customers": [
+            {
+                "id": 1,
+                "name": "John Doe",
+                "phone": "9876543210"
+            }
+        ]
+    }
 
 @app.route('/contact')
 def contact():
     return
 
+@app.route('/privacy')
+def privacy_policy():
+    return render_template('intro/privacy.html')
+
 @app.route('/register')
 def register():
     return render_template('service/register.html', razorpay_key_id='rzp_test_SxU2RG4SoMaOcI')
 
+@app.route('/dashboard')
+def dashboard():
+    return render_template('service/dashboard.html')
+
+
+
 
 @app.post("/verify-subscription")
 def verify_subscription():
-    data = request.get_json()
+    data = request.get_json()["payment"]
+    account_data = request.get_json()["formData"]
+    conn = get_db()
+    cur = conn.cursor()
+    
 
     try:
         # Verify Razorpay signature
@@ -56,42 +106,34 @@ def verify_subscription():
     #   - selected plan (monthly/yearly)
     #   - pending user information
     # ------------------------------------------------------------------
-    """
-    order = PendingOrder.query.filter_by(
-        razorpay_order_id=data["razorpay_order_id"]
-    ).first()
-
-    if order is None:
-        return jsonify({
-            "success": False,
-            "message": "Unknown order."
-        }), 404
-
-    # Calculate expiry
-    if order.plan == "monthly":
-        expires_at = datetime.utcnow() + timedelta(days=30)
-    else:
-        expires_at = datetime.utcnow() + timedelta(days=365)
-
-    # Create/activate account
-    user = User(
-        salon_name=order.salon_name,
-        owner_name=order.owner_name,
-        email=order.email,
-        username=order.username,
-        subscription_type=order.plan,
-        subscription_started=datetime.utcnow(),
-        subscription_expires=expires_at,
-        razorpay_payment_id=data["razorpay_payment_id"],
-        razorpay_order_id=data["razorpay_order_id"],
+    pendingOrder = cur.execute(
+        "SELECT * FROM pendingorders WHERE id = ?", (data["razorpay_order_id"],)
+    ).fetchone()
+    cur.execute(
+        "INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?, ?, ?)", (pendingOrder[0],pendingOrder[1],pendingOrder[2],pendingOrder[3],pendingOrder[4],pendingOrder[5],pendingOrder[6],)
+    )
+    cur.execute(
+        "DELETE FROM pendingorders WHERE id = ?", (pendingOrder[0],)
     )
 
-    db.session.add(user)
+    accid = cur.execute(
+        "INSERT INTO salons(name, phone, salon_name, email, created_on, plan, expires_on) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            account_data["owner_name"].capitalize(),
+            account_data["phone"], account_data["salon_name"],
+            account_data["email"], int(datetime.now().timestamp()),
+            account_data["plan"], int(datetime.now().timestamp())+Time.month if account_data["plan"]=="monthly" else int(datetime.now().timestamp())+12*Time.month,
+        )
+    ).lastrowid
 
-    # Remove pending order
-    db.session.delete(order)
+    cur.execute(
+        """INSERT INTO accounts(auth_id, username, password) VALUES (?, ?, ?) """,
+        (accid, account_data["email"], account_data["password"],)
+    )
+        
+    conn.close()
 
-    db.session.commit()"""
+
 
     return jsonify({
         "success": True,
@@ -120,6 +162,17 @@ def create_subscription():
         "payment_capture": 1
     })
 
+    conn = get_db()
+
+    cur = conn.cursor()
+
+    cur.execute(
+        """INSERT INTO pendingorders(id, amount, created_at, plan, receipt, email, phone) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (order["id"], order["amount"], order["created_at"], data["plan"], receipt ,data["email"], data["phone"])
+    )
+
+    conn.close()
+
     return jsonify(order)
 
 @app.route('/home')
@@ -132,9 +185,13 @@ def login():
         username = request.form["username"]
         password = request.form["password"]
 
-        # Authenticate here...
-        if username == "admin" and password == "password":
-            return redirect(url_for("home"))
+        logged_in_acc = authRepo.login(username, password)
+
+        if logged_in_acc:
+            session["id"] = logged_in_acc.auth_id
+            session["auth_level"] = logged_in_acc.auth_level
+
+            return redirect(url_for('dashboard'))
 
         flash("Invalid username or password.", "error")
 
@@ -142,4 +199,4 @@ def login():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')

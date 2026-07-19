@@ -1,0 +1,591 @@
+{% extends 'base.html' %}
+
+{% block title %}Billing - Salon Billing Software{% endblock %}
+
+{% block content %}
+<div class="space-y-8" id="billing-page-container">
+    <!-- Page Header & Customer Lookup -->
+    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-6 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Create New Invoice</h1>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Search or register a customer to begin adding services.</p>
+        </div>
+        
+        <!-- Customer Details Area -->
+        <div class="w-full lg:w-[28rem] space-y-3">
+            <div>
+                <label for="customer-phone" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Customer Phone Number
+                </label>
+                <div class="relative flex rounded-xl shadow-sm">
+                    <input 
+                        type="tel" 
+                        id="customer-phone" 
+                        placeholder="Enter 10-digit number..." 
+                        maxlength="10"
+                        class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 pr-12 text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 sm:text-sm transition"
+                    />
+                    <button class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-pink-500 transition">
+                        🔍
+                    </button>
+                </div>
+                <div id="customer-status-banner" class="mt-2 hidden text-xs font-medium px-2 py-1 rounded">
+                    <!-- Text updated via JS -->
+                </div>
+            </div>
+
+            <!-- New Customer Fields (Hidden by default) -->
+            <div id="new-customer-fields" class="hidden grid-cols-2 gap-3 pt-2">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Full Name</label>
+                    <input type="text" id="new-cust-name" placeholder="e.g. Jane Doe" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 sm:text-sm transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Gender</label>
+                    <select id="new-cust-gender" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 sm:text-sm transition">
+                        <option value="">Select...</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workspace Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Service Items Selection -->
+        <div class="lg:col-span-8 space-y-6">
+            
+            <!-- Filters & Search -->
+            <div class="flex flex-col sm:flex-row justify-between gap-4 items-center bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <!-- Categories -->
+                <div class="flex gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0 hide-scrollbar" id="category-filters">
+                    <button data-cat="all" class="cat-btn px-4 py-1.5 rounded-full text-xs font-medium bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 transition shadow-sm">All</button>
+                    <button data-cat="hair" class="cat-btn px-4 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 transition">Hair</button>
+                    <button data-cat="nails" class="cat-btn px-4 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 transition">Nails</button>
+                    <button data-cat="spa" class="cat-btn px-4 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 transition">Spa</button>
+                </div>
+                
+                <!-- Search -->
+                <div class="relative w-full sm:w-64">
+                    <input type="text" id="service-search" placeholder="Search services..." class="block w-full rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-2 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition">
+                </div>
+            </div>
+
+            <!-- SKELETON CARDS LAYER -->
+            <div id="services-skeleton-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for i in range(4) %}
+                <div class="animate-pulse border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-50/50 dark:bg-slate-900/50 space-y-4">
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-2 w-2/3">
+                            <div class="h-5 bg-slate-300 dark:bg-slate-700 rounded w-5/6"></div>
+                            <div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/3"></div>
+                        </div>
+                        <div class="h-6 bg-slate-300 dark:bg-slate-700 rounded w-16"></div>
+                    </div>
+                    <div class="space-y-3 pt-2">
+                        <div class="h-9 bg-slate-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                        <div class="h-9 bg-slate-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- ACTUAL SERVICES CARD CONTAINER (Hidden initially) -->
+            <div id="services-actual-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                
+                <!-- Card 1 -->
+                <div class="service-card border border-slate-200 dark:border-slate-800 hover:border-pink-500/30 rounded-2xl p-5 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between transition-all group" data-category="hair" data-name="haircut & styling">
+                    <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <h3 class="font-semibold text-lg text-slate-800 dark:text-slate-100 group-hover:text-pink-500 transition">Haircut & Styling</h3>
+                            <span class="text-lg font-bold text-slate-900 dark:text-white">$45.00</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Category: Hair • Duration: ~45 mins</p>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        <div>
+                            <select class="staff-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="">Assign Stylist...</option>
+                                <option value="1">Alex Morgan</option>
+                                <option value="2">Jordan Lee</option>
+                            </select>
+                        </div>
+                        <div>
+                            <select class="discount-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="0">No Discount</option>
+                                <option value="pct-10">10% Off</option>
+                                <option value="flat-15">$15 Off Flat</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="add-to-bill-btn mt-4 w-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 hover:bg-pink-500 dark:hover:bg-pink-500 hover:text-white dark:hover:text-white font-medium text-xs py-2.5 rounded-xl transition shadow-sm" data-id="srv-01" data-title="Haircut & Styling" data-price="45">
+                        + Add to Bill
+                    </button>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="service-card border border-slate-200 dark:border-slate-800 hover:border-pink-500/30 rounded-2xl p-5 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between transition-all group" data-category="nails" data-name="gel manicure">
+                    <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <h3 class="font-semibold text-lg text-slate-800 dark:text-slate-100 group-hover:text-pink-500 transition">Gel Manicure</h3>
+                            <span class="text-lg font-bold text-slate-900 dark:text-white">$30.00</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Category: Nails • Duration: ~30 mins</p>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        <div>
+                            <select class="staff-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="">Assign Tech...</option>
+                                <option value="3">Taylor Smith</option>
+                                <option value="4">Casey Jones</option>
+                            </select>
+                        </div>
+                        <div>
+                            <select class="discount-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="0">No Discount</option>
+                                <option value="pct-5">5% Off</option>
+                                <option value="flat-5">$5 Off Flat</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="add-to-bill-btn mt-4 w-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 hover:bg-pink-500 dark:hover:bg-pink-500 hover:text-white dark:hover:text-white font-medium text-xs py-2.5 rounded-xl transition shadow-sm" data-id="srv-02" data-title="Gel Manicure" data-price="30">
+                        + Add to Bill
+                    </button>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="service-card border border-slate-200 dark:border-slate-800 hover:border-pink-500/30 rounded-2xl p-5 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between transition-all group" data-category="spa" data-name="deep tissue massage">
+                    <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <h3 class="font-semibold text-lg text-slate-800 dark:text-slate-100 group-hover:text-pink-500 transition">Deep Tissue Massage</h3>
+                            <span class="text-lg font-bold text-slate-900 dark:text-white">$85.00</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Category: Spa • Duration: ~60 mins</p>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        <div>
+                            <select class="staff-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="">Assign Therapist...</option>
+                                <option value="5">Riley Brooks</option>
+                            </select>
+                        </div>
+                        <div>
+                            <select class="discount-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="0">No Discount</option>
+                                <option value="pct-20">20% Off</option>
+                                <option value="flat-10">$10 Off Flat</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="add-to-bill-btn mt-4 w-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 hover:bg-pink-500 dark:hover:bg-pink-500 hover:text-white dark:hover:text-white font-medium text-xs py-2.5 rounded-xl transition shadow-sm" data-id="srv-03" data-title="Deep Tissue Massage" data-price="85">
+                        + Add to Bill
+                    </button>
+                </div>
+                
+                <!-- Card 4 -->
+                <div class="service-card border border-slate-200 dark:border-slate-800 hover:border-pink-500/30 rounded-2xl p-5 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between transition-all group" data-category="hair" data-name="hair coloring">
+                    <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <h3 class="font-semibold text-lg text-slate-800 dark:text-slate-100 group-hover:text-pink-500 transition">Hair Coloring</h3>
+                            <span class="text-lg font-bold text-slate-900 dark:text-white">$120.00</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Category: Hair • Duration: ~90 mins</p>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        <div>
+                            <select class="staff-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="">Assign Stylist...</option>
+                                <option value="1">Alex Morgan</option>
+                                <option value="2">Jordan Lee</option>
+                            </select>
+                        </div>
+                        <div>
+                            <select class="discount-select w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                                <option value="0">No Discount</option>
+                                <option value="pct-15">15% Off</option>
+                                <option value="flat-20">$20 Off Flat</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="add-to-bill-btn mt-4 w-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 hover:bg-pink-500 dark:hover:bg-pink-500 hover:text-white dark:hover:text-white font-medium text-xs py-2.5 rounded-xl transition shadow-sm" data-id="srv-04" data-title="Hair Coloring" data-price="120">
+                        + Add to Bill
+                    </button>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- Right Column: Checkout & Summary Overview -->
+        <div class="lg:col-span-4 space-y-6">
+            <h2 class="text-xl font-bold text-slate-900 dark:text-white">Invoice Summary</h2>
+            
+            <div class="border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 p-5 space-y-4 shadow-sm">
+                
+                <!-- Cart list entries dynamically dropped here -->
+                <div id="cart-container" class="max-h-64 overflow-y-auto space-y-3 pr-2 hide-scrollbar">
+                    <div id="cart-empty-state" class="text-center py-8 space-y-2">
+                        <span class="text-3xl block">🛒</span>
+                        <p class="text-sm text-slate-400 font-medium">No items added to the ticket yet.</p>
+                    </div>
+                    <!-- Cart items will be injected here -->
+                </div>
+
+                <!-- Live calculations table -->
+                <div class="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4 space-y-2.5 text-sm">
+                    <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                        <span>Subtotal</span>
+                        <span id="summary-subtotal">$0.00</span>
+                    </div>
+                    <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                        <span>Discounts Deducted</span>
+                        <span id="summary-discount" class="text-emerald-500">-$0.00</span>
+                    </div>
+                    <div class="flex justify-between text-slate-500 dark:text-slate-400">
+                        <span>Estimated Tax (8%)</span>
+                        <span id="summary-tax">$0.00</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-base text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <span>Grand Total</span>
+                        <span id="summary-total">$0.00</span>
+                    </div>
+                </div>
+
+                <!-- Payment Processing Method Selector -->
+                <div class="pt-2">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                        Payment Mode
+                    </label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 block transition">
+                            <input type="radio" name="payment_method" value="cash" class="sr-only peer payment-radio" checked>
+                            <span class="text-xs font-medium block text-slate-600 dark:text-slate-400 peer-checked:text-pink-500">💵 Cash</span>
+                        </label>
+                        <label class="border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 block transition">
+                            <input type="radio" name="payment_method" value="card" class="sr-only peer payment-radio">
+                            <span class="text-xs font-medium block text-slate-600 dark:text-slate-400 peer-checked:text-pink-500">💳 Card</span>
+                        </label>
+                        <label class="border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 block transition">
+                            <input type="radio" name="payment_method" value="upi" class="sr-only peer payment-radio">
+                            <span class="text-xs font-medium block text-slate-600 dark:text-slate-400 peer-checked:text-pink-500">📱 UPI</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Final Actions -->
+                <button id="complete-checkout-btn" class="w-full bg-gradient-to-r from-pink-500 to-violet-500 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-pink-500/20 hover:opacity-95 transition text-center text-sm tracking-wide">
+                    Complete Checkout & Print
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Custom CSS for hiding scrollbars neatly -->
+<style>
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
+
+<!-- JavaScript Integration Framework -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // --- STATE MANAGEMENT ---
+    const checkoutState = {
+        customer: {
+            is_new: false,
+            phone: "",
+            name: "",
+            gender: ""
+        },
+        items: [], // Array of { id, title, price, staff_id, staff_name, discount_code, discount_val, final_price }
+        summary: {
+            subtotal: 0,
+            discount_total: 0,
+            tax: 0,
+            total: 0
+        },
+        payment_method: "cash"
+    };
+
+    // --- DOM ELEMENTS ---
+    const phoneInput = document.getElementById("customer-phone");
+    const banner = document.getElementById("customer-status-banner");
+    const newCustomerFields = document.getElementById("new-customer-fields");
+    
+    const searchInput = document.getElementById("service-search");
+    const categoryBtns = document.querySelectorAll(".cat-btn");
+    const serviceCards = document.querySelectorAll(".service-card");
+
+    const cartContainer = document.getElementById("cart-container");
+    const emptyState = document.getElementById("cart-empty-state");
+    
+    // --- 1. SIMULATE BACKEND LOADING ---
+    setTimeout(() => {
+        document.getElementById("services-skeleton-grid").classList.add("hidden");
+        document.getElementById("services-actual-grid").classList.remove("hidden");
+    }, 800);
+
+    // --- 2. CUSTOMER LOOKUP LOGIC ---
+    phoneInput.addEventListener("input", function(e) {
+        let val = e.target.value.replace(/\D/g, '');
+        checkoutState.customer.phone = val;
+
+        if (val.length === 10) {
+            banner.classList.remove("hidden");
+            banner.className = "mt-2 text-xs font-medium px-2 py-1 rounded bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
+            banner.innerText = "⏳ Looking up profile...";
+            
+            // Mock API Delay
+            setTimeout(() => {
+                // If it ends in 5 or 0, treat as NEW customer for demo purposes
+                if (val.endsWith("5") || val.endsWith("0")) {
+                    checkoutState.customer.is_new = true;
+                    banner.className = "mt-2 text-xs font-medium px-2 py-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400";
+                    banner.innerText = "✨ New Client! Please enter details.";
+                    newCustomerFields.classList.remove("hidden");
+                    newCustomerFields.classList.add("grid");
+                } else {
+                    checkoutState.customer.is_new = false;
+                    checkoutState.customer.name = "Sarah Jenkins"; 
+                    banner.className = "mt-2 text-xs font-medium px-2 py-1 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+                    banner.innerText = "✅ Customer Found: Sarah Jenkins (Tier: VIP)";
+                    newCustomerFields.classList.add("hidden");
+                    newCustomerFields.classList.remove("grid");
+                }
+            }, 500);
+        } else {
+            banner.classList.add("hidden");
+            newCustomerFields.classList.add("hidden");
+            newCustomerFields.classList.remove("grid");
+            checkoutState.customer.is_new = false;
+        }
+    });
+
+    // --- 3. FILTER & SEARCH LOGIC ---
+    let currentCategory = "all";
+    let searchQuery = "";
+
+    function filterServices() {
+        serviceCards.forEach(card => {
+            const matchesCat = (currentCategory === "all" || card.dataset.category === currentCategory);
+            const matchesSearch = card.dataset.name.includes(searchQuery);
+            if (matchesCat && matchesSearch) {
+                card.classList.remove("hidden");
+                card.classList.add("flex");
+            } else {
+                card.classList.add("hidden");
+                card.classList.remove("flex");
+            }
+        });
+    }
+
+    categoryBtns.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            // Reset active styles
+            categoryBtns.forEach(b => {
+                b.classList.remove("bg-slate-800", "text-white", "dark:bg-slate-100", "dark:text-slate-900");
+                b.classList.add("bg-slate-100", "text-slate-600", "dark:bg-slate-800", "dark:text-slate-400");
+            });
+            // Apply active styles to clicked
+            const target = e.target;
+            target.classList.remove("bg-slate-100", "text-slate-600", "dark:bg-slate-800", "dark:text-slate-400");
+            target.classList.add("bg-slate-800", "text-white", "dark:bg-slate-100", "dark:text-slate-900");
+            
+            currentCategory = target.dataset.cat;
+            filterServices();
+        });
+    });
+
+    searchInput.addEventListener("input", (e) => {
+        searchQuery = e.target.value.toLowerCase();
+        filterServices();
+    });
+
+    // --- 4. CART & SUMMARY LOGIC ---
+    function updateSummary() {
+        let subtotal = 0;
+        let discountTotal = 0;
+
+        checkoutState.items.forEach(item => {
+            subtotal += item.price;
+            let itemDiscount = 0;
+            
+            // Calculate specific item discount
+            if (item.discount_code.startsWith("pct-")) {
+                let pct = parseFloat(item.discount_code.split("-")[1]);
+                itemDiscount = item.price * (pct / 100);
+            } else if (item.discount_code.startsWith("flat-")) {
+                itemDiscount = parseFloat(item.discount_code.split("-")[1]);
+            }
+            
+            discountTotal += itemDiscount;
+            item.final_price = item.price - itemDiscount; 
+        });
+
+        const taxRate = 0.08; // 8% tax
+        const subAfterDiscount = subtotal - discountTotal;
+        const tax = subAfterDiscount > 0 ? subAfterDiscount * taxRate : 0;
+        const total = subAfterDiscount > 0 ? subAfterDiscount + tax : 0;
+
+        checkoutState.summary.subtotal = subtotal;
+        checkoutState.summary.discount_total = discountTotal;
+        checkoutState.summary.tax = tax;
+        checkoutState.summary.total = total;
+
+        // Update DOM
+        document.getElementById("summary-subtotal").innerText = `$${subtotal.toFixed(2)}`;
+        document.getElementById("summary-discount").innerText = `-$${discountTotal.toFixed(2)}`;
+        document.getElementById("summary-tax").innerText = `$${tax.toFixed(2)}`;
+        document.getElementById("summary-total").innerText = `$${total.toFixed(2)}`;
+    }
+
+    function renderCart() {
+        // Clear current items (keep empty state hidden or shown)
+        const existingItems = cartContainer.querySelectorAll('.cart-item');
+        existingItems.forEach(el => el.remove());
+
+        if (checkoutState.items.length === 0) {
+            emptyState.classList.remove("hidden");
+        } else {
+            emptyState.classList.add("hidden");
+            
+            checkoutState.items.forEach((item, index) => {
+                const itemDiv = document.createElement("div");
+                itemDiv.className = "cart-item flex justify-between items-start bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800";
+                
+                let discountBadge = item.discount_code !== "0" 
+                    ? `<span class="inline-block mt-1 text-[10px] bg-pink-100 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400 px-1.5 py-0.5 rounded font-medium">Discount Applied</span>` 
+                    : "";
+
+                itemDiv.innerHTML = `
+                    <div class="pr-2">
+                        <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">${item.title}</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">By: ${item.staff_name || 'Unassigned'}</p>
+                        ${discountBadge}
+                    </div>
+                    <div class="flex flex-col items-end gap-2">
+                        <span class="text-sm font-bold text-slate-900 dark:text-white">$${item.price.toFixed(2)}</span>
+                        <button class="text-slate-400 hover:text-red-500 transition remove-btn" data-index="${index}" title="Remove">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                `;
+                cartContainer.appendChild(itemDiv);
+            });
+        }
+        
+        // Attach remove events
+        document.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.dataset.index);
+                checkoutState.items.splice(idx, 1);
+                renderCart();
+                updateSummary();
+            });
+        });
+    }
+
+    // --- 5. ADD TO BILL ACTION ---
+    document.querySelectorAll(".add-to-bill-btn").forEach(btn => {
+        btn.addEventListener("click", function() {
+            const card = this.closest('.service-card');
+            const staffSelect = card.querySelector('.staff-select');
+            const discountSelect = card.querySelector('.discount-select');
+
+            // Optional validation: force staff selection
+            if(staffSelect.value === "") {
+                alert("Please assign a staff member before adding to bill.");
+                return;
+            }
+
+            const newItem = {
+                id: this.dataset.id,
+                title: this.dataset.title,
+                price: parseFloat(this.dataset.price),
+                staff_id: staffSelect.value,
+                staff_name: staffSelect.options[staffSelect.selectedIndex].text,
+                discount_code: discountSelect.value,
+                final_price: 0 // calculated in updateSummary
+            };
+
+            checkoutState.items.push(newItem);
+            
+            // Reset dropdowns on card for next time
+            staffSelect.value = "";
+            discountSelect.value = "0";
+
+            renderCart();
+            updateSummary();
+        });
+    });
+
+    // --- 6. HANDLE PAYMENT METHOD CHANGE ---
+    document.querySelectorAll('.payment-radio').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                checkoutState.payment_method = e.target.value;
+            }
+        });
+    });
+
+    // --- 7. COMPLETE CHECKOUT / GENERATE JSON ---
+    document.getElementById("complete-checkout-btn").addEventListener("click", function() {
+        if(checkoutState.items.length === 0) {
+            alert("Your cart is empty. Please add services before checking out.");
+            return;
+        }
+        if(!checkoutState.customer.phone || checkoutState.customer.phone.length < 10) {
+            alert("Please enter a valid 10-digit customer phone number.");
+            return;
+        }
+
+        // Grab new customer details if applicable before compiling final JSON
+        if (checkoutState.customer.is_new) {
+            checkoutState.customer.name = document.getElementById("new-cust-name").value;
+            checkoutState.customer.gender = document.getElementById("new-cust-gender").value;
+            
+            if(!checkoutState.customer.name) {
+                alert("Please provide the new customer's name.");
+                return;
+            }
+        }
+
+        // Final payload structure ready for the backend
+        const backendPayload = JSON.stringify(checkoutState, null, 2);
+        
+        console.log("PAYLOAD READY FOR BACKEND:");
+        console.log(backendPayload);
+        
+        // Demo User Feedback
+        const originalText = this.innerText;
+        this.innerText = "Processing...";
+        this.classList.add("opacity-75");
+        
+        setTimeout(() => {
+            alert("Checkout Successful! Check browser console for the JSON payload generated.");
+            this.innerText = originalText;
+            this.classList.remove("opacity-75");
+            
+            // Optional: reset page here
+            // window.location.reload();
+        }, 800);
+
+        // TODO: Replace with actual backend fetch
+        /*
+        fetch('/api/invoices/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: backendPayload
+        }).then(res => res.json()).then(data => { ... });
+        */
+    });
+
+});
+</script>
+{% endblock %}

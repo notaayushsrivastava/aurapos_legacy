@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Home | Salon Billing Software{% endblock %}
+
+{% block content %}
+
+<div class="max-w-6xl mx-auto py-10">
+
+    <!-- Hero -->
+    <div class="rounded-3xl bg-gradient-to-r from-pink-500 to-violet-600 text-white p-10 shadow-xl">
+
+        <div class="flex flex-col lg:flex-row items-center justify-between gap-8 p-2">
+
+            <div>
+                <h1 class="text-5xl font-bold">
+                    Salon Billing Software
+                </h1>
+
+                <p class="mt-4 text-lg text-pink-100 max-w-2xl">
+                    A modern cloud-powered solution for salons to manage billing,
+                    customers, services and business operations from one place.
+                </p>
+
+                <div class="mt-8 flex gap-4">
+
+                    <span class="rounded-full bg-white/20 px-4 py-2">
+                        Version 1.0
+                    </span>
+
+                    <a href="{{url_for('register')}}" class = "rounded-full bg-green-400 px-4 py-2 hover:scale-[1.02] hover:bg-green-500">
+                      Get Started &RightArrow;
+                    </a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Features -->
+
+    <div class="mt-12">
+
+        <h2 class="text-3xl font-bold mb-8">
+            Features
+        </h2>
+
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">🧾</div>
+                <h3 class="font-bold text-xl mb-2">Billing</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Create professional invoices in seconds with automatic calculations.
+                </p>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">👥</div>
+                <h3 class="font-bold text-xl mb-2">Customers</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Maintain customer profiles, visit history and contact information.
+                </p>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">✂️</div>
+                <h3 class="font-bold text-xl mb-2">Services</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Manage service categories, pricing and duration with ease.
+                </p>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">📈</div>
+                <h3 class="font-bold text-xl mb-2">Reports</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Gain insights with revenue, sales and performance analytics.
+                </p>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">📦</div>
+                <h3 class="font-bold text-xl mb-2">Inventory</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Keep track of products and receive alerts before stock runs out.
+                </p>
+            </div>
+
+            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
+                <div class="text-4xl mb-4">🔒</div>
+                <h3 class="font-bold text-xl mb-2">Secure</h3>
+                <p class="text-slate-500 dark:text-slate-400">
+                    Secure authentication and Razorpay-powered payment integration.
+                </p>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Why Choose -->
+
+    <div class="mt-14 grid lg:grid-cols-2 gap-8">
+
+        <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8">
+
+            <h2 class="text-2xl font-bold mb-4">
+                Why Choose This Software?
+            </h2>
+
+            <ul class="space-y-4">
+
+                <li>✅ Fast invoice generation</li>
+                <li>✅ Modern responsive interface</li>
+                <li>✅ Dark mode support</li>
+                <li>✅ Customer & service management</li>
+                <li>✅ Subscription-based licensing</li>
+                <li>✅ Cloud-ready architecture</li>
+
+            </ul>
+
+        </div>
+
+        <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8">
+
+            <h2 class="text-2xl font-bold mb-4">
+                Technology Stack
+            </h2>
+
+            <div class="grid grid-cols-2 gap-3">
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    Flask
+                </div>
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    Tailwind CSS
+                </div>
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    SQLite
+                </div>
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    SQLAlchemy
+                </div>
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    Razorpay
+                </div>
+
+                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
+                    Chart.js
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Developer -->
+
+    <div class="flex flex-col mt-14 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg p-10 text-center items-center">
+    
+        <!-- The flex container aligns its children (the image) to the center -->
+        <div class="mb-4">
+            <img src="{{url_for('static', filename='assets/Untitled.png')}}" class="w-12 h-12 object-contain">
+        </div>
+
+        <h2 class="text-3xl font-bold">
+            Developed by Aayush Srivastava
+        </h2>
+
+        <p class="mt-4 text-slate-500 dark:text-slate-400 max-w-3xl mx-auto">
+            This software was built to simplify salon management by combining
+            billing, customer management, reporting and subscription management
+            into one intuitive platform.
+        </p>
+
+    </div>
+
+</div>
+
+{% endblock %}
