@@ -113,7 +113,7 @@ class AuthorizationRepository:
     cur=conn.cursor()
     cur.executescript(
         """
-          CREATE TABLE IF NOT EXISTS salon(
+          CREATE TABLE IF NOT EXISTS salons(
             id INTEGER PRIMARY KEY AUTOINCREMENT, 
             name TEXT NOT NULL,
             phone TEXT NOT NULL UNIQUE,

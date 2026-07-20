@@ -1,0 +1,452 @@
+{% extends 'base.html' %}
+
+{% block title %}Services Management - Salon Billing Software{% endblock %}
+
+{% block content %}
+<div class="space-y-6" id="services-page-container">
+    
+    <!-- Page Header & Global Actions -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Service Management</h1>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Add, edit, and organize your salon services and pricing.</p>
+        </div>
+        
+        <button id="toggle-add-form-btn" class="flex items-center justify-center gap-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-medium px-5 py-2.5 rounded-xl shadow-sm hover:bg-pink-500 dark:hover:bg-pink-500 hover:text-white dark:hover:text-white transition">
+            <span id="btn-icon">➕</span> <span id="btn-text">Add New Service</span>
+        </button>
+    </div>
+
+    <!-- Add/Edit Service Panel (Hidden by default) -->
+    <div id="add-service-panel" class="hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm mb-6 transition-all">
+        <h2 id="form-panel-title" class="text-lg font-bold text-slate-900 dark:text-white mb-4">Create New Service</h2>
+        <form id="add-service-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <div class="lg:col-span-2">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Service Name</label>
+                <input type="text" id="form-service-name" placeholder="e.g. Keratin Treatment" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition" required>
+            </div>
+
+            <!-- Dynamic Category Selector Block -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Category</label>
+                    <button type="button" id="add-cat-toggle" class="text-[11px] text-pink-500 hover:text-pink-600 font-medium transition">+ New Category</button>
+                </div>
+                
+                <!-- Standard Dropdown Select -->
+                <select id="form-service-category" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition" required>
+                    <!-- JavaScript injected -->
+                </select>
+
+                <!-- Custom Category Form Line (Hidden inline wrapper) -->
+                <div id="new-category-input-wrapper" class="hidden flex gap-2 mt-1">
+                    <input type="text" id="new-category-name" placeholder="New category name" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:border-pink-500 transition">
+                    <button type="button" id="save-new-cat-btn" class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-xl text-xs font-semibold hover:border-pink-500 transition">Add</button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Price (₹)</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500 font-medium">₹</span>
+                    <input type="number" id="form-service-price" placeholder="0" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 pl-8 pr-4 py-2.5 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition" required>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Duration (Minutes)</label>
+                <select id="form-service-duration" class="block w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition">
+                    <option value="15">15 mins</option>
+                    <option value="30">30 mins</option>
+                    <option value="45">45 mins</option>
+                    <option value="60">1 Hour</option>
+                    <option value="90">1.5 Hours</option>
+                    <option value="120">2+ Hours</option>
+                </select>
+            </div>
+
+            <div class="lg:col-span-2 flex items-end justify-end gap-3 pt-2">
+                <button type="button" id="cancel-add-btn" class="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition">
+                    Cancel
+                </button>
+                <button type="submit" id="form-submit-btn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-violet-500 text-white text-sm font-medium shadow-md shadow-pink-500/20 hover:opacity-95 transition">
+                    Save Service
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Main Workspace Table -->
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col">
+        
+        <!-- Toolbar: Search & Filter -->
+        <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-2xl">
+            <div class="relative w-full sm:w-80">
+                <input type="text" id="service-search" placeholder="Search services by name..." class="block w-full rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm text-slate-900 dark:text-white focus:border-pink-500 focus:ring-pink-500 transition">
+            </div>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <select id="category-filter" class="w-full sm:w-40 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
+                    <!-- Dynamic injection of choices -->
+                </select>
+            </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600 dark:text-slate-400">
+                <thead class="bg-slate-50 dark:bg-slate-800/80 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-6 py-4">Service Name</th>
+                        <th class="px-6 py-4">Category</th>
+                        <th class="px-6 py-4">Duration</th>
+                        <th class="px-6 py-4">Price</th>
+                        <th class="px-6 py-4 text-center">Status</th>
+                        <th class="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                
+                <!-- Skeleton Loader Row State -->
+                <tbody id="services-table-skeleton" class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for i in range(5) %}
+                    <tr class="animate-pulse">
+                        <td class="px-6 py-4"><div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-32 mb-1"></div></td>
+                        <td class="px-6 py-4"><div class="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-20"></div></td>
+                        <td class="px-6 py-4"><div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16"></div></td>
+                        <td class="px-6 py-4"><div class="h-4 bg-slate-300 dark:bg-slate-700 rounded w-16"></div></td>
+                        <td class="px-6 py-4 flex justify-center"><div class="h-5 bg-slate-200 dark:bg-slate-800 rounded-full w-16"></div></td>
+                        <td class="px-6 py-4 text-right"><div class="h-6 bg-slate-200 dark:bg-slate-800 rounded w-12 ml-auto"></div></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+                <!-- Master Render Target -->
+                <tbody id="services-table-actual" class="hidden divide-y divide-slate-100 dark:divide-slate-800">
+                    <!-- Controlled by renderTable() -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Empty Query State -->
+        <div id="empty-state" class="hidden text-center py-12 px-4">
+            <span class="text-4xl block mb-3">🔍</span>
+            <h3 class="text-lg font-medium text-slate-900 dark:text-white">No services found</h3>
+            <p class="text-slate-500 dark:text-slate-400 mt-1">Try adjusting your search filters or add a new entry.</p>
+        </div>
+
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // Core Layout Bindings
+    const toggleBtn = document.getElementById("toggle-add-form-btn");
+    const cancelBtn = document.getElementById("cancel-add-btn");
+    const addPanel = document.getElementById("add-service-panel");
+    const formTitle = document.getElementById("form-panel-title");
+    const submitBtn = document.getElementById("form-submit-btn");
+    const btnIcon = document.getElementById("btn-icon");
+    const btnText = document.getElementById("btn-text");
+    
+    // Form Inputs
+    const formName = document.getElementById("form-service-name");
+    const formCategory = document.getElementById("form-service-category");
+    const formPrice = document.getElementById("form-service-price");
+    const formDuration = document.getElementById("form-service-duration");
+    
+    // Dynamic Category Fields
+    const addCatToggle = document.getElementById("add-cat-toggle");
+    const newCatWrapper = document.getElementById("new-category-input-wrapper");
+    const newCatNameInput = document.getElementById("new-category-name");
+    const saveNewCatBtn = document.getElementById("save-new-cat-btn");
+    
+    // Search/Filters & Tables
+    const searchInput = document.getElementById("service-search");
+    const categoryFilter = document.getElementById("category-filter");
+    const tbodySkeleton = document.getElementById("services-table-skeleton");
+    const tbodyActual = document.getElementById("services-table-actual");
+    const emptyState = document.getElementById("empty-state");
+
+    // Tracks index scope when executing an edit modification
+    let editingServiceId = null;
+
+    // Dynamic state object mapping system category tags
+    let categoryMap = {
+        "hair": "Hair Styling",
+        "nails": "Nail Artistry",
+        "makeup": "Cosmetics & Makeup",
+        "skin": "Skin Care & Spa"
+    };
+
+    // Client service array state (Base in INR)
+    let servicesDB = [
+        { id: "S01", name: "Men's Basic Haircut", category: "hair", duration: 30, price: 250, active: true },
+        { id: "S02", name: "Women's Advanced Styling", category: "hair", duration: 60, price: 1200, active: true },
+        { id: "S03", name: "Keratin Treatment", category: "hair", duration: 120, price: 4500, active: true },
+        { id: "S04", name: "Classic Manicure", category: "nails", duration: 30, price: 400, active: true },
+        { id: "S05", name: "Gel Extensions", category: "nails", duration: 60, price: 1500, active: true },
+        { id: "S06", name: "Bridal Makeup Package", category: "makeup", duration: 120, price: 15000, active: true },
+        { id: "S07", name: "Party Makeup", category: "makeup", duration: 60, price: 3000, active: true },
+        { id: "S08", name: "Deep Tissue Massage", category: "skin", duration: 60, price: 2200, active: false },
+        { id: "S09", name: "Fruit Facial", category: "skin", duration: 45, price: 800, active: true },
+        { id: "S10", name: "Eyebrow Threading", category: "skin", duration: 15, price: 50, active: true }
+    ];
+
+    // Localized Currency Formatter (INR - ₹)
+    const formatINR = (amount) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            maximumFractionDigits: 0
+        }).format(amount);
+    };
+
+    // Sync Dropdown Elements with Content State Map
+    function rebuildDropdownOptions() {
+        // 1. Clean and rebuild the Form creation dropdown
+        formCategory.innerHTML = '<option value="">Select Category...</option>';
+        Object.entries(categoryMap).forEach(([key, label]) => {
+            const opt = document.createElement("option");
+            opt.value = key;
+            opt.textContent = label;
+            formCategory.appendChild(opt);
+        });
+
+        // 2. Clean and rebuild the Workspace view toolbar filter
+        const currentSelection = categoryFilter.value || "all";
+        categoryFilter.innerHTML = '<option value="all">All Categories</option>';
+        Object.entries(categoryMap).forEach(([key, label]) => {
+            const opt = document.createElement("option");
+            opt.value = key;
+            opt.textContent = label;
+            categoryFilter.appendChild(opt);
+        });
+        categoryFilter.value = currentSelection;
+    }
+
+    // Dynamic Table Renderer
+    function renderTable(filterQuery = "", filterCat = "all") {
+        tbodyActual.innerHTML = "";
+        
+        let filteredData = servicesDB.filter(srv => {
+            const matchesQuery = srv.name.toLowerCase().includes(filterQuery.toLowerCase());
+            const matchesCat = (filterCat === "all" || srv.category === filterCat);
+            return matchesQuery && matchesCat;
+        });
+
+        if (filteredData.length === 0) {
+            tbodyActual.classList.add("hidden");
+            emptyState.classList.remove("hidden");
+            return;
+        }
+
+        emptyState.classList.add("hidden");
+        tbodyActual.classList.remove("hidden");
+
+        filteredData.forEach(srv => {
+            const displayCategoryName = categoryMap[srv.category] || srv.category;
+            const statusBadge = srv.active 
+                ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">Active</span>`
+                : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400">Inactive</span>`;
+
+            const row = document.createElement("tr");
+            row.className = "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group";
+            row.innerHTML = `
+                <td class="px-6 py-4">
+                    <div class="font-medium text-slate-900 dark:text-white">${srv.name}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wider">ID: ${srv.id}</div>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="inline-block bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 text-xs px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">${displayCategoryName}</span>
+                </td>
+                <td class="px-6 py-4 text-slate-600 dark:text-slate-400">${srv.duration} mins</td>
+                <td class="px-6 py-4 font-bold text-slate-900 dark:text-white">${formatINR(srv.price)}</td>
+                <td class="px-6 py-4 text-center">${statusBadge}</td>
+                <td class="px-6 py-4 text-right">
+                    <div class="flex items-center justify-end gap-3 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button type="button" data-id="${srv.id}" data-action="edit" class="text-slate-400 hover:text-pink-500 p-1 transition" title="Modify Entry">✏️</button>
+                        <button type="button" data-id="${srv.id}" data-action="delete" class="text-slate-400 hover:text-red-500 p-1 transition" title="Purge Service">🗑️</button>
+                    </div>
+                </td>
+            `;
+            tbodyActual.appendChild(row);
+        });
+    }
+
+    // Controls slide states for configuration tray
+    function openPanel(isEditMode = false) {
+        addPanel.classList.remove("hidden");
+        if(isEditMode) {
+            formTitle.innerText = "Modify Service Profile";
+            submitBtn.innerText = "Update Record";
+            btnIcon.innerText = "✏️";
+            btnText.innerText = "Editing Area";
+        } else {
+            formTitle.innerText = "Create New Service";
+            submitBtn.innerText = "Save Service";
+            btnIcon.innerText = "✖";
+            btnText.innerText = "Close Form";
+        }
+    }
+
+    function closeAndResetPanel() {
+        addPanel.classList.add("hidden");
+        document.getElementById("add-service-form").reset();
+        newCatWrapper.classList.add("hidden");
+        formCategory.classList.remove("hidden");
+        addCatToggle.innerText = "+ New Category";
+        editingServiceId = null;
+        
+        btnIcon.innerText = "➕";
+        btnText.innerText = "Add New Service";
+    }
+
+    // Toggle logic button interface hook
+    toggleBtn.addEventListener("click", () => {
+        if (addPanel.classList.contains("hidden")) {
+            openPanel(false);
+        } else {
+            closeAndResetPanel();
+        }
+    });
+    cancelBtn.addEventListener("click", closeAndResetPanel);
+
+    // Interactive Dynamic Category Row UI Toggle
+    addCatToggle.addEventListener("click", () => {
+        if(newCatWrapper.classList.contains("hidden")) {
+            newCatWrapper.classList.remove("hidden");
+            formCategory.classList.add("hidden");
+            formCategory.removeAttribute("required");
+            addCatToggle.innerText = "✖ Choose Existing";
+            newCatNameInput.focus();
+        } else {
+            newCatWrapper.classList.add("hidden");
+            formCategory.classList.remove("hidden");
+            formCategory.setAttribute("required", "required");
+            addCatToggle.innerText = "+ New Category";
+            newCatNameInput.value = "";
+        }
+    });
+
+    // Process Inline Add Category Request
+    saveNewCatBtn.addEventListener("click", () => {
+        const rawName = newCatNameInput.value.trim();
+        if(!rawName) return;
+
+        // Form unique lookup token key
+        const generatedKey = rawName.toLowerCase().replace(/[^a-z0-9]/g, "-");
+        
+        if(categoryMap[generatedKey]) {
+            alert("This category configuration variant already exists!");
+            return;
+        }
+
+        // Mutation step append category dictionary map
+        categoryMap[generatedKey] = rawName;
+        
+        // Re-render select configurations
+        rebuildDropdownOptions();
+        
+        // Auto select newly created target value safely
+        newCatWrapper.classList.add("hidden");
+        formCategory.classList.remove("hidden");
+        formCategory.setAttribute("required", "required");
+        formCategory.value = generatedKey;
+        addCatToggle.innerText = "+ New Category";
+        newCatNameInput.value = "";
+    });
+
+    // Form execution block (Handles creates vs array update modifications)
+    document.getElementById("add-service-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const priceNum = parseFloat(formPrice.value) || 0;
+        const durationNum = parseInt(formDuration.value) || 30;
+
+        if (editingServiceId !== null) {
+            // Processing path configuration update
+            const targetIdx = servicesDB.findIndex(s => s.id === editingServiceId);
+            if(targetIdx !== -1) {
+                servicesDB[targetIdx].name = formName.value.trim();
+                servicesDB[targetIdx].category = formCategory.value;
+                servicesDB[targetIdx].price = priceNum;
+                servicesDB[targetIdx].duration = durationNum;
+            }
+        } else {
+            // Processing path execution create context
+            const newIndexID = "S" + String(servicesDB.length + 1).padStart(2, '0');
+            const newServiceRecord = {
+                id: newIndexID,
+                name: formName.value.trim(),
+                category: formCategory.value,
+                duration: durationNum,
+                price: priceNum,
+                active: true
+            };
+            servicesDB.unshift(newServiceRecord); // Add directly to the top
+        }
+
+        closeAndResetPanel();
+        renderTable(searchInput.value, categoryFilter.value);
+    });
+
+    // Consolidated Row Event Delegation Handler (Edit/Delete Router)
+    tbodyActual.addEventListener("click", (e) => {
+        const actionBtn = e.target.closest("button[data-action]");
+        if(!actionBtn) return;
+
+        const targetId = actionBtn.getAttribute("data-id");
+        const actionType = actionBtn.getAttribute("data-action");
+
+        if(actionType === "delete") {
+            const targetService = servicesDB.find(s => s.id === targetId);
+            const confirmed = confirm(`Are you sure you want to remove "${targetService.name}" from your catalog?`);
+            if(confirmed) {
+                servicesDB = servicesDB.filter(s => s.id !== targetId);
+                renderTable(searchInput.value, categoryFilter.value);
+            }
+        } 
+        
+        else if (actionType === "edit") {
+            const matchSrv = servicesDB.find(s => s.id === targetId);
+            if(!matchSrv) return;
+
+            // Step setting memory reference pointers
+            editingServiceId = matchSrv.id;
+
+            // Load values to control layout input bindings
+            formName.value = matchSrv.name;
+            formPrice.value = matchSrv.price;
+            formDuration.value = matchSrv.duration;
+            
+            // Revert state context safely to selection modes if text variant inputs are open
+            newCatWrapper.classList.add("hidden");
+            formCategory.classList.remove("hidden");
+            formCategory.setAttribute("required", "required");
+            addCatToggle.innerText = "+ New Category";
+            formCategory.value = matchSrv.category;
+
+            openPanel(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
+    // Real-time Input Filters Hook
+    searchInput.addEventListener("input", () => {
+        renderTable(searchInput.value, categoryFilter.value);
+    });
+    categoryFilter.addEventListener("change", () => {
+        renderTable(searchInput.value, categoryFilter.value);
+    });
+
+    // Execution Bootloader Setup Routine
+    rebuildDropdownOptions();
+    setTimeout(() => {
+        tbodySkeleton.classList.add("hidden");
+        renderTable();
+    }, 800);
+
+});
+</script>
+{% endblock %}

@@ -18,7 +18,7 @@ def index():
 
 @app.route('/services')
 def services():
-    return
+    return render_template('service/services.html')
 
 @app.route('/billing')
 def billing():
@@ -110,7 +110,7 @@ def verify_subscription():
         "SELECT * FROM pendingorders WHERE id = ?", (data["razorpay_order_id"],)
     ).fetchone()
     cur.execute(
-        "INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?, ?, ?)", (pendingOrder[0],pendingOrder[1],pendingOrder[2],pendingOrder[3],pendingOrder[4],pendingOrder[5],pendingOrder[6],)
+        "INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (pendingOrder[0],pendingOrder[1],pendingOrder[2],pendingOrder[3],pendingOrder[4],pendingOrder[5],pendingOrder[6], pendingOrder[7], )
     )
     cur.execute(
         "DELETE FROM pendingorders WHERE id = ?", (pendingOrder[0],)
@@ -147,9 +147,9 @@ def create_subscription():
     plan = data["plan"]
 
     if plan == "monthly":
-        amount = 14900      # ₹149.00
+        amount = 6900      # ₹149.00
     elif plan == "yearly":
-        amount = 160900     # ₹1609.00
+        amount = 74900     # ₹1609.00
     else:
         return jsonify({"error": "Invalid plan"}), 400
 
