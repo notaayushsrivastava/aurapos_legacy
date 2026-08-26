@@ -1,151 +1,123 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
-{% block title %}Login | Salon Billing Software{% endblock %}
+{% block title %}Sign In — AuraPOS Salon Manager{% endblock %}
 
-{% block content %}
+{% block public_content %}
+<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-neutral-100 dark:bg-[#07070a]"
+     x-data="loginFormApp()">
+  
+  <div class="w-full max-w-md bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
+    
+    <!-- Ambient top glow -->
+    <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-violet-600/15 rounded-full blur-3xl pointer-events-none"></div>
 
-<div class="flex min-h-[80vh] items-center justify-center px-4">
-    <div
-        class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl
-               dark:border-slate-800 dark:bg-slate-900">
-
-        <!-- Logo -->
-        <div class="mb-8 text-center">
-            <div
-                class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full
-                       bg-gradient-to-r from-pink-500 to-violet-600 text-4xl shadow-lg">
-                <img src="{{url_for('static', filename='assets/logo.svg')}}" height="36px" width="36px">
-            </div>
-
-            <h1 class="text-3xl font-bold text-slate-800 dark:text-white">
-                Welcome Back
-            </h1>
-
-            <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                Sign in to access the Salon Billing System
-            </p>
+    <!-- Header & Logo -->
+    <div class="text-center space-y-2">
+      <a href="{{ url_for('index') }}" class="inline-flex items-center gap-2.5 group">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-neon-magenta to-neon-cyan flex items-center justify-center text-white shadow-md shadow-neon-cyan/20 group-hover:scale-105 transition-transform">
+          <i data-lucide="scissors" class="w-5 h-5"></i>
         </div>
-
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <!-- Login Form -->
-        <form method="POST" class="space-y-5">
-
-            <!-- Username -->
-            <div>
-                <label
-                    for="username"
-                    class="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Username
-                </label>
-
-                <input
-                    id="username"
-                    name="username"
-                    type="text"
-                    required
-                    autofocus
-                    placeholder="Enter your username"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3
-                           text-slate-800 outline-none transition
-                           focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20
-                           dark:border-slate-700 dark:bg-slate-800
-                           dark:text-white dark:placeholder-slate-500">
-            </div>
-
-            <!-- Password -->
-            <div>
-                <label
-                    for="password"
-                    class="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Password
-                </label>
-
-                <div class="relative">
-                    <input
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                        placeholder="Enter your password"
-                        class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 pr-12
-                               text-slate-800 outline-none transition
-                               focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20
-                               dark:border-slate-700 dark:bg-slate-800
-                               dark:text-white dark:placeholder-slate-500">
-
-                    <button
-                        type="button"
-                        id="togglePassword"
-                        class="absolute inset-y-0 right-3 flex items-center text-slate-500 hover:text-pink-500">
-                        <img src="{{url_for('static', filename='assets/passwordShown.svg')}}" class="invert-0 dark:invert" height = "24px" width="24px">
-                    </button>
-                </div>
-            </div>
-
-            <!-- Remember Me -->
-            <div class="flex items-center justify-between">
-
-                <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                    <input
-                        type="checkbox"
-                        name="remember"
-                        class="rounded border-slate-300 text-pink-500 focus:ring-pink-500">
-                    Remember me
-                </label>
-
-                <a
-                    href="#"
-                    class="text-sm text-pink-500 hover:text-pink-600">
-                    Forgot password?
-                </a>
-
-            </div>
-
-            <!-- Login Button -->
-            <button
-                type="submit"
-                class="w-full rounded-lg bg-gradient-to-r from-pink-500 to-violet-600
-                       px-4 py-3 font-semibold text-white shadow-lg
-                       transition hover:scale-[1.02] hover:shadow-xl
-                       active:scale-100">
-                Sign In
-            </button>
-
-        </form>
-
-        <!-- Footer -->
-        <div class="mt-8 border-t border-slate-200 pt-5 text-center dark:border-slate-800">
-            <p class="text-sm text-slate-500 dark:text-slate-400">
-                Salon Billing Software
-            </p>
-        </div>
-
+      </a>
+      <h2 class="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
+        Welcome back
+      </h2>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        Enter your credentials to access your salon POS dashboard.
+      </p>
     </div>
+
+    <!-- Login Form -->
+    <form method="POST" action="{{ url_for('login') }}" class="space-y-4" @submit="isSubmitting = true">
+      
+      <!-- Username / Email Input -->
+      <div>
+        <label for="username" class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1.5">
+          Email or Username
+        </label>
+        <div class="relative flex items-center">
+          <div class="absolute left-3.5 flex items-center justify-center pointer-events-none text-neutral-400">
+            <i data-lucide="mail" class="w-4 h-4"></i>
+          </div>
+          <input type="text" 
+                 id="username" 
+                 name="username" 
+                 required 
+                 placeholder="name@aurasalon.com" 
+                 class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors">
+        </div>
+      </div>
+
+      <!-- Password Input with Toggle -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label for="password" class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+            Password
+          </label>
+          <a href="{{ url_for('forgotpassword') }}" class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline">
+            Forgot password?
+          </a>
+        </div>
+        
+        <div class="relative flex items-center">
+          <div class="absolute left-3.5 flex items-center justify-center pointer-events-none text-neutral-400">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+          </div>
+          <input :type="showPassword ? 'text' : 'password'" 
+                 id="password" 
+                 name="password" 
+                 required 
+                 placeholder="••••••••" 
+                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors">
+          <button type="button" 
+                  @click="showPassword = !showPassword" 
+                  class="absolute right-3.5 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-white p-1">
+            <i :data-lucide="showPassword ? 'eye-off' : 'eye'" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Remember Me -->
+      <div class="flex items-center justify-between text-xs pt-1">
+        <label class="flex items-center gap-2 cursor-pointer text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" name="remember" class="rounded border-neutral-300 dark:border-neutral-700 text-violet-600 focus:ring-violet-500">
+          <span>Remember me on this device</span>
+        </label>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="pt-2">
+        <button type="submit" 
+                :disabled="isSubmitting"
+                class="w-full py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-violet-600 dark:hover:bg-violet-500 dark:text-white disabled:opacity-50 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-98">
+          <i data-lucide="log-in" class="w-4 h-4" x-show="!isSubmitting"></i>
+          <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="isSubmitting"></i>
+          <span x-text="isSubmitting ? 'Authenticating...' : 'Sign In to Terminal'"></span>
+        </button>
+      </div>
+
+    </form>
+
+    <!-- Register Link -->
+    <div class="pt-2 text-center text-xs text-neutral-500 dark:text-neutral-400 border-t border-neutral-100 dark:border-neutral-800">
+      Don't have an active salon subscription? 
+      <a href="{{ url_for('register') }}" class="text-violet-600 dark:text-violet-400 font-bold hover:underline">
+        Get Started &rarr;
+      </a>
+    </div>
+
+  </div>
+
 </div>
-
-<script>
-const password = document.getElementById("password");
-const toggle = document.getElementById("togglePassword");
-
-toggle.addEventListener("click", () => {
-    if (password.type === "password") {
-        password.type = "text";
-        toggle.innerHTML = "<img src=\"{{url_for('static', filename='assets/passwordHidden.svg')}}\" class=\"invert-0 dark:invert\" height = \"24px\" width=\"24px\">";
-    } else {
-        password.type = "password";
-        toggle.innerHTML = "<img src=\"{{url_for('static', filename='assets/passwordShown.svg')}}\" class=\"invert-0 dark:invert\" height = \"24px\" width=\"24px\">";
-    }
-});
-</script>
-
 {% endblock %}
+
+{% block scripts %}
+<script>
+  function loginFormApp() {
+    return {
+      showPassword: false,
+      isSubmitting: false
+    };
+  }
+</script>
+{% endblock %}
+

@@ -1,324 +1,310 @@
-{% extends "base.html" %}
-{% block title %}Dashboard - Salon Billing Software{% endblock %}
+{% extends "layout.html" %}
+
+{% block title %}Dashboard — AuraPOS Salon Manager{% endblock %}
+{% block page_title %}Salon Executive Overview{% endblock %}
 
 {% block content %}
-<div class="space-y-6" id="dashboard-container">
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="dashboardApp()">
+  
+  <!-- Active Subscription Status Banner -->
+  <div class="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-violet-900/40 via-[#120e24] to-neutral-900/60 border border-violet-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="w-10 h-10 rounded-2xl bg-violet-600/20 border border-violet-500/40 text-violet-400 flex items-center justify-center shrink-0">
+        <i data-lucide="crown" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold text-neutral-900 dark:text-white">Studio Pro Annual Plan</span>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Active</span>
+        </div>
+        <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+          Plan active • Next renewal on <span class="font-semibold text-neutral-700 dark:text-neutral-200">March 28, 2027</span> (294 days remaining)
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <a href="{{ url_for('register') }}" class="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-colors shadow-sm">
+        Manage Subscription
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Metrics KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     
-    <!-- Page Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+    <!-- KPI 1: Daily Revenue -->
+    <div class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Today's Total Sales</span>
+        <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <i data-lucide="trending-up" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-3 flex items-baseline gap-2">
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white">₹24,850</span>
+        <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center">+14.2%</span>
+      </div>
+      <p class="text-[11px] text-neutral-400 mt-1">From 32 closed invoices</p>
+    </div>
+
+    <!-- KPI 2: Appointments -->
+    <div class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Total Bookings Today</span>
+        <div class="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+          <i data-lucide="calendar-check" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-3 flex items-baseline gap-2">
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white">38</span>
+        <span class="text-[11px] font-medium text-violet-600 dark:text-violet-400">6 in service</span>
+      </div>
+      <p class="text-[11px] text-neutral-400 mt-1">8 upcoming walk-ins</p>
+    </div>
+
+    <!-- KPI 3: Avg Ticket Size -->
+    <div class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Average Ticket Size</span>
+        <div class="w-8 h-8 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+          <i data-lucide="receipt" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-3 flex items-baseline gap-2">
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white">₹776</span>
+        <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">+8.5%</span>
+      </div>
+      <p class="text-[11px] text-neutral-400 mt-1">Cross-selling rate 34%</p>
+    </div>
+
+    <!-- KPI 4: Staff on Floor -->
+    <div class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Active Stylists</span>
+        <div class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+          <i data-lucide="scissors" class="w-4 h-4"></i>
+        </div>
+      </div>
+      <div class="mt-3 flex items-baseline gap-2">
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white">8 / 10</span>
+        <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">80% Floor</span>
+      </div>
+      <p class="text-[11px] text-neutral-400 mt-1">2 on scheduled break</p>
+    </div>
+
+  </div>
+
+  <!-- Quick Action Grid -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+    
+    <a href="{{ url_for('billing') }}" 
+       class="p-4 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-violet-500/20 transition-all hover:scale-[1.02]">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="plus-circle" class="w-5 h-5"></i>
+        <span>New POS Sale</span>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4"></i>
+    </a>
+
+    <a href="{{ url_for('appointments') }}" 
+       class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="calendar-plus" class="w-5 h-5 text-violet-500"></i>
+        <span>Book Client</span>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-neutral-400"></i>
+    </a>
+
+    <a href="{{ url_for('services') }}" 
+       class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="sparkles" class="w-5 h-5 text-cyan-500"></i>
+        <span>Service Menu</span>
+      </div>
+      <i data-lucide="arrow-right" class="w-4 h-4 text-neutral-400"></i>
+    </a>
+
+    <button @click="copyBookingLink()" 
+            class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="share-2" class="w-5 h-5 text-emerald-500"></i>
+        <span x-text="copiedLink ? 'Link Copied!' : 'Copy Booking Link'"></span>
+      </div>
+      <i data-lucide="copy" class="w-4 h-4 text-neutral-400"></i>
+    </button>
+
+  </div>
+
+  <!-- Two-Column Section: Today's Appointments & Staff Leaderboard -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- Today's Appointments Live Timeline (8 Cols) -->
+    <div class="lg:col-span-7 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
         <div>
-            <h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Overview</h1>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Here is what's happening at your salon today.</p>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Today's Appointment Schedule</h3>
+          <p class="text-xs text-neutral-400">Live queue &amp; active styling chairs</p>
         </div>
-        <div class="text-sm font-medium text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            📅 <span id="current-date">Loading date...</span>
-        </div>
-    </div>
+        <a href="{{ url_for('appointments') }}" class="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+          View All &rarr;
+        </a>
+      </div>
 
-    <!-- KPI Top Stats Cards (Skeleton State) -->
-    <div id="stats-skeleton" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {% for i in range(3) %}
-        <div class="animate-pulse rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex items-center gap-4">
-            <div class="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-800"></div>
-            <div class="space-y-2 flex-1">
-                <div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/2"></div>
-                <div class="h-6 bg-slate-300 dark:bg-slate-700 rounded w-3/4"></div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-
-    <!-- KPI Top Stats Cards (Actual Data) -->
-    <div id="stats-actual" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Stat 1 -->
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex items-center gap-5 shadow-sm transition hover:shadow-md">
-            <div class="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-2xl">
-                💰
-            </div>
-            <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Today's Revenue</p>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <h3 class="text-2xl font-bold text-slate-900 dark:text-white">$1,245.00</h3>
-                    <span class="text-xs font-medium text-emerald-500">+12%</span>
-                </div>
-            </div>
-        </div>
-        <!-- Stat 2 -->
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex items-center gap-5 shadow-sm transition hover:shadow-md">
-            <div class="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-2xl">
-                ✂️
-            </div>
-            <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Services Completed</p>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <h3 class="text-2xl font-bold text-slate-900 dark:text-white">28</h3>
-                    <span class="text-xs font-medium text-slate-400">vs 24 yesterday</span>
-                </div>
-            </div>
-        </div>
-        <!-- Stat 3 -->
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex items-center gap-5 shadow-sm transition hover:shadow-md">
-            <div class="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-2xl">
-                ✨
-            </div>
-            <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">New Clients</p>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <h3 class="text-2xl font-bold text-slate-900 dark:text-white">5</h3>
-                    <span class="text-xs font-medium text-emerald-500">+2 this week</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Grid Layout -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <!-- Recent Bills -->
-        <div class="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col">
-            <div class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-slate-900 dark:text-white">Recent Invoices</h3>
-                <a href="#" class="text-xs font-medium text-pink-500 hover:text-pink-600 transition">View All &rarr;</a>
-            </div>
+      <div class="space-y-3">
+        <template x-for="apt in todayAppointments" :key="apt.id">
+          <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between gap-3">
             
-            <div class="p-0 overflow-x-auto">
-                <table class="w-full text-left text-sm text-slate-600 dark:text-slate-400">
-                    <thead class="bg-slate-50 dark:bg-slate-800/50 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-                        <tr>
-                            <th class="px-6 py-4">Inv ID</th>
-                            <th class="px-6 py-4">Client</th>
-                            <th class="px-6 py-4">Amount</th>
-                            <th class="px-6 py-4">Status</th>
-                            <th class="px-6 py-4 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    
-                    <!-- Table Skeletons -->
-                    <tbody id="table-skeleton" class="divide-y divide-slate-100 dark:divide-slate-800">
-                        {% for i in range(4) %}
-                        <tr class="animate-pulse">
-                            <td class="px-6 py-4"><div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16"></div></td>
-                            <td class="px-6 py-4">
-                                <div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-24 mb-1"></div>
-                                <div class="h-3 bg-slate-100 dark:bg-slate-900 rounded w-16"></div>
-                            </td>
-                            <td class="px-6 py-4"><div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-16"></div></td>
-                            <td class="px-6 py-4"><div class="h-6 bg-slate-200 dark:bg-slate-800 rounded-full w-20"></div></td>
-                            <td class="px-6 py-4 text-right"><div class="h-4 bg-slate-200 dark:bg-slate-800 rounded w-8 ml-auto"></div></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-
-                    <!-- Actual Table Data -->
-                    <tbody id="table-actual" class="hidden divide-y divide-slate-100 dark:divide-slate-800">
-                        <!-- JS injects rows here -->
-                    </tbody>
-                </table>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950/60 font-mono-num font-bold text-xs text-violet-700 dark:text-violet-300 flex flex-col items-center justify-center leading-tight">
+                <span x-text="apt.time"></span>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold text-neutral-900 dark:text-white" x-text="apt.client"></span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                        :class="{
+                          'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20': apt.status === 'In Service',
+                          'bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20': apt.status === 'Confirmed',
+                          'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20': apt.status === 'Next Up'
+                        }"
+                        x-text="apt.status"></span>
+                </div>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  <span class="font-medium text-neutral-700 dark:text-neutral-300" x-text="apt.service"></span> • Stylist: <span x-text="apt.staff"></span>
+                </p>
+              </div>
             </div>
-        </div>
 
-        <!-- Quick Actions -->
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <h3 class="font-bold text-lg text-slate-900 dark:text-white mb-6">Quick Actions</h3>
-            
-            <div class="space-y-3">
-                <a href="{{ url_for('billing') }}" class="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-pink-500 to-violet-500 text-white font-medium py-3 rounded-xl shadow-lg shadow-pink-500/20 hover:opacity-95 transition">
-                    <span>➕</span> Create New Bill
+            <a href="{{ url_for('billing') }}" class="px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600 text-[11px] font-bold text-neutral-700 dark:text-neutral-300 transition-colors">
+              Checkout
+            </a>
+
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Staff Performance Leaderboard (5 Cols) -->
+    <div class="lg:col-span-5 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Stylist Leaderboard</h3>
+          <p class="text-xs text-neutral-400">Daily revenue &amp; client count</p>
+        </div>
+        <span class="text-xs font-mono-num text-emerald-500 font-bold">Live Sync</span>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="(staff, idx) in staffLeaderboard" :key="staff.name">
+          <div class="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-7 h-7 rounded-lg bg-neutral-200 dark:bg-neutral-800 font-black text-xs text-neutral-700 dark:text-neutral-300 flex items-center justify-center font-mono-num" x-text="'#' + (idx + 1)"></div>
+              <div>
+                <p class="text-xs font-bold text-neutral-900 dark:text-white" x-text="staff.name"></p>
+                <p class="text-[10px] text-neutral-400"><span x-text="staff.services"></span> services completed</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">₹<span x-text="staff.revenue"></span></div>
+              <div class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold font-mono-num">₹<span x-text="Math.round(staff.revenue * 0.15)"></span> comm.</div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Recent Transactions Table -->
+  <div class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+      <div>
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Recent POS Invoices</h3>
+        <p class="text-xs text-neutral-400">Real-time payment logs</p>
+      </div>
+      <a href="{{ url_for('billing') }}" class="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+        Launch Register &rarr;
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 dark:border-neutral-800 pb-2">
+          <tr>
+            <th class="py-2.5 px-3">Invoice #</th>
+            <th class="py-2.5 px-3">Client</th>
+            <th class="py-2.5 px-3">Items / Services</th>
+            <th class="py-2.5 px-3">Amount</th>
+            <th class="py-2.5 px-3">Payment</th>
+            <th class="py-2.5 px-3">Time</th>
+            <th class="py-2.5 px-3 text-right">Receipt</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium">
+          <template x-for="inv in recentInvoices" :key="inv.id">
+            <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors">
+              <td class="py-3 px-3 font-mono-num font-bold text-neutral-900 dark:text-white" x-text="inv.id"></td>
+              <td class="py-3 px-3 text-neutral-800 dark:text-neutral-200 font-semibold" x-text="inv.client"></td>
+              <td class="py-3 px-3 text-neutral-500 dark:text-neutral-400" x-text="inv.services"></td>
+              <td class="py-3 px-3 font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="inv.amount"></span></td>
+              <td class="py-3 px-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                      :class="inv.payment === 'UPI' ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'"
+                      x-text="inv.payment"></span>
+              </td>
+              <td class="py-3 px-3 text-neutral-400 font-mono-num" x-text="inv.time"></td>
+              <td class="py-3 px-3 text-right">
+                <a href="{{ url_for('billing') }}" class="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+                  Reprint
                 </a>
-                
-                <button class="flex items-center justify-center gap-2 w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium py-3 rounded-xl hover:border-pink-500/50 hover:text-pink-500 transition">
-                    <span>👥</span> Add Customer
-                </button>
-
-                <button class="flex items-center justify-center gap-2 w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium py-3 rounded-xl hover:border-pink-500/50 hover:text-pink-500 transition">
-                    <span>📅</span> View Appointments
-                </button>
-            </div>
-
-            <!-- Mini Summary -->
-            <div class="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-                <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">System Status</h4>
-                <div class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                    <span class="relative flex h-3 w-3">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                    </span>
-                    Backend Connected
-                </div>
-            </div>
-        </div>
-
-        <!-- Revenue Chart -->
-        <div class="lg:col-span-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-lg text-slate-900 dark:text-white">Revenue Trends</h3>
-                <select class="text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:border-pink-500 focus:ring-pink-500">
-                    <option>Last 7 Days</option>
-                    <option>This Month</option>
-                    <option>This Year</option>
-                </select>
-            </div>
-            
-            <!-- Chart Skeleton -->
-            <div id="chart-skeleton" class="h-[300px] w-full flex items-end justify-between gap-2 animate-pulse pb-4">
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-1/4"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-2/4"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-1/3"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-3/4"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-1/2"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-full"></div>
-                <div class="w-1/12 bg-slate-200 dark:bg-slate-800 rounded-t h-4/5"></div>
-            </div>
-
-            <!-- Canvas for Chart.js -->
-            <div id="chart-actual" class="hidden h-[300px] w-full">
-                <canvas id="revenueChart"></canvas>
-            </div>
-        </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
+  </div>
+
 </div>
+{% endblock %}
 
-<!-- Load Chart.js via CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<!-- Dashboard Logic -->
+{% block scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    
-    // Set Current Date in Header
-    const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-US', dateOptions);
+  function dashboardApp() {
+    return {
+      copiedLink: false,
 
-    // Dummy Data for Table
-    const recentInvoices = [
-        { id: "#INV-4029", client: "Sarah Jenkins", phone: "555-0192", amount: 160.00, status: "Paid" },
-        { id: "#INV-4028", client: "Michael Chen", phone: "555-3841", amount: 45.00, status: "Paid" },
-        { id: "#INV-4027", client: "Emma Watson", phone: "555-7723", amount: 210.00, status: "Pending" },
-        { id: "#INV-4026", client: "David Miller", phone: "555-9011", amount: 30.00, status: "Paid" },
-        { id: "#INV-4025", client: "Jessica Alba", phone: "555-4432", amount: 125.50, status: "Paid" }
-    ];
+      todayAppointments: [
+        { id: 1, time: "11:30", client: "Ananya Sharma", service: "Signature Haircut & Spa", staff: "Alex Rivera", status: "In Service" },
+        { id: 2, time: "12:15", client: "Rohan Varma", service: "Beard Styling & Shave", staff: "Marcus Vance", status: "Next Up" },
+        { id: 3, time: "13:00", client: "Kavita Sen", service: "Hydra-Dew Glow Facial", staff: "Sarah Jenkins", status: "Confirmed" },
+        { id: 4, time: "14:30", client: "Meera Nair", service: "Full Balayage & Gloss", staff: "Priya Nair", status: "Confirmed" },
+      ],
 
-    // Simulate Network Request / Processing time
-    setTimeout(() => {
-        
-        // 1. Swap Top Stats
-        document.getElementById("stats-skeleton").classList.add("hidden");
-        document.getElementById("stats-actual").classList.remove("hidden");
+      staffLeaderboard: [
+        { name: "Priya Nair (Colorist)", services: 6, revenue: 8600 },
+        { name: "Alex Rivera (Senior Stylist)", services: 8, revenue: 6450 },
+        { name: "Sarah Jenkins (Skin Specialist)", services: 4, revenue: 5200 },
+        { name: "Marcus Vance (Stylist)", services: 7, revenue: 4600 },
+      ],
 
-        // 2. Populate and Swap Table
-        const tbody = document.getElementById("table-actual");
-        recentInvoices.forEach(inv => {
-            
-            // Status Badge styling logic
-            let statusBadge = "";
-            if(inv.status === "Paid") {
-                statusBadge = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">Paid</span>`;
-            } else {
-                statusBadge = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400">Pending</span>`;
-            }
+      recentInvoices: [
+        { id: "AP-8914", client: "Deepika Rao", services: "Keratin Treatment + Wash", amount: 4800, payment: "UPI", time: "10:45 AM" },
+        { id: "AP-8913", client: "Vikram Malhotra", services: "Executive Cut + Beard", amount: 650, payment: "Cash", time: "10:15 AM" },
+        { id: "AP-8912", client: "Sunita Roy", services: "Luxury Hair Spa", amount: 1200, payment: "UPI", time: "09:50 AM" },
+        { id: "AP-8911", client: "Aditya Shah", services: "Signature Haircut", amount: 450, payment: "Card", time: "09:20 AM" },
+      ],
 
-            const row = document.createElement("tr");
-            row.className = "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition";
-            row.innerHTML = `
-                <td class="px-6 py-4 font-medium text-slate-900 dark:text-white">${inv.id}</td>
-                <td class="px-6 py-4">
-                    <div class="font-medium text-slate-900 dark:text-slate-200">${inv.client}</div>
-                    <div class="text-xs text-slate-500">${inv.phone}</div>
-                </td>
-                <td class="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">$${inv.amount.toFixed(2)}</td>
-                <td class="px-6 py-4">${statusBadge}</td>
-                <td class="px-6 py-4 text-right">
-                    <button class="text-slate-400 hover:text-pink-500 transition" title="Print/View">📄</button>
-                </td>
-            `;
-            tbody.appendChild(row);
+      copyBookingLink() {
+        const url = window.location.origin + "{{ url_for('booking') }}";
+        navigator.clipboard.writeText(url).then(() => {
+          this.copiedLink = true;
+          setTimeout(() => { this.copiedLink = false; }, 2500);
         });
-        
-        document.getElementById("table-skeleton").classList.add("hidden");
-        tbody.classList.remove("hidden");
-
-        // 3. Swap and Render Chart
-        document.getElementById("chart-skeleton").classList.add("hidden");
-        document.getElementById("chart-actual").classList.remove("hidden");
-        renderChart();
-
-    }, 800); // 800ms loading simulation
-
-    // Chart.js Setup Function
-    function renderChart() {
-        const ctx = document.getElementById('revenueChart').getContext('2d');
-        
-        // Check if dark mode is active to style axes and grids appropriately
-        const isDark = document.documentElement.classList.contains('dark');
-        const textColor = isDark ? '#94a3b8' : '#64748b'; // slate-400 : slate-500
-        const gridColor = isDark ? '#1e293b' : '#f1f5f9'; // slate-800 : slate-100
-
-        // Create gradient fill for the line chart
-        let gradient = ctx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, 'rgba(236, 72, 153, 0.5)'); // pink-500 with opacity
-        gradient.addColorStop(1, 'rgba(236, 72, 153, 0.0)');
-
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                datasets: [{
-                    label: 'Revenue ($)',
-                    data: [420, 680, 550, 890, 720, 1245, 1100],
-                    borderColor: '#ec4899', // tailwind pink-500
-                    backgroundColor: gradient,
-                    borderWidth: 3,
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#ec4899',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    fill: true,
-                    tension: 0.4 // Creates smooth curves
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: isDark ? '#0f172a' : '#ffffff',
-                        titleColor: isDark ? '#ffffff' : '#0f172a',
-                        bodyColor: isDark ? '#cbd5e1' : '#475569',
-                        borderColor: isDark ? '#334155' : '#e2e8f0',
-                        borderWidth: 1,
-                        padding: 12,
-                        displayColors: false,
-                        callbacks: {
-                            label: function(context) {
-                                return '$' + context.parsed.y;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: { color: textColor, font: { family: 'Inter, sans-serif' } }
-                    },
-                    y: {
-                        grid: { color: gridColor, drawBorder: false },
-                        ticks: { 
-                            color: textColor, 
-                            font: { family: 'Inter, sans-serif' },
-                            callback: function(value) { return '$' + value; }
-                        },
-                        beginAtZero: true
-                    }
-                },
-                interaction: {
-                    intersect: false,
-                    mode: 'index',
-                },
-            }
-        });
-    }
-});
+      }
+    };
+  }
 </script>
 {% endblock %}
+

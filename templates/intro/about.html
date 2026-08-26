@@ -1,188 +1,643 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
 
-{% block title %}Home | Salon Billing Software{% endblock %}
+{% block title %}AuraPOS — Kinetic Salon Billing & Studio Management{% endblock %}
 
-{% block content %}
+{% block head %}
+<style>
+  /* Anime.js landing specific deep dark theme overrides */
+  body {
+    background-color: #050508 !important;
+    color: #f3f4f6 !important;
+  }
+  
+  .hero-canvas {
+    perspective: 1000px;
+    transform-style: preserve-3d;
+  }
 
-<div class="max-w-6xl mx-auto py-10">
+  .grid-element {
+    will-change: transform, opacity;
+  }
 
-    <!-- Hero -->
-    <div class="rounded-3xl bg-gradient-to-r from-pink-500 to-violet-600 text-white p-10 shadow-xl">
+  .kinetic-char {
+    display: inline-block;
+    opacity: 0;
+    will-change: transform, opacity;
+  }
 
-        <div class="flex flex-col lg:flex-row items-center justify-between gap-8 p-2">
+  .gradient-text-neon {
+    background: linear-gradient(135deg, #00f5d4 0%, #7b2cbf 50%, #f72585 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 
-            <div>
-                <h1 class="text-5xl font-bold">
-                    Salon Billing Software
-                </h1>
+  .neon-border {
+    position: relative;
+  }
+  .neon-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(0, 245, 212, 0.4), rgba(247, 37, 133, 0.4));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
 
-                <p class="mt-4 text-lg text-pink-100 max-w-2xl">
-                    A modern cloud-powered solution for salons to manage billing,
-                    customers, services and business operations from one place.
-                </p>
+  /* Pulse glowing background circle */
+  .glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    opacity: 0.35;
+  }
+</style>
+{% endblock %}
 
-                <div class="mt-8 flex gap-4">
+{% block public_content %}
+<div class="relative min-h-screen bg-[#050508] text-white overflow-hidden selection:bg-[#00f5d4] selection:text-black">
+  
+  <!-- Glowing Background Atmosphere Orbs -->
+  <div class="glow-orb w-96 h-96 bg-neon-cyan top-10 -left-20 animate-pulse" style="animation-duration: 7s;"></div>
+  <div class="glow-orb w-[500px] h-[500px] bg-neon-magenta top-40 right-[-100px] animate-pulse" style="animation-duration: 9s;"></div>
+  <div class="glow-orb w-80 h-80 bg-neon-violet bottom-20 left-1/3 animate-pulse" style="animation-duration: 11s;"></div>
 
-                    <span class="rounded-full bg-white/20 px-4 py-2">
-                        Version 1.0
-                    </span>
-
-                    <a href="{{url_for('register')}}" class = "rounded-full bg-green-400 px-4 py-2 hover:scale-[1.02] hover:bg-green-500">
-                      Get Started &RightArrow;
-                    </a>
-
-                </div>
-
-            </div>
-
-        </div>
-
+  <!-- Layered Kinetic Stagger Grid Container -->
+  <div id="stagger-grid-layer" class="hero-canvas absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden opacity-40">
+    <div id="anime-grid" class="grid grid-cols-12 sm:grid-cols-16 gap-3 sm:gap-4 w-[140vw] sm:w-[120vw] h-[120vh] transform -rotate-12 scale-110">
+      <!-- Grid elements injected dynamically via anime.js helper -->
     </div>
+  </div>
 
-    <!-- Features -->
-
-    <div class="mt-12">
-
-        <h2 class="text-3xl font-bold mb-8">
-            Features
-        </h2>
-
-        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">🧾</div>
-                <h3 class="font-bold text-xl mb-2">Billing</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Create professional invoices in seconds with automatic calculations.
-                </p>
-            </div>
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">👥</div>
-                <h3 class="font-bold text-xl mb-2">Customers</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Maintain customer profiles, visit history and contact information.
-                </p>
-            </div>
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">✂️</div>
-                <h3 class="font-bold text-xl mb-2">Services</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Manage service categories, pricing and duration with ease.
-                </p>
-            </div>
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">📈</div>
-                <h3 class="font-bold text-xl mb-2">Reports</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Gain insights with revenue, sales and performance analytics.
-                </p>
-            </div>
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">📦</div>
-                <h3 class="font-bold text-xl mb-2">Inventory</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Keep track of products and receive alerts before stock runs out.
-                </p>
-            </div>
-
-            <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow hover:scale-[1.02] hover:shadow-xl hover:transition">
-                <div class="text-4xl mb-4">🔒</div>
-                <h3 class="font-bold text-xl mb-2">Secure</h3>
-                <p class="text-slate-500 dark:text-slate-400">
-                    Secure authentication and Razorpay-powered payment integration.
-                </p>
-            </div>
-
-        </div>
-
-    </div>
-
-    <!-- Why Choose -->
-
-    <div class="mt-14 grid lg:grid-cols-2 gap-8">
-
-        <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8">
-
-            <h2 class="text-2xl font-bold mb-4">
-                Why Choose This Software?
-            </h2>
-
-            <ul class="space-y-4">
-
-                <li>✅ Fast invoice generation</li>
-                <li>✅ Modern responsive interface</li>
-                <li>✅ Dark mode support</li>
-                <li>✅ Customer & service management</li>
-                <li>✅ Subscription-based licensing</li>
-                <li>✅ Cloud-ready architecture</li>
-
-            </ul>
-
-        </div>
-
-        <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8">
-
-            <h2 class="text-2xl font-bold mb-4">
-                Technology Stack
-            </h2>
-
-            <div class="grid grid-cols-2 gap-3">
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    Flask
-                </div>
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    Tailwind CSS
-                </div>
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    SQLite
-                </div>
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    SQLAlchemy
-                </div>
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    Razorpay
-                </div>
-
-                <div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-3 text-center">
-                    Chart.js
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <!-- Developer -->
-
-    <div class="flex flex-col mt-14 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg p-10 text-center items-center">
+  <!-- HERO SECTION -->
+  <section class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-24 sm:pt-24 sm:pb-32 flex flex-col items-center text-center">
     
-        <!-- The flex container aligns its children (the image) to the center -->
-        <div class="mb-4">
-            <img src="{{url_for('static', filename='assets/Untitled.png')}}" class="w-12 h-12 object-contain">
+    <!-- Floating Kinetic Badge -->
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-xs font-semibold text-neutral-300 backdrop-blur-md mb-8 shadow-xl hover:border-neutral-700 transition-all cursor-default group" id="hero-badge">
+      <span class="w-2 h-2 rounded-full bg-[#00f5d4] animate-ping"></span>
+      <span>AuraPOS 3.0 Release</span>
+      <span class="text-neutral-500">•</span>
+      <span class="text-[#00f5d4] group-hover:underline">Next-Gen Salon OS</span>
+    </div>
+
+    <!-- Kinetic Headline (Characters wrapped and animated by anime.js) -->
+    <h1 id="kinetic-headline" class="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight max-w-5xl leading-[1.08] mb-6">
+      Kinetic Billing &amp; Salon Ops Engineered for Studios
+    </h1>
+
+    <!-- Subtitle -->
+    <p id="hero-subtext" class="text-lg sm:text-xl text-neutral-400 max-w-2xl font-normal mb-10 leading-relaxed opacity-0">
+      Ultra-fast POS, multi-staff commission calculation, automated GST invoicing, and frictionless online client scheduling — in one high-contrast, minimalist system.
+    </p>
+
+    <!-- CTAs & Trust Badges -->
+    <div id="hero-actions" class="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 w-full sm:w-auto opacity-0">
+      <a href="{{ url_for('register') }}" 
+         class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white font-bold text-base shadow-xl shadow-neon-magenta/25 hover:shadow-neon-cyan/40 hover:scale-[1.03] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group">
+        <span>Start Free 14-Day Trial</span>
+        <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
+      </a>
+
+      <a href="#pos-demo" 
+         class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 font-semibold text-base backdrop-blur-md transition-all flex items-center justify-center gap-2">
+        <i data-lucide="play-circle" class="w-5 h-5 text-neon-cyan"></i>
+        <span>Explore Live Simulator</span>
+      </a>
+    </div>
+
+    <!-- Micro Stats -->
+    <div id="hero-stats" class="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-12 mt-16 pt-12 border-t border-neutral-800/80 max-w-4xl w-full opacity-0">
+      <div>
+        <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-white">0.3s</div>
+        <div class="text-xs text-neutral-500 font-medium mt-1">Average Invoice Checkout</div>
+      </div>
+      <div>
+        <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-[#00f5d4]">₹749/yr</div>
+        <div class="text-xs text-neutral-500 font-medium mt-1">Affordable Flat Pricing</div>
+      </div>
+      <div>
+        <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-[#f72585]">100%</div>
+        <div class="text-xs text-neutral-500 font-medium mt-1">GST &amp; Tax Compliance</div>
+      </div>
+      <div>
+        <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-[#7b2cbf]">24/7</div>
+        <div class="text-xs text-neutral-500 font-medium mt-1">Client Self-Service Booking</div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- INTERACTIVE POS SIMULATOR SECTION (#pos-demo) -->
+  <section id="pos-demo" class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-neutral-900" x-data="posSimulator()">
+    
+    <div class="text-center max-w-3xl mx-auto mb-12">
+      <h2 class="text-xs font-bold uppercase tracking-widest text-[#00f5d4] mb-3">Live Interactive Sandbox</h2>
+      <h3 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+        Experience High-Speed POS in Your Browser
+      </h3>
+      <p class="text-neutral-400 text-sm sm:text-base mt-2">
+        Click any service below to watch instant item addition, live tax calculation, and receipt generation in real-time.
+      </p>
+    </div>
+
+    <!-- Interactive Two-Column Simulator Container -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#0c0c12] p-4 sm:p-8 rounded-3xl border border-neutral-800/80 shadow-2xl relative overflow-hidden">
+      
+      <!-- Left Column: Clickable Service Catalog -->
+      <div class="lg:col-span-7 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-neutral-400">1. Click Services to Add</span>
+          <span class="text-xs text-[#00f5d4] font-medium flex items-center gap-1">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i> Interactive Demo
+          </span>
         </div>
 
-        <h2 class="text-3xl font-bold">
-            Developed by Aayush Srivastava
-        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <template x-for="item in catalog" :key="item.id">
+            <button @click="addItem(item)" 
+                    class="flex items-center justify-between p-4 rounded-2xl bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 transition-all text-left group">
+              <div>
+                <div class="text-xs text-neutral-500 font-medium" x-text="item.category"></div>
+                <div class="text-sm font-bold text-white group-hover:text-[#00f5d4] transition-colors" x-text="item.name"></div>
+                <div class="text-xs font-mono-num text-neutral-400 mt-1">₹<span x-text="item.price"></span> • <span x-text="item.duration"></span> mins</div>
+              </div>
+              <div class="w-8 h-8 rounded-xl bg-neutral-800 group-hover:bg-[#00f5d4] group-hover:text-black flex items-center justify-center text-neutral-400 transition-all">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+              </div>
+            </button>
+          </template>
+        </div>
 
-        <p class="mt-4 text-slate-500 dark:text-slate-400 max-w-3xl mx-auto">
-            This software was built to simplify salon management by combining
-            billing, customer management, reporting and subscription management
-            into one intuitive platform.
-        </p>
+        <div class="p-3.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/60 text-xs text-neutral-400 flex items-center justify-between">
+          <span>💡 Need custom price? Add any customized charge with 1-click in the live POS.</span>
+          <a href="{{ url_for('billing') }}" class="text-[#00f5d4] hover:underline font-semibold">Open Full POS &rarr;</a>
+        </div>
+      </div>
+
+      <!-- Right Column: Live Bill Computation -->
+      <div class="lg:col-span-5 flex flex-col bg-[#111118] p-5 sm:p-6 rounded-2xl border border-neutral-800">
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-800">
+          <div>
+            <div class="text-sm font-bold text-white">Live Invoice Preview</div>
+            <div class="text-[11px] text-neutral-400">Order #AP-8042 • Walk-in Client</div>
+          </div>
+          <button @click="clearBill()" class="text-xs text-neutral-500 hover:text-rose-400 transition-colors">Clear All</button>
+        </div>
+
+        <!-- Selected Items List -->
+        <div class="flex-1 py-4 space-y-3 min-h-[180px] max-h-[220px] overflow-y-auto pr-1">
+          <template x-if="billItems.length === 0">
+            <div class="h-full flex flex-col items-center justify-center text-neutral-600 text-xs py-8">
+              <i data-lucide="shopping-bag" class="w-8 h-8 mb-2 opacity-40"></i>
+              <span>No items selected yet. Click services on the left!</span>
+            </div>
+          </template>
+
+          <template x-for="(b, idx) in billItems" :key="idx">
+            <div class="flex items-center justify-between p-2 rounded-xl bg-neutral-900/60 border border-neutral-800/70 text-xs">
+              <div class="truncate max-w-[150px]">
+                <p class="font-semibold text-neutral-200 truncate" x-text="b.name"></p>
+                <p class="text-[10px] text-neutral-500 font-mono-num">₹<span x-text="b.price"></span> × <span x-text="b.qty"></span></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex items-center bg-neutral-800 rounded-lg p-0.5">
+                  <button @click="decrementQty(idx)" class="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-white">-</button>
+                  <span class="px-1.5 text-[11px] font-mono-num text-white" x-text="b.qty"></span>
+                  <button @click="incrementQty(idx)" class="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-white">+</button>
+                </div>
+                <div class="font-mono-num font-bold text-white w-14 text-right">
+                  ₹<span x-text="b.price * b.qty"></span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Tax & Subtotal Breakdown -->
+        <div class="pt-4 border-t border-neutral-800 space-y-1.5 text-xs">
+          <div class="flex justify-between text-neutral-400">
+            <span>Subtotal</span>
+            <span class="font-mono-num text-white">₹<span x-text="subtotal"></span></span>
+          </div>
+          <div class="flex justify-between text-neutral-400">
+            <span>GST (18% Total: CGST 9% + SGST 9%)</span>
+            <span class="font-mono-num text-white">₹<span x-text="tax"></span></span>
+          </div>
+          <div class="flex justify-between text-base font-extrabold text-white pt-2 border-t border-neutral-800/80">
+            <span>Grand Total</span>
+            <span class="font-mono-num text-[#00f5d4]">₹<span x-text="grandTotal"></span></span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="mt-5 grid grid-cols-2 gap-2">
+          <button @click="triggerCelebration()" class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#f72585] to-violet-600 text-white font-bold text-xs shadow-md hover:opacity-90 transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span>Pay &amp; Invoice</span>
+          </button>
+          <a href="{{ url_for('billing') }}" class="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs transition-all flex items-center justify-center gap-1">
+            <span>Launch POS</span>
+            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+          </a>
+        </div>
+      </div>
 
     </div>
+
+  </section>
+
+  <!-- FEATURES GRID SECTION (#features) -->
+  <section id="features" class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 border-t border-neutral-900">
+    <div class="text-center max-w-3xl mx-auto mb-16">
+      <h2 class="text-xs font-bold uppercase tracking-widest text-[#f72585] mb-3">Engineered for Growth</h2>
+      <h3 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+        Every tool required to run high-volume salons.
+      </h3>
+      <p class="text-neutral-400 mt-4 text-base">
+        Eliminate paperwork, track staff commissions automatically, and provide your guests with a premium digital checkout experience.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+      
+      <!-- Feature 1 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-[#00f5d4]/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-[#00f5d4] flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-[#00f5d4]/10 transition-all">
+          <i data-lucide="receipt" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-[#00f5d4] transition-colors">Split-Second POS Billing</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Search items with instant keyboard shortcuts, assign multiple stylists per bill, calculate taxes automatically, and print 80mm thermal receipts or send digital invoices.
+        </p>
+      </div>
+
+      <!-- Feature 2 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-[#f72585]/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-[#f72585] flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-[#f72585]/10 transition-all">
+          <i data-lucide="calendar-check-2" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-[#f72585] transition-colors">Client Self-Service Booking</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Provide your clients with a modern self-scheduling link for Instagram and Google Maps. Slots sync live with stylist availability.
+        </p>
+      </div>
+
+      <!-- Feature 3 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-violet-500/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-violet-400 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-violet-500/10 transition-all">
+          <i data-lucide="users" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-violet-400 transition-colors">Staff &amp; Commission Tracking</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Track daily revenue generated per stylist, service counts, and commission payouts automatically at checkout.
+        </p>
+      </div>
+
+      <!-- Feature 4 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-[#00f5d4]/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-[#00f5d4] flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-[#00f5d4]/10 transition-all">
+          <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-[#00f5d4] transition-colors">Real-Time Salon Analytics</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Understand peak client hours, high-margin services, average ticket values, and customer repeat rates in real time.
+        </p>
+      </div>
+
+      <!-- Feature 5 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-[#f72585]/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-[#f72585] flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-[#f72585]/10 transition-all">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-[#f72585] transition-colors">Secure Cloud &amp; Offline Resilient</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Encrypted database records, zero data loss, rate-limited endpoints, and instant Razorpay payment automation.
+        </p>
+      </div>
+
+      <!-- Feature 6 -->
+      <div class="p-8 rounded-3xl bg-[#0c0c12] border border-neutral-800/90 hover:border-violet-500/50 transition-all group relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 text-violet-400 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-violet-500/10 transition-all">
+          <i data-lucide="smartphone" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2 group-hover:text-violet-400 transition-colors">Mobile &amp; Tablet Ready</h4>
+        <p class="text-sm text-neutral-400 leading-relaxed">
+          Operate smoothly on iPads, Android tablets, desktop terminals, and smartphones with seamless responsive layouts.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PRICING SECTION (#pricing) -->
+  <section id="pricing" class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 border-t border-neutral-900" x-data="{ billingCycle: 'yearly' }">
+    <div class="text-center max-w-3xl mx-auto mb-12">
+      <h2 class="text-xs font-bold uppercase tracking-widest text-[#00f5d4] mb-3">Transparent Subscriptions</h2>
+      <h3 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+        One Simple Plan for All Salons
+      </h3>
+      <p class="text-neutral-400 mt-3 text-base">
+        No hidden setup fees. No per-seat limits. Full access to all features.
+      </p>
+
+      <!-- Billing Cycle Switcher -->
+      <div class="inline-flex items-center p-1.5 rounded-2xl bg-[#0c0c12] border border-neutral-800 mt-8">
+        <button @click="billingCycle = 'monthly'" 
+                :class="billingCycle === 'monthly' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400 hover:text-white'"
+                class="px-5 py-2 rounded-xl text-xs font-bold transition-all">
+          Monthly Billing
+        </button>
+        <button @click="billingCycle = 'yearly'" 
+                :class="billingCycle === 'yearly' ? 'bg-gradient-to-r from-neon-magenta to-violet-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'"
+                class="px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
+          <span>Yearly Billing</span>
+          <span class="text-[10px] bg-white text-neutral-950 px-1.5 py-0.5 rounded font-black">SAVE 10%</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pricing Comparison Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+      
+      <!-- Monthly Tier -->
+      <div class="p-8 sm:p-10 rounded-3xl bg-[#0c0c12] border border-neutral-800 flex flex-col justify-between relative">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-neutral-400">Monthly Flexible</div>
+          <div class="mt-4 flex items-baseline gap-2">
+            <span class="text-4xl sm:text-5xl font-extrabold font-mono-num text-white">₹69</span>
+            <span class="text-sm text-neutral-400">/ month</span>
+          </div>
+          <p class="text-xs text-neutral-500 mt-2">Billed monthly, cancel anytime in 1-click.</p>
+
+          <ul class="mt-8 space-y-3 text-sm text-neutral-300">
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Unlimited POS Invoicing</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Unlimited Staff Profiles</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Online Client Booking Portal</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Automatic GST / Tax Calculations</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Email &amp; WhatsApp Receipt Preview</li>
+          </ul>
+        </div>
+
+        <a href="{{ url_for('register') }}" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-sm transition-all">
+          Subscribe Monthly
+        </a>
+      </div>
+
+      <!-- Yearly Tier (Highlighted) -->
+      <div class="p-8 sm:p-10 rounded-3xl bg-gradient-to-b from-[#141420] to-[#0c0c12] border-2 border-neon-magenta shadow-2xl shadow-neon-magenta/15 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-4 right-4 bg-neon-magenta text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+          Best Value
+        </div>
+
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-neon-cyan">Yearly Studio Pro</div>
+          <div class="mt-4 flex items-baseline gap-2">
+            <span class="text-4xl sm:text-5xl font-extrabold font-mono-num text-white">₹749</span>
+            <span class="text-sm text-neutral-400">/ year</span>
+          </div>
+          <p class="text-xs text-neutral-400 mt-2">Full 12-month access with priority VIP support.</p>
+
+          <ul class="mt-8 space-y-3 text-sm text-neutral-200">
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> <strong>Everything in Monthly, plus:</strong></li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> 2 Months Free (₹749 vs ₹828)</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Priority 24/7 Phone &amp; Chat Support</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Custom Logo on Thermal Invoices</li>
+            <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-[#00f5d4]"></i> Free Data Import from Old Software</li>
+          </ul>
+        </div>
+
+        <a href="{{ url_for('register') }}" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white font-bold text-sm shadow-lg shadow-neon-magenta/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
+          Get Started with Yearly Pro
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CALL TO ACTION BANNER -->
+  <section class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+    <div class="rounded-3xl p-8 sm:p-14 bg-gradient-to-r from-[#180922] via-[#0d1624] to-[#091b19] border border-neutral-800 shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
+      
+      <div class="max-w-xl text-center md:text-left">
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          Ready to modernize your salon operations?
+        </h3>
+        <p class="text-neutral-400 text-sm sm:text-base mt-3">
+          Sign up in under 60 seconds. Instant activation with Razorpay integration.
+        </p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center gap-4 shrink-0">
+        <a href="{{ url_for('register') }}" 
+           class="px-8 py-4 rounded-2xl bg-white text-neutral-950 hover:bg-neutral-100 font-extrabold text-sm shadow-xl transition-transform hover:scale-105 active:scale-95">
+          Create Salon Account
+        </a>
+        <a href="{{ url_for('contact') }}" 
+           class="px-6 py-4 rounded-2xl bg-neutral-900/80 border border-neutral-700 text-neutral-300 hover:text-white font-semibold text-sm transition-colors">
+          Talk to Sales
+        </a>
+      </div>
+
+    </div>
+  </section>
 
 </div>
-
 {% endblock %}
+
+{% block scripts %}
+<!-- Include anime.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. Build and Populate Anime.js Geometric Stagger Grid
+    const gridContainer = document.getElementById('anime-grid');
+    if (gridContainer) {
+      const totalElements = 192; // 12 x 16
+      const shapes = ['rounded-md', 'rounded-full', 'rotate-45 rounded-sm', 'rounded-lg'];
+      const colors = ['bg-[#00f5d4]/20', 'bg-[#f72585]/20', 'bg-[#7b2cbf]/20', 'bg-neutral-800/40'];
+      
+      for (let i = 0; i < totalElements; i++) {
+        const el = document.createElement('div');
+        const shape = shapes[i % shapes.length];
+        const color = colors[i % colors.length];
+        el.className = `grid-element w-6 h-6 sm:w-8 sm:h-8 ${shape} ${color} border border-white/5 opacity-0 transition-colors`;
+        gridContainer.appendChild(el);
+      }
+
+      // Anime.js Stagger Animation for Grid Elements
+      anime({
+        targets: '.grid-element',
+        scale: [
+          { value: 0.1, easing: 'easeOutSine', duration: 500 },
+          { value: 1, easing: 'easeInOutQuad', duration: 1200 }
+        ],
+        rotate: () => anime.random(-180, 180),
+        opacity: [
+          { value: 0, duration: 0 },
+          { value: () => anime.random(0.15, 0.6), duration: 1000 }
+        ],
+        delay: anime.stagger(25, { grid: [16, 12], from: 'center' }),
+        loop: false,
+        complete: function() {
+          // Continuous ambient pulsing
+          anime({
+            targets: '.grid-element',
+            scale: () => anime.random(0.85, 1.15),
+            opacity: () => anime.random(0.2, 0.5),
+            delay: anime.stagger(60, { from: 'center' }),
+            duration: 3000,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+          });
+        }
+      });
+    }
+
+    // 2. Kinetic Typography: Split headline into individual <span> characters
+    const headline = document.getElementById('kinetic-headline');
+    if (headline) {
+      const text = headline.innerText.trim();
+      headline.innerHTML = '';
+      
+      // Wrap characters while preserving spaces
+      const words = text.split(' ');
+      words.forEach((word, wordIdx) => {
+        const wordSpan = document.createElement('span');
+        wordSpan.style.display = 'inline-block';
+        wordSpan.style.whiteSpace = 'nowrap';
+        
+        Array.from(word).forEach((char) => {
+          const charSpan = document.createElement('span');
+          charSpan.textContent = char;
+          charSpan.className = 'kinetic-char';
+          // Style specific highlight words
+          if (word.toLowerCase().includes('kinetic') || word.toLowerCase().includes('billing')) {
+            charSpan.classList.add('text-[#00f5d4]');
+          } else if (word.toLowerCase().includes('studios') || word.toLowerCase().includes('engineered')) {
+            charSpan.classList.add('text-[#f72585]');
+          }
+          wordSpan.appendChild(charSpan);
+        });
+        
+        headline.appendChild(wordSpan);
+        if (wordIdx < words.length - 1) {
+          headline.appendChild(document.createTextNode(' '));
+        }
+      });
+
+      // Animate kinetic characters using Spring Easing
+      anime({
+        targets: '.kinetic-char',
+        opacity: [0, 1],
+        translateY: [60, 0],
+        rotateZ: () => anime.random(-15, 15),
+        scale: [0.3, 1],
+        delay: anime.stagger(30, { start: 300 }),
+        easing: 'easeOutElastic(1, .6)',
+        duration: 1200
+      });
+    }
+
+    // 3. Animate Hero Subtext & Actions
+    anime.timeline({ easing: 'easeOutExpo' })
+      .add({
+        targets: '#hero-subtext',
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 900
+      }, 700)
+      .add({
+        targets: '#hero-actions',
+        opacity: [0, 1],
+        translateY: [25, 0],
+        duration: 800
+      }, 850)
+      .add({
+        targets: '#hero-stats',
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 800
+      }, 1000);
+
+    // 4. Mouse-Move Parallax Effect for Background Grid & Shapes
+    let mouseX = 0, mouseY = 0;
+    let targetX = 0, targetY = 0;
+    
+    window.addEventListener('mousemove', (e) => {
+      const { innerWidth, innerHeight } = window;
+      targetX = (e.clientX - innerWidth / 2) / (innerWidth / 2);
+      targetY = (e.clientY - innerHeight / 2) / (innerHeight / 2);
+    });
+
+    function animateParallax() {
+      mouseX += (targetX - mouseX) * 0.05;
+      mouseY += (targetY - mouseY) * 0.05;
+      
+      const gridLayer = document.getElementById('stagger-grid-layer');
+      if (gridLayer) {
+        // Shift in opposition to cursor
+        gridLayer.style.transform = `translate3d(${-mouseX * 35}px, ${-mouseY * 35}px, 0px) rotateX(${mouseY * 10}deg) rotateY(${-mouseX * 10}deg)`;
+      }
+      requestAnimationFrame(animateParallax);
+    }
+    animateParallax();
+
+  });
+
+  // Alpine.js Interactive Sandbox Store
+  function posSimulator() {
+    return {
+      catalog: [
+        { id: 1, name: "Signature Haircut & Wash", category: "Hair Styling", price: 450, duration: 35 },
+        { id: 2, name: "Beard Sculpt & Hot Towel", category: "Grooming", price: 250, duration: 20 },
+        { id: 3, name: "Hydra-Glow Facial Spa", category: "Skin Spa", price: 1200, duration: 50 },
+        { id: 4, name: "Balayage & Gloss Treatment", category: "Color & Hair", price: 2800, duration: 90 },
+      ],
+      billItems: [
+        { name: "Signature Haircut & Wash", price: 450, qty: 1 }
+      ],
+      addItem(item) {
+        const existing = this.billItems.find(b => b.name === item.name);
+        if (existing) {
+          existing.qty++;
+        } else {
+          this.billItems.push({ name: item.name, price: item.price, qty: 1 });
+        }
+      },
+      incrementQty(idx) {
+        this.billItems[idx].qty++;
+      },
+      decrementQty(idx) {
+        if (this.billItems[idx].qty > 1) {
+          this.billItems[idx].qty--;
+        } else {
+          this.billItems.splice(idx, 1);
+        }
+      },
+      clearBill() {
+        this.billItems = [];
+      },
+      get subtotal() {
+        return this.billItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+      },
+      get tax() {
+        return Math.round(this.subtotal * 0.18);
+      },
+      get grandTotal() {
+        return this.subtotal + this.tax;
+      },
+      triggerCelebration() {
+        alert("🎉 Demo Payment Verified! In the live POS, this instantly generates PDF/Thermal prints and WhatsApp receipts.");
+      }
+    }
+  }
+</script>
+{% endblock %}
+
