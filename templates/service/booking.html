@@ -1,0 +1,361 @@
+{% extends "layout.html" %}
+
+{% block title %}Book Salon Appointment — Aura Salon{% endblock %}
+
+{% block public_content %}
+<div class="min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-10 bg-neutral-100 dark:bg-[#07070a] flex items-center justify-center"
+     x-data="clientBookingApp()">
+  
+  <div class="w-full max-w-3xl bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+    
+    <!-- Header Banner -->
+    <div class="p-6 sm:p-8 bg-gradient-to-r from-violet-950 via-neutral-900 to-[#0c0c12] border-b border-neutral-200 dark:border-neutral-800 text-white relative overflow-hidden">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-neon-magenta to-neon-cyan flex items-center justify-center text-white font-bold shadow-md">
+            <i data-lucide="scissors" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-extrabold tracking-tight">Aura Luxury Salon &amp; Studio</h1>
+            <p class="text-xs text-neutral-300">402 High Street Mall • Open Today 9:00 AM – 9:00 PM</p>
+          </div>
+        </div>
+        
+        <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Instant Confirmation
+        </span>
+      </div>
+
+      <!-- Step Indicator -->
+      <div class="mt-6 grid grid-cols-3 gap-2 text-xs">
+        <div class="p-2 rounded-xl text-center font-bold transition-all"
+             :class="step === 1 ? 'bg-white/20 text-white border border-white/30' : 'bg-white/5 text-neutral-400'">
+          1. Select Service
+        </div>
+        <div class="p-2 rounded-xl text-center font-bold transition-all"
+             :class="step === 2 ? 'bg-white/20 text-white border border-white/30' : 'bg-white/5 text-neutral-400'">
+          2. Stylist &amp; Time
+        </div>
+        <div class="p-2 rounded-xl text-center font-bold transition-all"
+             :class="step === 3 ? 'bg-white/20 text-white border border-white/30' : 'bg-white/5 text-neutral-400'">
+          3. Details &amp; Confirm
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking Form Steps -->
+    <div class="p-6 sm:p-8">
+      
+      <!-- ================= STEP 1: SERVICE SELECTION ================= -->
+      <div x-show="step === 1" class="space-y-5">
+        <div>
+          <h2 class="text-lg font-bold text-neutral-900 dark:text-white">Choose Your Services</h2>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Select one or more services you would like to book.</p>
+        </div>
+
+        <!-- Category Pills -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <template x-for="cat in categories" :key="cat">
+            <button @click="selectedCategory = cat"
+                    :class="selectedCategory === cat ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400'"
+                    class="px-3.5 py-1.5 rounded-lg whitespace-nowrap transition-colors"
+                    x-text="cat">
+            </button>
+          </template>
+        </div>
+
+        <!-- Services List -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+          <template x-for="s in filteredServices" :key="s.id">
+            <div @click="toggleService(s)" 
+                 :class="isServiceSelected(s.id) ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f0f16]'"
+                 class="p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between hover:border-violet-400">
+              
+              <div>
+                <div class="flex justify-between items-start">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400" x-text="s.category"></span>
+                  <span class="text-[11px] text-neutral-400 font-mono-num" x-text="s.duration + ' mins'"></span>
+                </div>
+                <h4 class="text-sm font-bold text-neutral-900 dark:text-white mt-1" x-text="s.name"></h4>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-1" x-text="s.desc"></p>
+              </div>
+
+              <div class="mt-3 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+                <span class="text-sm font-extrabold font-mono-num text-neutral-900 dark:text-white">₹<span x-text="s.price"></span></span>
+                <span class="text-xs font-bold" :class="isServiceSelected(s.id) ? 'text-violet-600 dark:text-violet-400' : 'text-neutral-400'" x-text="isServiceSelected(s.id) ? '✓ Selected' : '+ Select'"></span>
+              </div>
+
+            </div>
+          </template>
+        </div>
+
+        <!-- Next Step Button -->
+        <div class="pt-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
+          <div>
+            <span class="text-xs text-neutral-400">Selected Services:</span>
+            <div class="text-sm font-bold text-neutral-900 dark:text-white">
+              <span x-text="selectedServices.length"></span> items (₹<span x-text="totalPrice"></span>)
+            </div>
+          </div>
+
+          <button @click="nextStep()" 
+                  :disabled="selectedServices.length === 0"
+                  class="px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center gap-1.5">
+            <span>Continue to Stylist &amp; Time</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= STEP 2: STYLIST & TIME ================= -->
+      <div x-show="step === 2" class="space-y-6" x-cloak>
+        <div>
+          <h2 class="text-lg font-bold text-neutral-900 dark:text-white">Select Stylist &amp; Slot</h2>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Choose your preferred specialist and convenient appointment time.</p>
+        </div>
+
+        <!-- Stylist Grid -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2">Preferred Stylist</label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <template x-for="st in stylists" :key="st.name">
+              <button type="button" 
+                      @click="selectedStylist = st.name"
+                      :class="selectedStylist === st.name ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 text-violet-900 dark:text-violet-200 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300'"
+                      class="p-3 rounded-2xl border text-center transition-all">
+                <div class="w-9 h-9 mx-auto rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center font-bold text-xs mb-2" x-text="st.name[0]"></div>
+                <div class="text-xs font-bold truncate" x-text="st.name"></div>
+                <div class="text-[10px] text-neutral-400 truncate" x-text="st.role"></div>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Date & Slot Selection -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1">Appointment Date</label>
+            <input type="date" 
+                   x-model="bookingDate" 
+                   class="w-full px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1">Available Time Slots</label>
+            <div class="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
+              <template x-for="slot in timeSlots" :key="slot">
+                <button type="button"
+                        @click="selectedSlot = slot"
+                        :class="selectedSlot === slot ? 'bg-violet-600 text-white font-bold' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-800'"
+                        class="py-2 rounded-lg text-xs font-mono-num transition-all"
+                        x-text="slot">
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nav -->
+        <div class="pt-4 border-t border-neutral-200 dark:border-neutral-800 flex justify-between">
+          <button @click="step = 1" class="px-5 py-2.5 rounded-xl border text-xs font-semibold">
+            &larr; Back
+          </button>
+          <button @click="step = 3" 
+                  :disabled="!selectedSlot"
+                  class="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1">
+            <span>Next: Client Details</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= STEP 3: CLIENT DETAILS & CONFIRMATION ================= -->
+      <div x-show="step === 3" class="space-y-5" x-cloak>
+        <div>
+          <h2 class="text-lg font-bold text-neutral-900 dark:text-white">Your Contact Details</h2>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">We will send your booking confirmation &amp; reminder via WhatsApp/SMS.</p>
+        </div>
+
+        <form @submit.prevent="confirmBooking()" class="space-y-3">
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full Name</label>
+              <input type="text" x-model="client.name" required placeholder="e.g. Radhika Seth" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">WhatsApp / Phone Number</label>
+              <input type="tel" x-model="client.phone" required pattern="[0-9]{10}" placeholder="9876543210" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email (Optional)</label>
+            <input type="email" x-model="client.email" placeholder="radhika@example.com" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Special Notes / Preferences</label>
+            <textarea x-model="client.notes" rows="2" placeholder="Any hair allergies, preferred beverage, etc..." class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"></textarea>
+          </div>
+
+          <!-- Booking Summary Box -->
+          <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200 dark:border-neutral-800 space-y-2 text-xs">
+            <div class="font-bold text-neutral-900 dark:text-white">Booking Summary</div>
+            <div class="flex justify-between text-neutral-500">
+              <span>Date &amp; Slot:</span>
+              <span class="font-semibold text-neutral-900 dark:text-white" x-text="bookingDate + ' @ ' + selectedSlot"></span>
+            </div>
+            <div class="flex justify-between text-neutral-500">
+              <span>Stylist:</span>
+              <span class="font-semibold text-neutral-900 dark:text-white" x-text="selectedStylist"></span>
+            </div>
+            <div class="flex justify-between text-neutral-500">
+              <span>Estimated Total (Pay at Salon):</span>
+              <span class="font-mono-num font-bold text-emerald-600 dark:text-emerald-400">₹<span x-text="totalPrice"></span></span>
+            </div>
+          </div>
+
+          <!-- Submit Buttons -->
+          <div class="pt-3 flex justify-between">
+            <button type="button" @click="step = 2" class="px-5 py-2.5 rounded-xl border text-xs font-semibold">
+              &larr; Back
+            </button>
+            <button type="submit" class="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 transition-all">
+              Confirm &amp; Reserve Slot
+            </button>
+          </div>
+
+        </form>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= SUCCESS CONFIRMATION MODAL ================= -->
+  <div x-show="showSuccessModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100">
+    
+    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 text-center space-y-4">
+      
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center">
+        <i data-lucide="check" class="w-7 h-7"></i>
+      </div>
+
+      <div>
+        <h3 class="text-lg font-black text-neutral-900 dark:text-white">Appointment Confirmed!</h3>
+        <p class="text-xs text-neutral-400 mt-1">Booking Ref: <span class="font-mono-num font-bold text-violet-400">#BK-9482</span></p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-left text-xs space-y-1.5">
+        <p><strong class="text-neutral-400">Client:</strong> <span x-text="client.name"></span></p>
+        <p><strong class="text-neutral-400">Stylist:</strong> <span x-text="selectedStylist"></span></p>
+        <p><strong class="text-neutral-400">Slot:</strong> <span x-text="bookingDate + ' at ' + selectedSlot"></span></p>
+        <p><strong class="text-neutral-400">Venue:</strong> Aura Luxury Salon, Studio 402</p>
+      </div>
+
+      <p class="text-[11px] text-neutral-400">
+        A confirmation message has been queued for WhatsApp. Pay upon arrival at the salon.
+      </p>
+
+      <button @click="resetFlow()" class="w-full py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 text-xs font-bold">
+        Done / Book Another
+      </button>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function clientBookingApp() {
+    return {
+      step: 1,
+      selectedCategory: 'All',
+      selectedStylist: 'Any Available Stylist',
+      bookingDate: new Date().toISOString().split('T')[0],
+      selectedSlot: '11:00 AM',
+      showSuccessModal: false,
+
+      client: {
+        name: '',
+        phone: '',
+        email: '',
+        notes: ''
+      },
+
+      categories: ['All', 'Haircuts', 'Spa & Facial', 'Hair Color', 'Styling', 'Treatments'],
+
+      stylists: [
+        { name: 'Any Available Stylist', role: 'Fastest Allocation' },
+        { name: 'Alex Rivera', role: 'Senior Stylist' },
+        { name: 'Priya Nair', role: 'Master Colorist' },
+        { name: 'Marcus Vance', role: 'Grooming Expert' },
+      ],
+
+      timeSlots: [
+        '10:00 AM', '11:00 AM', '12:00 PM', '01:30 PM', '02:30 PM', '04:00 PM', '05:30 PM', '07:00 PM'
+      ],
+
+      services: [
+        { id: 1, name: "Signature Haircut & Wash", category: "Haircuts", price: 450, duration: 35, desc: "Includes shampoo, customized hair wash, and blow dry finish." },
+        { id: 2, name: "Women's Layer Cut & Blowdry", category: "Haircuts", price: 750, duration: 45, desc: "Consultation, texture layering, and heat styling." },
+        { id: 3, name: "Hydra-Dew Glow Facial", category: "Spa & Facial", price: 1500, duration: 60, desc: "Deep pore ultrasonic cleanse & hydration infusion." },
+        { id: 4, name: "Luxury Organic Hair Spa", category: "Treatments", price: 1200, duration: 50, desc: "Scalp therapy, argan oil steam wrap & relaxing massage." },
+        { id: 5, name: "Full Balayage & Toning", category: "Hair Color", price: 3200, duration: 120, desc: "Artisan hair painting with gloss and bond repair." },
+      ],
+
+      selectedServices: [
+        { id: 1, name: "Signature Haircut & Wash", price: 450, duration: 35 }
+      ],
+
+      get filteredServices() {
+        return this.services.filter(s => this.selectedCategory === 'All' || s.category === this.selectedCategory);
+      },
+
+      isServiceSelected(id) {
+        return this.selectedServices.some(s => s.id === id);
+      },
+
+      toggleService(service) {
+        const idx = this.selectedServices.findIndex(s => s.id === service.id);
+        if (idx !== -1) {
+          this.selectedServices.splice(idx, 1);
+        } else {
+          this.selectedServices.push(service);
+        }
+      },
+
+      get totalPrice() {
+        return this.selectedServices.reduce((acc, s) => acc + s.price, 0);
+      },
+
+      nextStep() {
+        if (this.selectedServices.length > 0) {
+          this.step = 2;
+        }
+      },
+
+      confirmBooking() {
+        this.showSuccessModal = true;
+      },
+
+      resetFlow() {
+        this.showSuccessModal = false;
+        this.step = 1;
+        this.client = { name: '', phone: '', email: '', notes: '' };
+      }
+    };
+  }
+</script>
+{% endblock %}
+

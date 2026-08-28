@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+
+{% block title %}404 — Page Not Found — AuraPOS{% endblock %}
+
+{% block public_content %}
+<div class="min-h-[calc(100vh-8rem)] flex items-center justify-center p-4 text-center">
+  <div class="max-w-md space-y-6">
+    <div class="w-20 h-20 mx-auto rounded-3xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 flex items-center justify-center font-mono-num font-black text-2xl">
+      404
+    </div>
+    
+    <div class="space-y-2">
+      <h1 class="text-2xl font-bold text-neutral-900 dark:text-white">Page Not Found</h1>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        The page you are looking for might have been moved, deleted, or never existed.
+      </p>
+    </div>
+
+    <div class="flex items-center justify-center gap-3">
+      <a href="{{ url_for('index') }}" class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-colors">
+        Return to Home
+      </a>
+      <a href="{{ url_for('dashboard') }}" class="px-5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 text-xs font-semibold hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">
+        Open Dashboard
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

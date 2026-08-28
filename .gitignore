@@ -3,3 +3,7 @@
 tailwind.config.js
 *.json
 *.css
+*.env
+/build/*
+/dist/*
+/.vscode/*

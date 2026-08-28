@@ -547,5 +547,6 @@ def page_not_found(*args):
 
 
 if __name__ == '__main__':
+    print("Hello!, Press Ctrl+C to exit.")
     app.run(debug=True, host='0.0.0.0', port=5000)
 
