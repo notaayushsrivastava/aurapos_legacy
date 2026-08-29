@@ -1,5 +1,5 @@
 from flask import (
-    Flask, jsonify, request, render_template, flash, redirect, url_for, session
+    Flask, jsonify, request, render_template, flash, redirect, url_for, session, Response
 )
 import razorpay
 from uuid import uuid4
@@ -10,6 +10,8 @@ from datetime import timedelta, datetime, date
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_limiter.errors import RateLimitExceeded
+import csv
+import io
 import json
 
 
@@ -23,6 +25,31 @@ def login_required(f):
     return decorated_function
 
 
+def role_required(*levels):
+    """Gate a route to specific auth levels.
+
+    Pages redirect unauthorized users to /billing with a flash message;
+    API endpoints return a 403 JSON response instead.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if "id" not in session:
+                flash("Please sign in to access your salon terminal.", "warning")
+                return redirect(url_for("login"))
+            if session.get("auth_level", "admin") not in levels:
+                if request.path.startswith("/api/"):
+                    return jsonify({
+                        "success": False,
+                        "message": "Your access level is not authorised for this action.",
+                    }), 403
+                flash("Your access level doesn't allow that page.", "error")
+                return redirect(url_for("billing"))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
 
@@ -32,6 +59,8 @@ serviceRepo = ServiceRepository()
 staffRepo = StaffRepository()
 appointmentRepo = AppointmentRepository()
 billRepo = BillRepository()
+customerRepo = CustomerRepository()
+categoryRepo = CategoryRepository()
 
 limiter = Limiter(
     get_remote_address,
@@ -346,12 +375,14 @@ def dashboard():
         staff=staff,
         appointments=appointments,
         recent_bills=recent_bills,
-        metrics=metrics
+        metrics=metrics,
+        # Billing Desk sees the dashboard but never revenue figures
+        can_view_revenue=session.get("auth_level", "admin") != "cashier"
     )
 
 
 @app.route('/services')
-@login_required
+@role_required("admin", "manager")
 def services():
     salon_id = session.get("id", 1)
     service_list = serviceRepo.get_services(salon_id)
@@ -386,7 +417,7 @@ def api_get_services():
 
 
 @app.post('/api/services')
-@login_required
+@role_required("admin", "manager")
 def api_add_service():
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
@@ -404,7 +435,7 @@ def api_add_service():
 
 
 @app.put('/api/services/<int:service_id>')
-@login_required
+@role_required("admin", "manager")
 def api_update_service(service_id):
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
@@ -423,11 +454,90 @@ def api_update_service(service_id):
 
 
 @app.delete('/api/services/<int:service_id>')
-@login_required
+@role_required("admin", "manager")
 def api_delete_service(service_id):
     salon_id = session.get("id", 1)
     serviceRepo.delete_service(service_id, salon_id)
     return jsonify({"success": True})
+
+
+# ================= SERVICE CATEGORIES =================
+
+@app.get('/api/categories')
+@login_required
+def api_get_categories():
+    salon_id = session.get("id", 1)
+    return jsonify({"categories": categoryRepo.get_categories(salon_id)})
+
+
+@app.post('/api/categories')
+@role_required("admin", "manager")
+def api_add_category():
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Category name is required."}), 400
+    if len(name) > 40:
+        return jsonify({"success": False, "message": "Category name must be 40 characters or fewer."}), 400
+    cat_id, created = categoryRepo.add_category(salon_id, name)
+    if created:
+        return jsonify({"success": True, "id": cat_id, "created": True, "message": f"Category '{name}' added."})
+    return jsonify({"success": True, "id": cat_id, "created": False, "message": f"Category '{name}' already exists."})
+
+
+@app.delete('/api/categories/<int:category_id>')
+@role_required("admin", "manager")
+def api_delete_category(category_id):
+    salon_id = session.get("id", 1)
+    ok, message = categoryRepo.delete_category(salon_id, category_id)
+    return jsonify({"success": ok, "message": message}), (200 if ok else 409)
+
+
+# ================= CUSTOMER LOOKUP (POS BILLING) =================
+
+@app.get('/api/customers/search')
+@login_required
+def api_search_customers():
+    salon_id = session.get("id", 1)
+    query = request.args.get("q", "")
+    return jsonify({"query": query, "customers": customerRepo.search_customers(salon_id, query)})
+
+
+@app.post('/api/customers')
+@login_required
+def api_create_customer():
+    """Create a customer from the POS lookup dialog. Phone must be exactly 10 digits."""
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    phone_digits = "".join(ch for ch in str(data.get("phone", "") or "") if ch.isdigit())
+    if not name:
+        return jsonify({"success": False, "message": "Customer name is required."}), 400
+    if len(phone_digits) != 10:
+        return jsonify({"success": False, "message": "Phone number must be exactly 10 digits."}), 400
+    existing = customerRepo.get_by_phone(salon_id, phone_digits)
+    if existing:
+        return jsonify({
+            "success": False,
+            "message": f"A customer with phone {phone_digits} already exists — attached them to the bill instead.",
+            "existing": existing,
+        }), 409
+    new_id = customerRepo.add_customer(
+        account_id=salon_id,
+        name=name,
+        phone=phone_digits,
+        email=str(data.get("email", "") or "").strip(),
+        notes=str(data.get("notes", "") or "").strip(),
+    )
+    customer = {
+        "id": new_id,
+        "name": name,
+        "phone": phone_digits,
+        "email": str(data.get("email", "") or "").strip(),
+        "notes": str(data.get("notes", "") or "").strip(),
+    }
+    return jsonify({"success": True, "id": new_id, "customer": customer, "message": f"{name} added to your customer list."})
 
 
 @app.post('/api/bills')
@@ -529,6 +639,288 @@ def api_public_booking():
         notes=data.get("notes", "")
     )
     return jsonify({"success": True, "booking_id": f"BK-{new_id:04d}"})
+
+
+# ================= SETTINGS =================
+
+@app.route('/settings')
+@role_required("admin", "manager")
+def settings():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    accounts = authRepo.get_accounts(salon_id)
+    # Never expose team passwords to the client
+    safe_accounts = [{**acc, "password": "********"} for acc in accounts]
+    salon_data = asdict(salon) if salon else {}
+    subscriptions = authRepo.get_subscriptions(salon_id)
+    deletion_request = authRepo.get_pending_deletion_request(salon_id)
+    if session.get("auth_level", "admin") != "admin":
+        # Managers can open Settings (team overview, own password) but must
+        # never see subscription details or salon billing metadata.
+        for key in ("plan", "created_on", "expires_on"):
+            salon_data.pop(key, None)
+        subscriptions = []
+        deletion_request = None
+    return render_template(
+        'service/settings.html',
+        salon=salon_data,
+        accounts=safe_accounts,
+        primary_account_id=authRepo.get_primary_account_id(salon_id),
+        subscriptions=subscriptions,
+        deletion_request=deletion_request,
+        max_team_seats=MAX_TEAM_SEATS,
+    )
+
+
+@app.patch('/api/settings/profile')
+@role_required("admin")
+def api_update_profile():
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    owner_name = (data.get("owner_name") or "").strip()
+    salon_name = (data.get("salon_name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    if not all([owner_name, salon_name, email, phone]):
+        return jsonify({"success": False, "message": "All profile fields are required."}), 400
+    ok = authRepo.update_salon_profile(salon_id, owner_name, salon_name, email, phone)
+    if not ok:
+        return jsonify({"success": False, "message": "That email or phone is already linked to another salon."}), 400
+    return jsonify({"success": True, "message": "Salon profile updated."})
+
+
+@app.post('/api/settings/password')
+@login_required
+def api_change_password():
+    salon_id = session.get("id", 1)
+    username = session.get("username", "")
+    data = request.get_json() or {}
+    current = (data.get("current_password") or "").strip()
+    new = (data.get("new_password") or "").strip()
+    confirm = (data.get("confirm_password") or "").strip()
+    if len(new) < 6:
+        return jsonify({"success": False, "message": "New password must be at least 6 characters."}), 400
+    if new != confirm:
+        return jsonify({"success": False, "message": "New password and confirmation do not match."}), 400
+    ok, message = authRepo.change_password(salon_id, username, current, new)
+    if ok:
+        session["password"] = new
+    return jsonify({"success": ok, "message": message}), (200 if ok else 400)
+
+
+@app.get('/api/settings/accounts')
+@role_required("admin", "manager")
+def api_get_accounts():
+    salon_id = session.get("id", 1)
+    accounts = [{**acc, "password": "********"} for acc in authRepo.get_accounts(salon_id)]
+    return jsonify({
+        "accounts": accounts,
+        "primary_account_id": authRepo.get_primary_account_id(salon_id),
+        "max_seats": MAX_TEAM_SEATS,
+    })
+
+
+@app.post('/api/settings/accounts')
+@login_required
+def api_add_account():
+    if session.get("auth_level") != "admin":
+        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    result = authRepo.add_account(
+        salon_id,
+        data.get("email", ""),
+        data.get("password", ""),
+        data.get("auth_level", "cashier"),
+    )
+    return jsonify(result), (200 if result["success"] else 400)
+
+
+@app.patch('/api/settings/accounts/<int:row_id>')
+@login_required
+def api_update_account(row_id):
+    if session.get("auth_level") != "admin":
+        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    new_password = (data.get("password") or "").strip() or None
+    result = authRepo.update_account(
+        salon_id, row_id,
+        data.get("email", ""),
+        data.get("auth_level", "cashier"),
+        password=new_password,
+    )
+    if result["success"]:
+        # Keep the session in sync when the logged-in user edits their own account
+        me = next((a for a in authRepo.get_accounts(salon_id) if a["id"] == row_id), None)
+        if me and me["username"] == session.get("username", ""):
+            if new_password:
+                session["password"] = new_password
+            session["auth_level"] = me["auth_level"]
+    return jsonify(result), (200 if result["success"] else 400)
+
+
+@app.delete('/api/settings/accounts/<int:row_id>')
+@login_required
+def api_delete_account(row_id):
+    if session.get("auth_level") != "admin":
+        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    salon_id = session.get("id", 1)
+    result = authRepo.delete_account(salon_id, row_id)
+    return jsonify(result), (200 if result["success"] else 400)
+
+
+def _csv_response(filename, header, rows):
+    """Stream rows as a downloadable CSV attachment."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get('/api/settings/export/<dataset>')
+@role_required("admin")
+def api_export_data(dataset):
+    salon_id = session.get("id", 1)
+    stamp = date.today().isoformat()
+    if dataset == "services":
+        rows = serviceRepo.get_services(salon_id)
+        return _csv_response(
+            f"services-{stamp}.csv",
+            ["id", "name", "category", "price", "duration", "staff", "description", "active"],
+            [[r["id"], r["name"], r["category"], r["price"], r["duration"], r["staff"], r["description"], r["active"]] for r in rows],
+        )
+    if dataset == "categories":
+        cats = categoryRepo.get_categories(salon_id)
+        usage = {}
+        for s in serviceRepo.get_services(salon_id):
+            key = str(s["category"]).strip().lower()
+            usage[key] = usage.get(key, 0) + 1
+        return _csv_response(
+            f"categories-{stamp}.csv",
+            ["id", "name", "services_in_category", "created_at"],
+            [[c["id"], c["name"], usage.get(str(c["name"]).strip().lower(), 0), c["created_at"]] for c in cats],
+        )
+    if dataset == "customers":
+        rows = customerRepo.get_customers(salon_id)
+        return _csv_response(
+            f"customers-{stamp}.csv",
+            ["id", "name", "phone", "email", "notes", "created_at"],
+            [[r["id"], r["name"], r["phone"], r["email"], r["notes"], r["created_at"]] for r in rows],
+        )
+    if dataset == "appointments":
+        rows = appointmentRepo.get_appointments(salon_id)
+        return _csv_response(
+            f"appointments-{stamp}.csv",
+            ["id", "client", "phone", "email", "service", "time", "date", "staff", "price", "duration", "status", "notes"],
+            [[r["id"], r["client"], r["phone"], r["email"], r["service"], r["time"], r["date"], r["staff"], r["price"], r["duration"], r["status"], r["notes"]] for r in rows],
+        )
+    if dataset == "bills":
+        rows = billRepo.get_recent_bills(salon_id, limit=1000000)
+        return _csv_response(
+            f"invoices-{stamp}.csv",
+            ["id", "client_name", "client_phone", "subtotal", "discount", "tax", "grand_total", "payment_mode", "created_at"],
+            [[r["id"], r["client_name"], r["client_phone"], r["subtotal"], r["discount"], r["tax"], r["grand_total"], r["payment_mode"], r["created_at"]] for r in rows],
+        )
+    return jsonify({"success": False, "message": "Unknown dataset."}), 404
+
+
+@app.get('/api/settings/export/template/<dataset>')
+@role_required("admin")
+def api_import_template(dataset):
+    """Downloadable sample CSVs showing the exact mass-upload format."""
+    if dataset == "customers":
+        return _csv_response(
+            "customers-upload-template.csv",
+            ["name", "phone", "email", "notes"],
+            [
+                ["Ananya Sharma", "9876543210", "ananya@gmail.com", "Prefers weekend slots"],
+                ["Rahul Verma", "9811112222", "rahul@gmail.com", ""],
+            ],
+        )
+    if dataset == "services":
+        return _csv_response(
+            "services-upload-template.csv",
+            ["name", "category", "price", "duration", "staff", "description", "active"],
+            [
+                ["Signature Haircut", "Haircuts", 450, 30, "Any Stylist", "Includes wash & blowdry", 1],
+                ["Express Facial", "Spa & Facial", 900, 40, "Any Stylist", "", 1],
+            ],
+        )
+    return jsonify({"success": False, "message": "Unknown template."}), 404
+
+
+@app.post('/api/settings/import/<dataset>')
+@login_required
+def api_import_data(dataset):
+    """Mass upload customers or services from a CSV file."""
+    if session.get("auth_level") != "admin":
+        return jsonify({"success": False, "message": "Only the salon owner can import data."}), 403
+    salon_id = session.get("id", 1)
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Attach a CSV file to upload."}), 400
+    if not file.filename.lower().endswith(".csv"):
+        return jsonify({"success": False, "message": "Only .csv files are supported."}), 400
+    try:
+        text = file.read().decode("utf-8-sig")
+        raw_rows = list(csv.DictReader(io.StringIO(text)))
+    except Exception:
+        return jsonify({"success": False, "message": "Could not read that CSV file."}), 400
+    # Normalize headers (lowercase, trimmed) so "Name", "NAME" etc. all work
+    rows = [
+        {(k or "").strip().lower(): (v or "") for k, v in row.items() if k is not None}
+        for row in raw_rows
+    ]
+    if dataset == "customers":
+        result = customerRepo.bulk_add_customers(salon_id, rows)
+    elif dataset == "services":
+        result = serviceRepo.bulk_add_services(salon_id, rows)
+    else:
+        return jsonify({"success": False, "message": "Unknown dataset."}), 404
+    message = f"Import complete — {result['added']} added, {result['skipped']} skipped."
+    if result.get("categories_registered"):
+        message += f" {result['categories_registered']} new service category(ies) registered."
+    if result["errors"]:
+        message += " Issues: " + "; ".join(result["errors"][:3])
+    return jsonify({"success": True, "message": message, **result})
+
+
+@app.post('/api/settings/delete-request')
+@login_required
+def api_delete_request():
+    if session.get("auth_level") != "admin":
+        return jsonify({"success": False, "message": "Only the salon owner can request account deletion."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    confirm = (data.get("confirm") or "").strip().upper()
+    if confirm != "DELETE":
+        return jsonify({"success": False, "message": "Type DELETE to confirm this request."}), 400
+    salon = authRepo.get_salon(salon_id)
+    reason = (data.get("reason") or "").strip()
+    authRepo.request_account_deletion(salon_id, salon.email if salon else "", reason)
+    try:
+        mailer.send(Message(
+            subject="AuraPOS — Account Deletion Request",
+            recipients=["salonbillingsoftware@gmail.com"],
+            body=(
+                f"Salon #{salon_id} ({salon.salon_name if salon else 'Unknown'}) has requested account deletion.\n"
+                f"Contact email: {salon.email if salon else '-'}\n"
+                f"Plan: {salon.plan if salon else '-'}\n"
+                f"Reason: {reason or '—'}"
+            ),
+        ))
+    except Exception as e:
+        print("Mail error (safe fallback):", e)
+    return jsonify({
+        "success": True,
+        "message": "Deletion request submitted. Our support team will contact you within 48 hours.",
+    })
 
 
 # ================= ERROR HANDLERS =================

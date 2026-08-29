@@ -3,13 +3,15 @@
 {% block title %}Sign In — AuraPOS Salon Manager{% endblock %}
 
 {% block public_content %}
-<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-neutral-100 dark:bg-[#07070a]"
+<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-neutral-100 dark:bg-[#050508]"
      x-data="loginFormApp()">
   
-  <div class="w-full max-w-md bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
+  <div data-anim="scale" class="w-full max-w-md bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
     
-    <!-- Ambient top glow -->
-    <div class="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-violet-600/15 rounded-full blur-3xl pointer-events-none"></div>
+    <!-- Ambient neon glows (reel palette) -->
+    <div class="absolute -top-16 left-1/4 -translate-x-1/2 w-52 h-52 bg-neon-magenta/15 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -top-20 right-0 w-52 h-52 bg-neon-cyan/15 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-16 w-56 h-56 bg-neon-violet/15 rounded-full blur-3xl pointer-events-none"></div>
 
     <!-- Header & Logo -->
     <div class="text-center space-y-2">
@@ -27,7 +29,7 @@
     </div>
 
     <!-- Login Form -->
-    <form method="POST" action="{{ url_for('login') }}" class="space-y-4" @submit="isSubmitting = true">
+    <form method="POST" action="{{ url_for('login') }}" data-anim="up" data-delay="140" class="space-y-4" @submit="isSubmitting = true">
       
       <!-- Username / Email Input -->
       <div>
@@ -43,7 +45,7 @@
                  name="username" 
                  required 
                  placeholder="name@aurasalon.com" 
-                 class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors">
+                 class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 transition-colors">
         </div>
       </div>
 
@@ -53,7 +55,7 @@
           <label for="password" class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
             Password
           </label>
-          <a href="{{ url_for('forgotpassword') }}" class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline">
+          <a href="{{ url_for('forgotpassword') }}" class="text-xs font-medium text-violet-600 dark:text-neon-cyan hover:underline">
             Forgot password?
           </a>
         </div>
@@ -67,7 +69,7 @@
                  name="password" 
                  required 
                  placeholder="••••••••" 
-                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors">
+                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 transition-colors">
           <button type="button" 
                   @click="showPassword = !showPassword" 
                   class="absolute right-3.5 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-white p-1">
@@ -79,7 +81,7 @@
       <!-- Remember Me -->
       <div class="flex items-center justify-between text-xs pt-1">
         <label class="flex items-center gap-2 cursor-pointer text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" name="remember" class="rounded border-neutral-300 dark:border-neutral-700 text-violet-600 focus:ring-violet-500">
+          <input type="checkbox" name="remember" class="rounded border-neutral-300 dark:border-neutral-700 text-violet-600 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
           <span>Remember me on this device</span>
         </label>
       </div>
@@ -88,7 +90,7 @@
       <div class="pt-2">
         <button type="submit" 
                 :disabled="isSubmitting"
-                class="w-full py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-violet-600 dark:hover:bg-violet-500 dark:text-white disabled:opacity-50 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-98">
+                class="w-full py-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white hover:opacity-95 disabled:opacity-50 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-98">
           <i data-lucide="log-in" class="w-4 h-4" x-show="!isSubmitting"></i>
           <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="isSubmitting"></i>
           <span x-text="isSubmitting ? 'Authenticating...' : 'Sign In to Terminal'"></span>
@@ -100,7 +102,7 @@
     <!-- Register Link -->
     <div class="pt-2 text-center text-xs text-neutral-500 dark:text-neutral-400 border-t border-neutral-100 dark:border-neutral-800">
       Don't have an active salon subscription? 
-      <a href="{{ url_for('register') }}" class="text-violet-600 dark:text-violet-400 font-bold hover:underline">
+      <a href="{{ url_for('register') }}" class="text-violet-600 dark:text-neon-cyan font-bold hover:underline">
         Get Started &rarr;
       </a>
     </div>

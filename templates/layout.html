@@ -65,6 +65,9 @@
     }
   </script>
 
+  <!-- anime.js — shared kinetic motion engine for all pages -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -91,12 +94,16 @@
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
     }
+
+    /* Kinetic reveal gating — initAuraMotion() adds .js-anim only when motion is allowed,
+       so content stays visible if anime.js fails to load or reduced motion is set */
+    html.js-anim [data-anim] { opacity: 0; }
   </style>
 
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-neutral-50 text-neutral-900 dark:bg-[#07070a] dark:text-neutral-100 min-h-screen flex flex-col font-sans transition-colors duration-200 antialiased selection:bg-neon-cyan selection:text-black"
+<body class="bg-neutral-50 text-neutral-900 dark:bg-[#050508] dark:text-neutral-100 min-h-screen flex flex-col font-sans transition-colors duration-200 antialiased selection:bg-neon-cyan selection:text-black"
       x-data="globalApp()">
 
   <!-- Interactive Flash Messages Toast Container -->
@@ -152,11 +159,11 @@
     {% endwith %}
   </div>
 
-  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments'] %}
+  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings'] %}
 
   {% if is_auth_app %}
     <!-- ================= AUTHENTICATED APP LAYOUT ================= -->
-    <div class="flex h-screen overflow-hidden bg-neutral-100 dark:bg-[#07070a]" x-data="{ sidebarOpen: false }">
+    <div class="flex h-screen overflow-hidden bg-neutral-100 dark:bg-[#050508]" x-data="{ sidebarOpen: false }">
       
       <!-- Mobile Sidebar Backdrop -->
       <div x-show="sidebarOpen" 
@@ -177,7 +184,7 @@
         <!-- Brand Header -->
         <div class="h-16 flex items-center justify-between px-5 border-b border-neutral-200 dark:border-neutral-800/80">
           <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 group">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-violet-500/20 group-hover:scale-105 transition-transform">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-neon-magenta via-violet-600 to-neon-cyan flex items-center justify-center text-white shadow-md shadow-neon-magenta/25 group-hover:scale-105 transition-transform">
               <i data-lucide="scissors" class="w-5 h-5"></i>
             </div>
             <div>
@@ -199,7 +206,7 @@
         <!-- Quick POS Sale CTA -->
         <div class="p-3 border-b border-neutral-200/60 dark:border-neutral-800/60">
           <a href="{{ url_for('billing') }}" 
-             class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-black dark:text-white text-sm font-semibold shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg active:scale-[0.98]">
+             class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-sm font-semibold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98]">
             <i data-lucide="plus-circle" class="w-4 h-4"></i>
             <span>New Sale (POS)</span>
           </a>
@@ -212,46 +219,61 @@
           <a href="{{ url_for('dashboard') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/dashboard' %}
-                 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
                {% else %}
                  text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
                {% endif %}">
-            <i data-lucide="layout-dashboard" class="w-4 h-4 transition-colors {% if request.path == '/dashboard' %}text-violet-600 dark:text-violet-400{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <i data-lucide="layout-dashboard" class="w-4 h-4 transition-colors {% if request.path == '/dashboard' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>Dashboard</span>
           </a>
 
           <a href="{{ url_for('billing') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/billing' %}
-                 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
                {% else %}
                  text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
                {% endif %}">
-            <i data-lucide="receipt" class="w-4 h-4 transition-colors {% if request.path == '/billing' %}text-violet-600 dark:text-violet-400{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <i data-lucide="receipt" class="w-4 h-4 transition-colors {% if request.path == '/billing' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>POS Billing</span>
           </a>
 
+          {% if session.get('auth_level', 'admin') != 'cashier' %}
           <a href="{{ url_for('services') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/services' %}
-                 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
                {% else %}
                  text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
                {% endif %}">
-            <i data-lucide="sparkles" class="w-4 h-4 transition-colors {% if request.path == '/services' %}text-violet-600 dark:text-violet-400{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <i data-lucide="sparkles" class="w-4 h-4 transition-colors {% if request.path == '/services' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>Service Catalog</span>
           </a>
+          {% endif %}
 
           <a href="{{ url_for('appointments') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/appointments' %}
-                 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
                {% else %}
                  text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
                {% endif %}">
-            <i data-lucide="calendar-clock" class="w-4 h-4 transition-colors {% if request.path == '/appointments' %}text-violet-600 dark:text-violet-400{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <i data-lucide="calendar-clock" class="w-4 h-4 transition-colors {% if request.path == '/appointments' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>Appointments</span>
           </a>
+
+          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          <a href="{{ url_for('settings') }}" 
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
+               {% if request.path == '/settings' %}
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
+               {% else %}
+                 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
+               {% endif %}">
+            <i data-lucide="settings" class="w-4 h-4 transition-colors {% if request.path == '/settings' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <span>Settings</span>
+          </a>
+          {% endif %}
 
           <div class="pt-4 px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Client Facing</div>
 
@@ -338,7 +360,7 @@
         </header>
 
         <!-- Content Area with Independent Scroll -->
-        <main class="flex-1 overflow-y-auto bg-neutral-50/50 dark:bg-[#07070a]">
+        <main class="flex-1 overflow-y-auto bg-neutral-50/50 dark:bg-[#050508]">
           {% block content %}{% endblock %}
         </main>
       </div>
@@ -435,7 +457,59 @@
       if (window.lucide) {
         lucide.createIcons();
       }
+      initAuraMotion();
     });
+
+    /* Shared kinetic motion engine — reveal-on-scroll + number count-ups.
+       (about.html opts out via window.AURA_NO_REVEAL and runs its own choreography.) */
+    function initAuraMotion() {
+      if (window.AURA_NO_REVEAL) return;
+      if (!window.anime || !('IntersectionObserver' in window)) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      var els = Array.prototype.slice.call(document.querySelectorAll('[data-anim]'));
+      if (els.length) {
+        document.documentElement.classList.add('js-anim');
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (!en.isIntersecting) return;
+            var el = en.target;
+            io.unobserve(el);
+            var mode = el.getAttribute('data-anim') || 'up';
+            var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
+            var cfg = { targets: el, duration: 750, delay: delay, easing: 'easeOutExpo' };
+            if (mode === 'scale') {
+              cfg.opacity = [0, 1]; cfg.scale = [0.92, 1]; cfg.translateY = [16, 0];
+            } else if (mode === 'left') {
+              cfg.opacity = [0, 1]; cfg.translateX = [-26, 0];
+            } else {
+              cfg.opacity = [0, 1]; cfg.translateY = [24, 0];
+            }
+            anime(cfg);
+          });
+        }, { threshold: 0.12, rootMargin: '0px 0px -36px 0px' });
+        els.forEach(function (el) { el.style.opacity = '0'; io.observe(el); });
+      }
+
+      var cio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          var el = en.target;
+          cio.unobserve(el);
+          var end = parseFloat(el.getAttribute('data-count')) || 0;
+          var prefix = el.getAttribute('data-prefix') || '';
+          var suffix = el.getAttribute('data-suffix') || '';
+          var obj = { v: 0 };
+          anime({
+            targets: obj, v: end, duration: 1500, easing: 'easeOutExpo',
+            update: function () {
+              el.textContent = prefix + Math.round(obj.v).toLocaleString('en-IN') + suffix;
+            }
+          });
+        });
+      }, { threshold: 0.5 });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-count]'), function (el) { cio.observe(el); });
+    }
 
     function globalApp() {
       return {
@@ -457,6 +531,145 @@
       }
     }
   </script>
+
+  <style>[x-cloak]{display:none !important}</style>
+  <script>
+    /* ===== Shared UI Kit: custom confirm dialog + toast notifications =====
+       Replaces native window.confirm / window.alert across all pages.
+       Usage:  await window.uiConfirm({ title, message, confirmText, cancelText, danger })
+               window.uiToast(message, 'success' | 'error' | 'warning' | 'info')  */
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('ui', {
+        confirmOpen: false,
+        confirmOpts: {},
+        _confirmResolve: null,
+        toasts: [],
+        _toastSeq: 0,
+
+        ask(opts = {}) {
+          this.confirmOpts = {
+            title: opts.title || 'Are you sure?',
+            message: opts.message || '',
+            confirmText: opts.confirmText || 'Confirm',
+            cancelText: opts.cancelText || 'Cancel',
+            danger: !!opts.danger,
+            icon: opts.icon || (opts.danger ? 'alert-triangle' : 'help-circle')
+          };
+          this.confirmOpen = true;
+          return new Promise((resolve) => { this._confirmResolve = resolve; });
+        },
+        answer(val) {
+          this.confirmOpen = false;
+          const resolve = this._confirmResolve;
+          this._confirmResolve = null;
+          if (resolve) resolve(val);
+        },
+        toast(message, type = 'success') {
+          const id = ++this._toastSeq;
+          this.toasts.push({ id, message, type });
+          setTimeout(() => this.dismissToast(id), 4500);
+        },
+        dismissToast(id) {
+          this.toasts = this.toasts.filter(t => t.id !== id);
+        }
+      });
+    });
+
+    window.uiConfirm = (opts = {}) => {
+      const ui = window.Alpine && window.Alpine.store('ui');
+      if (!ui) return Promise.resolve(window.confirm(opts.message || opts.title || 'Are you sure?'));
+      return ui.ask(opts);
+    };
+    window.uiToast = (message, type = 'success') => {
+      const ui = window.Alpine && window.Alpine.store('ui');
+      if (!ui) { console.log('[toast]', type, message); return; }
+      ui.toast(message, type);
+    };
+  </script>
+  <!-- ===== Shared UI Kit markup: confirm dialog + toast stack (both app & public shells) ===== -->
+  <div x-data
+       @keydown.escape.window="$store.ui.confirmOpen && $store.ui.answer(false)">
+
+    <!-- Custom Confirm Dialog -->
+    <div x-show="$store.ui.confirmOpen" x-cloak
+         role="dialog" aria-modal="true"
+         class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click.self="$store.ui.answer(false)">
+      <div class="bg-white dark:bg-[#0f0f16] w-full max-w-sm rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+           x-show="$store.ui.confirmOpen"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0 scale-95"
+           x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100 scale-100"
+           x-transition:leave-end="opacity-0 scale-95">
+
+        <div class="flex items-start gap-3.5">
+          <div class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+               :class="$store.ui.confirmOpts.danger ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400' : 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan'">
+            <i data-lucide="alert-triangle" class="w-5 h-5" x-show="$store.ui.confirmOpts.danger"></i>
+            <i data-lucide="help-circle" class="w-5 h-5" x-show="!$store.ui.confirmOpts.danger"></i>
+          </div>
+          <div class="min-w-0 pt-0.5">
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white leading-snug" x-text="$store.ui.confirmOpts.title"></h3>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1.5 leading-relaxed" x-show="$store.ui.confirmOpts.message" x-text="$store.ui.confirmOpts.message"></p>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="$store.ui.answer(false)"
+                  class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-bold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  x-text="$store.ui.confirmOpts.cancelText"></button>
+          <button @click="$store.ui.answer(true)"
+                  class="flex-1 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition-all hover:opacity-95"
+                  :class="$store.ui.confirmOpts.danger ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25' : 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan shadow-neon-magenta/25'"
+                  x-text="$store.ui.confirmOpts.confirmText"></button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Toast Notification Stack -->
+    <div class="fixed top-5 right-5 z-[90] flex flex-col gap-3 max-w-md w-full pointer-events-none px-4 sm:px-0"
+         x-effect="$store.ui.toasts.length && $nextTick(() => { if (window.lucide) lucide.createIcons(); })">
+      <template x-for="t in $store.ui.toasts" :key="t.id">
+        <div x-show="true"
+             x-transition:enter="transition ease-out duration-300 transform"
+             x-transition:enter-start="opacity-0 translate-y-2 translate-x-4 scale-95"
+             x-transition:enter-end="opacity-100 translate-y-0 translate-x-0 scale-100"
+             x-transition:leave="transition ease-in duration-200 transform"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 translate-x-4 scale-95"
+             class="pointer-events-auto p-3.5 pr-9 rounded-xl border shadow-xl flex items-start gap-3 relative overflow-hidden backdrop-blur-lg"
+             :class="t.type === 'error' ? 'bg-rose-50/95 border-rose-200 dark:bg-rose-950/80 dark:border-rose-800/80'
+                    : t.type === 'warning' ? 'bg-amber-50/95 border-amber-200 dark:bg-amber-950/80 dark:border-amber-800/80'
+                    : t.type === 'info' ? 'bg-cyan-50/95 border-cyan-200 dark:bg-cyan-950/80 dark:border-cyan-800/80'
+                    : 'bg-emerald-50/95 border-emerald-200 dark:bg-emerald-950/80 dark:border-emerald-800/80'">
+
+          <div class="mt-0.5 shrink-0">
+            <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500" x-show="t.type === 'success'"></i>
+            <i data-lucide="alert-circle" class="w-5 h-5 text-rose-500" x-show="t.type === 'error'"></i>
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500" x-show="t.type === 'warning'"></i>
+            <i data-lucide="info" class="w-5 h-5 text-cyan-500" x-show="t.type === 'info'"></i>
+          </div>
+          <p class="text-xs font-semibold leading-relaxed text-neutral-800 dark:text-neutral-100" x-text="t.message"></p>
+
+          <button @click="$store.ui.dismissToast(t.id)"
+                  class="absolute top-2.5 right-2.5 p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white transition-colors">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </template>
+    </div>
+
+  </div>
+  <!-- ===== End Shared UI Kit markup ===== -->
 
   {% block scripts %}{% endblock %}
 </body>

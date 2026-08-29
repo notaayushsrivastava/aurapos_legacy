@@ -4,10 +4,10 @@
 {% block page_title %}Point of Sale (POS) Billing{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto" x-data="posBillingApp()">
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="posBillingApp()">
   
   <!-- Top Action Bar & Shortcuts Banner -->
-  <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div data-anim="up" class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
       <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
         <span>Terminal #01</span>
@@ -42,10 +42,10 @@
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
     
     <!-- ================= LEFT COLUMN: CATALOG & SEARCH ================= -->
-    <div class="lg:col-span-7 space-y-4">
+    <div data-anim="up" data-delay="140" class="lg:col-span-7 min-w-0 space-y-4">
       
       <!-- Search & Category Filters -->
-      <div class="bg-white dark:bg-[#0c0c12] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
+      <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#0c0c12] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
         
         <!-- Search Input -->
         <div class="relative flex items-center">
@@ -55,7 +55,7 @@
           <input type="text" 
                  x-model="searchQuery"
                  placeholder="Search services by name (e.g., haircut, facial, keratin, beard)..." 
-                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 dark:focus:ring-violet-400 text-neutral-900 dark:text-white placeholder-neutral-400">
+                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 dark:focus:ring-violet-400 text-neutral-900 dark:text-white placeholder-neutral-400">
           <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3.5 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
             <i data-lucide="x" class="w-3.5 h-3.5"></i>
           </button>
@@ -120,7 +120,7 @@
 
               <!-- Quick Add Button with In-Cart Count Badge -->
               <button @click="addToBill(service)" 
-                      class="relative px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white dark:bg-violet-950/50 dark:text-violet-300 dark:hover:bg-violet-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
+                      class="relative px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white dark:bg-violet-500/10 dark:text-neon-cyan dark:hover:bg-violet-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 <span>Add</span>
                 <template x-if="getItemCount(service.id) > 0">
@@ -145,7 +145,7 @@
     </div>
 
     <!-- ================= RIGHT COLUMN: DYNAMIC BILL SUMMARY ================= -->
-    <div class="lg:col-span-5 sticky top-20 space-y-4">
+    <div data-anim="up" data-delay="220" class="lg:col-span-5 min-w-0 sticky top-20 space-y-4">
       
       <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-md flex flex-col overflow-hidden">
         
@@ -167,23 +167,65 @@
             </button>
           </div>
 
-          <!-- Customer Input fields -->
-          <div class="grid grid-cols-2 gap-2 pt-1">
-            <div>
-              <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Customer Name</label>
-              <input type="text" 
-                     x-model="customer.name" 
-                     placeholder="e.g., Sneha Kapoor" 
-                     class="w-full px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
+          <!-- Customer Lookup (search by name or 10-digit phone) -->
+          <div class="relative pt-1" @click.away="showCustomerResults = false">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">Customer</label>
+              <button @click="openNewCustomerModal()" class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-0.5">
+                <i data-lucide="user-plus" class="w-3 h-3"></i> New
+              </button>
             </div>
-            <div>
-              <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Phone Number</label>
-              <input type="tel" 
-                     x-model="customer.phone" 
-                     placeholder="e.g., 9876543210" 
-                     class="w-full px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
+            <div class="relative flex items-center">
+              <div class="absolute left-2.5 flex items-center justify-center pointer-events-none text-neutral-400">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+              </div>
+              <input type="text"
+                     x-model="customerQuery"
+                     @input="onCustomerInput()"
+                     @focus="customerQuery && (showCustomerResults = true)"
+                     placeholder="Search name or 10-digit phone…"
+                     class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <button x-show="customerQuery" @click="clearCustomer()" class="absolute right-2.5 text-neutral-400 hover:text-rose-500 transition-colors">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <!-- Live Search Results Dropdown -->
+            <div x-show="showCustomerResults" x-cloak
+                 class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#0f0f16] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
+              <template x-if="customerSearching">
+                <p class="px-3 py-2.5 text-[11px] text-neutral-400">Searching customers…</p>
+              </template>
+              <template x-for="c in customerResults" :key="c.id">
+                <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
+                  <span class="min-w-0">
+                    <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
+                    <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
+                  </span>
+                  <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
+                </button>
+              </template>
+              <template x-if="!customerSearching && customerResults.length === 0">
+                <div class="px-3 py-2.5 space-y-2">
+                  <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
+                  <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
+                    <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                    Create New Customer
+                  </button>
+                </div>
+              </template>
             </div>
           </div>
+
+          <!-- Selected Customer Chip -->
+          <div x-show="customer.id" x-cloak class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50">
+            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
+            <span class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 truncate">
+              <span x-text="customer.name"></span><span x-show="customer.phone"> · <span class="font-mono-num" x-text="customer.phone"></span></span>
+            </span>
+            <button @click="clearCustomer()" class="ml-auto text-[10px] font-bold text-neutral-400 hover:text-rose-500 shrink-0 transition-colors">Change</button>
+          </div>
+          <p x-show="!customer.id" class="text-[10px] text-neutral-400">No customer selected — the bill will be recorded as a Walk-in.</p>
         </div>
 
         <!-- Selected Line Items List -->
@@ -222,7 +264,7 @@
                 <!-- Staff Assignment Dropdown -->
                 <div class="flex-1 min-w-0">
                   <select x-model="item.staff" 
-                          class="w-full px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-[11px] font-medium text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-violet-500">
+                          class="w-full px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-[11px] font-medium text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
                     <template x-for="st in staffList" :key="st">
                       <option :value="st" x-text="st"></option>
                     </template>
@@ -256,13 +298,13 @@
           <div class="flex items-center justify-between gap-2">
             <span class="text-neutral-600 dark:text-neutral-400 flex items-center gap-1">
               <span>Discount</span>
-              <button @click="toggleDiscountMode()" class="text-[10px] underline text-violet-600 dark:text-violet-400" x-text="discountType === 'percent' ? '(%)' : '(₹)'"></button>
+              <button @click="toggleDiscountMode()" class="text-[10px] underline text-violet-600 dark:text-neon-cyan" x-text="discountType === 'percent' ? '(%)' : '(₹)'"></button>
             </span>
             <div class="flex items-center gap-1 w-24">
               <input type="number" 
                      x-model.number="discountValue" 
                      min="0"
-                     class="w-full text-right px-2 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num focus:outline-none focus:ring-1 focus:ring-violet-500 text-neutral-900 dark:text-white">
+                     class="w-full text-right px-2 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
             </div>
           </div>
 
@@ -277,7 +319,7 @@
           <!-- Grand Total -->
           <div class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-base font-extrabold text-neutral-900 dark:text-white">
             <span>Total Payable</span>
-            <span class="font-mono-num text-lg text-violet-600 dark:text-violet-400">₹<span x-text="grandTotal"></span></span>
+            <span class="font-mono-num text-lg text-violet-600 dark:text-neon-cyan">₹<span x-text="grandTotal"></span></span>
           </div>
 
           <!-- Payment Mode Selection -->
@@ -299,7 +341,7 @@
             
             <button @click="openPaymentModal()" 
                     :disabled="billItems.length === 0"
-                    class="col-span-2 py-3 px-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-violet-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-98">
+                    class="col-span-2 py-3 px-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
               <i data-lucide="check-circle" class="w-4 h-4"></i>
               <span>Collect Payment</span>
             </button>
@@ -347,8 +389,8 @@
 
       <!-- Amount Banner -->
       <div class="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50 text-center">
-        <span class="text-xs text-violet-700 dark:text-violet-300 font-semibold">Total Amount Due</span>
-        <div class="text-3xl font-black font-mono-num text-violet-600 dark:text-violet-400 mt-0.5">
+        <span class="text-xs text-violet-700 dark:text-neon-cyan font-semibold">Total Amount Due</span>
+        <div class="text-3xl font-black font-mono-num text-violet-600 dark:text-neon-cyan mt-0.5">
           ₹<span x-text="grandTotal"></span>
         </div>
       </div>
@@ -374,7 +416,7 @@
             <input type="number" 
                    x-model.number="cashReceived" 
                    :placeholder="grandTotal" 
-                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500 text-neutral-900 dark:text-white">
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
           </div>
           <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 flex justify-between text-xs font-semibold">
             <span class="text-neutral-500">Change Due to Client</span>
@@ -385,7 +427,7 @@
 
       <!-- Customer WhatsApp Invoice Checkbox -->
       <div class="flex items-center gap-2.5 text-xs text-neutral-600 dark:text-neutral-300">
-        <input type="checkbox" id="send-wa" checked class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500">
+        <input type="checkbox" id="send-wa" checked class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
         <label for="send-wa">Send invoice copy instantly via WhatsApp / SMS</label>
       </div>
 
@@ -425,16 +467,16 @@
       <div class="space-y-3">
         <div>
           <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Item / Custom Service Name</label>
-          <input type="text" x-model="customItem.name" placeholder="e.g. Special Bridal Hair Touchup" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+          <input type="text" x-model="customItem.name" placeholder="e.g. Special Bridal Hair Touchup" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Price (₹)</label>
-            <input type="number" x-model.number="customItem.price" placeholder="750" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+            <input type="number" x-model.number="customItem.price" placeholder="750" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
           </div>
           <div>
             <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Assign Staff</label>
-            <select x-model="customItem.staff" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+            <select x-model="customItem.staff" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
               <template x-for="st in staffList" :key="st">
                 <option :value="st" x-text="st"></option>
               </template>
@@ -445,7 +487,81 @@
 
       <div class="flex gap-2 pt-2">
         <button @click="showCustomItemModal = false" class="flex-1 py-2 rounded-xl border text-xs font-semibold">Cancel</button>
-        <button @click="addCustomItem()" class="flex-1 py-2 rounded-xl bg-violet-600 text-white text-xs font-bold">Add to Bill</button>
+        <button @click="addCustomItem()" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-xs font-bold">Add to Bill</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= NEW CUSTOMER MODAL ================= -->
+  <div x-show="showNewCustomerModal"
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+
+    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+         @click.away="showNewCustomerModal = false">
+
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">New Customer</h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Saved instantly to your salon's customer list.</p>
+        </div>
+        <button @click="showNewCustomerModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full Name <span class="text-rose-500">*</span></label>
+          <input type="text"
+                 x-model="newCustomer.name"
+                 placeholder="e.g., Riya Sharma"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Phone Number <span class="text-rose-500">*</span></label>
+          <input type="tel"
+                 inputmode="numeric"
+                 x-model="newCustomer.phone"
+                 @input="sanitizeCustomerPhone()"
+                 maxlength="10"
+                 placeholder="10-digit mobile number"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          <p class="text-[10px] text-neutral-400 mt-1"><span class="font-mono-num" x-text="newCustomer.phone.length"></span>/10 digits — exactly 10 required.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email (optional)</label>
+          <input type="email"
+                 x-model="newCustomer.email"
+                 placeholder="name@email.com"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Notes (optional)</label>
+          <input type="text"
+                 x-model="newCustomer.notes"
+                 placeholder="e.g., Prefers weekend slots"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <p x-show="newCustomerError" x-cloak class="text-[11px] font-semibold text-rose-500" x-text="newCustomerError"></p>
+      </div>
+
+      <div class="flex gap-3 pt-1">
+        <button @click="showNewCustomerModal = false" class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          Cancel
+        </button>
+        <button @click="createCustomer()" :disabled="savingCustomer"
+                class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span x-text="savingCustomer ? 'Saving…' : 'Create &amp; Attach'"></span>
+        </button>
       </div>
 
     </div>
@@ -512,6 +628,18 @@
         phone: ''
       },
 
+      customerQuery: '',
+      customerResults: [],
+      customerSearching: false,
+      showCustomerResults: false,
+      customerSearchTimer: null,
+      showNewCustomerModal: false,
+      savingCustomer: false,
+      newCustomerError: '',
+      newCustomer: { name: '', phone: '', email: '', notes: '' },
+
+      backendCategories: [],
+
       customItem: {
         name: '',
         price: 500,
@@ -520,6 +648,124 @@
 
       categories: ['All', 'Haircuts', 'Spa & Facial', 'Color & Hair', 'Styling', 'Grooming', 'Treatments'],
       staffList: ['Alex Rivera (Senior)', 'Priya Nair (Colorist)', 'Marcus Vance (Stylist)', 'Sarah Jenkins (Skin Specialist)', 'Unassigned'],
+
+      async init() {
+        // Sync the POS catalog + category pills with the backend
+        try {
+          const [svcRes, catRes] = await Promise.all([fetch('/api/services'), fetch('/api/categories')]);
+          if (svcRes.ok) {
+            const data = await svcRes.json();
+            if (data && data.length) {
+              this.services = data
+                .filter(s => Number(s.active) === 1)
+                .map(s => ({
+                  id: s.id,
+                  name: s.name,
+                  category: s.category,
+                  price: s.price,
+                  duration: s.duration,
+                  description: s.description
+                }));
+            }
+          }
+          if (catRes.ok) {
+            const catData = await catRes.json();
+            this.backendCategories = (catData.categories || []).map(c => c.name);
+          }
+        } catch (e) {
+          console.log("POS catalog sync failed — using cached fallback:", e);
+        }
+        this.syncCategories();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      syncCategories() {
+        const fromServices = this.services.map(s => s.category);
+        this.categories = ['All', ...new Set([...this.backendCategories, ...fromServices])];
+      },
+
+      // ---------- Customer lookup ----------
+      onCustomerInput() {
+        this.customer = { id: null, name: '', phone: '' }; // typing clears previous selection
+        this.showCustomerResults = true;
+        clearTimeout(this.customerSearchTimer);
+        const q = this.customerQuery.trim();
+        if (q.length < 2) { this.customerResults = []; this.customerSearching = false; return; }
+        this.customerSearching = true;
+        this.customerSearchTimer = setTimeout(async () => {
+          try {
+            const res = await fetch('/api/customers/search?q=' + encodeURIComponent(q));
+            this.customerResults = res.ok ? await res.json() : [];
+          } catch (e) {
+            console.log('Customer search failed:', e);
+            this.customerResults = [];
+          }
+          this.customerSearching = false;
+        }, 250);
+      },
+
+      selectCustomer(c) {
+        this.customer = { id: c.id, name: c.name, phone: c.phone };
+        this.customerQuery = c.name;
+        this.showCustomerResults = false;
+        this.customerResults = [];
+      },
+
+      clearCustomer() {
+        this.customer = { id: null, name: '', phone: '' };
+        this.customerQuery = '';
+        this.customerResults = [];
+        this.showCustomerResults = false;
+      },
+
+      // ---------- New customer dialog ----------
+      openNewCustomerModal() {
+        this.newCustomer = { name: '', phone: '', email: '', notes: '' };
+        // Pre-fill from whatever the cashier already typed
+        const q = this.customerQuery.trim();
+        if (q) {
+          const digits = q.replace(/\D/g, '');
+          if (digits.length >= 6) this.newCustomer.phone = digits.slice(0, 10);
+          else this.newCustomer.name = q;
+        }
+        this.newCustomerError = '';
+        this.showCustomerResults = false;
+        this.showNewCustomerModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      sanitizeCustomerPhone() {
+        this.newCustomer.phone = this.newCustomer.phone.replace(/\D/g, '').slice(0, 10);
+      },
+
+      async createCustomer() {
+        const nc = this.newCustomer;
+        if (!nc.name.trim()) { this.newCustomerError = 'Please enter the customer\u2019s name.'; return; }
+        if (!/^\d{10}$/.test(nc.phone.trim())) { this.newCustomerError = 'Phone number must be exactly 10 digits.'; return; }
+        this.savingCustomer = true;
+        this.newCustomerError = '';
+        try {
+          const res = await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: nc.name, phone: nc.phone, email: nc.email, notes: nc.notes })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            this.selectCustomer(data.customer);
+            this.showNewCustomerModal = false;
+          } else if (res.status === 409 && data.existing) {
+            // Phone already registered — attach that customer instead
+            this.selectCustomer(data.existing);
+            this.showNewCustomerModal = false;
+          } else {
+            this.newCustomerError = (data && data.message) || 'Could not save the customer. Please try again.';
+          }
+        } catch (e) {
+          this.newCustomerError = 'Network error — could not save the customer.';
+        }
+        this.savingCustomer = false;
+      },
 
       services: [
         { id: 1, name: "Executive Men's Haircut", category: "Haircuts", price: 400, duration: 30, description: "Includes shampoo, hair wash, precision taper, and styling." },
@@ -584,17 +830,26 @@
         this.billItems.splice(index, 1);
       },
 
-      resetBill() {
-        if (confirm("Clear current invoice?")) {
-          this.billItems = [];
-          this.discountValue = 0;
-          this.customer = { name: '', phone: '' };
-        }
+      async resetBill() {
+        const ok = await window.uiConfirm({
+          title: "Clear current invoice?",
+          message: "All items, the discount and the attached customer will be removed from this bill.",
+          confirmText: "Clear Bill",
+          cancelText: "Keep Editing",
+          danger: true
+        });
+        if (!ok) return;
+        this.billItems = [];
+        this.discountValue = 0;
+        this.customer = { name: '', phone: '' };
+        this.customerQuery = '';
+        this.showCustomerResults = false;
+        window.uiToast("Invoice cleared.", "info");
       },
 
       addCustomItem() {
         if (!this.customItem.name || !this.customItem.price) {
-          alert("Please specify item name and price.");
+          window.uiToast("Please specify item name and price.", "warning");
           return;
         }
         this.billItems.push({
@@ -650,7 +905,7 @@
 
       finalizePayment() {
         this.showPaymentModal = false;
-        alert(`✅ Payment of ₹${this.grandTotal} recorded via ${this.selectedPaymentMode}. Invoice #AP-9281 generated!`);
+        window.uiToast(`Payment of ₹${this.grandTotal} recorded via ${this.selectedPaymentMode}. Invoice #AP-9281 generated!`, "success");
         this.billItems = [];
         this.customer = { name: '', phone: '' };
         this.discountValue = 0;

@@ -3,6 +3,7 @@
 {% block title %}AuraPOS â€” Kinetic Salon Billing &amp; Studio Management{% endblock %}
 
 {% block head %}
+<script>window.AURA_NO_REVEAL = true; /* the reel runs its own choreography */</script>
 <meta name="description" content="AuraPOS â€” a kinetic demo reel: high-speed salon billing, choreographed chairs and real-time numbers.">
 <style>
 
@@ -798,8 +799,7 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- anime.js (same CDN + version as the original landing) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<!-- anime.js now loads once globally from layout.html -->
 <script>
 (function () {
     'use strict';
