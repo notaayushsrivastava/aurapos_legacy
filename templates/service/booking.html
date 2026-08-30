@@ -4,7 +4,7 @@
 
 {% block public_content %}
 <div class="min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-10 bg-neutral-100 dark:bg-[#050508] flex items-center justify-center"
-     x-data="clientBookingApp()">
+     x-data="clientBookingApp({{ salon.id if salon else 1 }}, {{ services | tojson }}, {{ staff | tojson }})">
   
   <div class="w-full max-w-3xl bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
     
@@ -16,8 +16,8 @@
             <i data-lucide="scissors" class="w-5 h-5"></i>
           </div>
           <div>
-            <h1 class="text-xl font-extrabold tracking-tight">Aura Luxury Salon &amp; Studio</h1>
-            <p class="text-xs text-neutral-300">402 High Street Mall • Open Today 9:00 AM – 9:00 PM</p>
+            <h1 class="text-xl font-extrabold tracking-tight">{{ salon.salon_name if salon else 'Aura Luxury Salon & Studio' }}</h1>
+            <p class="text-xs text-neutral-300">Phone: {{ salon.phone if salon else '9876543210' }} • Open Today 9:00 AM – 9:00 PM</p>
           </div>
         </div>
         
@@ -277,14 +277,39 @@
 
 {% block scripts %}
 <script>
-  function clientBookingApp() {
+  function clientBookingApp(salonId, rawServices, rawStaff) {
+    const parsedServices = (rawServices && rawServices.length) ? rawServices.map(s => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      price: s.price,
+      duration: s.duration,
+      desc: s.description || (s.duration + " mins service")
+    })) : [
+      { id: 1, name: "Signature Haircut & Wash", category: "Haircuts", price: 450, duration: 35, desc: "Custom wash and blow dry finish." }
+    ];
+
+    const parsedStylists = (rawStaff && rawStaff.length) ? [
+      { name: 'Any Available Stylist', role: 'Fastest Allocation' },
+      ...rawStaff.map(st => ({ name: st.name, role: st.role }))
+    ] : [
+      { name: 'Any Available Stylist', role: 'Fastest Allocation' },
+      { name: 'Alex Rivera', role: 'Senior Stylist' },
+      { name: 'Priya Nair', role: 'Master Colorist' },
+      { name: 'Marcus Vance', role: 'Grooming Expert' }
+    ];
+
+    const cats = ['All', ...new Set(parsedServices.map(s => s.category))];
+
     return {
+      salonId: salonId || 1,
       step: 1,
       selectedCategory: 'All',
       selectedStylist: 'Any Available Stylist',
       bookingDate: new Date().toISOString().split('T')[0],
       selectedSlot: '11:00 AM',
       showSuccessModal: false,
+      bookingRef: '#BK-1001',
 
       client: {
         name: '',
@@ -293,30 +318,11 @@
         notes: ''
       },
 
-      categories: ['All', 'Haircuts', 'Spa & Facial', 'Hair Color', 'Styling', 'Treatments'],
-
-      stylists: [
-        { name: 'Any Available Stylist', role: 'Fastest Allocation' },
-        { name: 'Alex Rivera', role: 'Senior Stylist' },
-        { name: 'Priya Nair', role: 'Master Colorist' },
-        { name: 'Marcus Vance', role: 'Grooming Expert' },
-      ],
-
-      timeSlots: [
-        '10:00 AM', '11:00 AM', '12:00 PM', '01:30 PM', '02:30 PM', '04:00 PM', '05:30 PM', '07:00 PM'
-      ],
-
-      services: [
-        { id: 1, name: "Signature Haircut & Wash", category: "Haircuts", price: 450, duration: 35, desc: "Includes shampoo, customized hair wash, and blow dry finish." },
-        { id: 2, name: "Women's Layer Cut & Blowdry", category: "Haircuts", price: 750, duration: 45, desc: "Consultation, texture layering, and heat styling." },
-        { id: 3, name: "Hydra-Dew Glow Facial", category: "Spa & Facial", price: 1500, duration: 60, desc: "Deep pore ultrasonic cleanse & hydration infusion." },
-        { id: 4, name: "Luxury Organic Hair Spa", category: "Treatments", price: 1200, duration: 50, desc: "Scalp therapy, argan oil steam wrap & relaxing massage." },
-        { id: 5, name: "Full Balayage & Toning", category: "Hair Color", price: 3200, duration: 120, desc: "Artisan hair painting with gloss and bond repair." },
-      ],
-
-      selectedServices: [
-        { id: 1, name: "Signature Haircut & Wash", price: 450, duration: 35 }
-      ],
+      categories: cats,
+      stylists: parsedStylists,
+      timeSlots: ['10:00 AM', '11:00 AM', '12:00 PM', '01:30 PM', '02:30 PM', '04:00 PM', '05:30 PM', '07:00 PM'],
+      services: parsedServices,
+      selectedServices: parsedServices.length ? [parsedServices[0]] : [],
 
       get filteredServices() {
         return this.services.filter(s => this.selectedCategory === 'All' || s.category === this.selectedCategory);
@@ -345,7 +351,34 @@
         }
       },
 
-      confirmBooking() {
+      async confirmBooking() {
+        try {
+          const serviceNames = this.selectedServices.map(s => s.name).join(' + ');
+          const totalDur = this.selectedServices.reduce((acc, s) => acc + s.duration, 0);
+          const res = await fetch('/api/public/booking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              salon_id: this.salonId,
+              name: this.client.name || 'Valued Client',
+              phone: this.client.phone || '',
+              email: this.client.email || '',
+              service: serviceNames,
+              slot: this.selectedSlot,
+              date: this.bookingDate,
+              stylist: this.selectedStylist,
+              price: this.totalPrice,
+              duration: totalDur,
+              notes: this.client.notes || ''
+            })
+          });
+          const data = await res.json();
+          if (data && data.booking_id) {
+            this.bookingRef = '#' + data.booking_id;
+          }
+        } catch (e) {
+          console.error("Booking error:", e);
+        }
         this.showSuccessModal = true;
       },
 

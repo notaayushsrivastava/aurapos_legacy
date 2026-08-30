@@ -306,7 +306,7 @@ class AuthorizationRepository:
         if self.count_accounts(salon_id) >= MAX_TEAM_SEATS:
             return {
                 "success": False,
-                "message": f"Team seat limit reached — a salon can have up to {MAX_TEAM_SEATS} accounts.",
+                "message": f"Team seat limit reached â€” a salon can have up to {MAX_TEAM_SEATS} accounts.",
             }
         try:
             conn = get_db()
@@ -446,7 +446,7 @@ class CategoryRepository:
         return [dict(r) for r in rows]
 
     def add_category(self, account_id, name):
-        """Insert a category; returns (id, created) — created is False if it already existed."""
+        """Insert a category; returns (id, created) â€” created is False if it already existed."""
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
@@ -483,7 +483,7 @@ class CategoryRepository:
         ).fetchone()["c"]
         if in_use:
             conn.close()
-            return False, f"Cannot delete '{row['name']}' — {in_use} service(s) still use it."
+            return False, f"Cannot delete '{row['name']}' â€” {in_use} service(s) still use it."
         cur.execute("DELETE FROM categories WHERE id = ? AND account_id = ?", (category_id, account_id))
         conn.commit()
         conn.close()
@@ -681,6 +681,9 @@ class StaffRepository:
                 account_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
+                phone TEXT DEFAULT '',
+                gender TEXT DEFAULT '',
+                email TEXT DEFAULT '',
                 total_revenue INTEGER DEFAULT 0,
                 services_done INTEGER DEFAULT 0,
                 created_on INTEGER NOT NULL,
@@ -689,6 +692,14 @@ class StaffRepository:
             """
         )
         conn.commit()
+        # Idempotent migrations for salons that created the staff table before
+        # the editable profile fields (phone / gender / email) existed.
+        for column in ("phone TEXT DEFAULT ''", "gender TEXT DEFAULT ''", "email TEXT DEFAULT ''"):
+            try:
+                cur.execute(f"ALTER TABLE staff ADD COLUMN {column}")
+            except sql.OperationalError:
+                pass
+        conn.commit()
         conn.close()
 
     def get_staff(self, account_id):
@@ -696,22 +707,90 @@ class StaffRepository:
         conn = get_db()
         cur = conn.cursor()
         rows = cur.execute(
-            "SELECT * FROM staff WHERE account_id = ? ORDER BY total_revenue DESC",
+            "SELECT * FROM staff WHERE account_id = ? ORDER BY total_revenue DESC, id ASC",
             (account_id,),
         ).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+        members = []
+        for r in rows:
+            d = dict(r)
+            d.setdefault("phone", "")
+            d.setdefault("gender", "")
+            d.setdefault("email", "")
+            members.append(d)
+        return members
+
+    def add_staff(self, account_id, name, role, phone="", gender="", email=""):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO staff(account_id, name, role, phone, gender, email, total_revenue, services_done, created_on)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
+            """,
+            (account_id, name, role, phone, gender, email, int(datetime.now().timestamp())),
+        )
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+
+    def update_staff(self, staff_id, account_id, name, role, phone="", gender="", email=""):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE staff
+            SET name = ?, role = ?, phone = ?, gender = ?, email = ?
+            WHERE id = ? AND account_id = ?
+            """,
+            (name, role, phone, gender, email, staff_id, account_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_staff(self, staff_id, account_id):
+        """Delete a staff member. Returns (ok, message). Prevents removing the last member."""
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT name FROM staff WHERE id = ? AND account_id = ?",
+            (staff_id, account_id),
+        ).fetchone()
+        if not row:
+            conn.close()
+            return False, "Staff member not found."
+        remaining = cur.execute(
+            "SELECT COUNT(*) AS c FROM staff WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()["c"]
+        if remaining <= 1:
+            conn.close()
+            return False, "A salon must keep at least one staff member on record."
+        cur.execute("DELETE FROM staff WHERE id = ? AND account_id = ?", (staff_id, account_id))
+        conn.commit()
+        conn.close()
+        return True, f"{row['name']} removed from the team."
+
+    @staticmethod
+    def base_name(staff_name):
+        """Reduce a display name like 'Alex Rivera (Senior Stylist)' to 'Alex Rivera'."""
+        s = str(staff_name or "").strip()
+        return s.split(" (", 1)[0].strip() if " (" in s else s
 
     def record_sale(self, staff_name, account_id, amount):
+        base = self.base_name(staff_name)
+        if not base:
+            return
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
             UPDATE staff 
             SET total_revenue = total_revenue + ?, services_done = services_done + 1
-            WHERE account_id = ? AND (name LIKE ? OR name = ?)
+            WHERE account_id = ? AND (name = ? OR name LIKE ?)
             """,
-            (int(amount), account_id, f"{staff_name}%", staff_name),
+            (int(amount), account_id, base, f"{base}%"),
         )
         conn.commit()
         conn.close()
@@ -723,15 +802,14 @@ class StaffRepository:
         if count == 0:
             now = int(datetime.now().timestamp())
             defaults = [
-                ("Alex Rivera", "Senior Stylist", 6450, 8, now),
-                ("Priya Nair", "Master Colorist", 8600, 6, now),
-                ("Marcus Vance", "Grooming Specialist", 4600, 7, now),
-                ("Sarah Jenkins", "Skin Specialist", 5200, 4, now),
+                ("Alex Rivera", "Senior Stylist", "9811023456", "Male", "alex@aurasalon.in", 0, 0, now),
+                ("Priya Nair", "Master Colorist", "9822034567", "Female", "priya@aurasalon.in", 0, 0, now),
+                ("Marcus Vance", "Grooming Specialist", "9833045678", "Male", "marcus@aurasalon.in", 0, 0, now),
             ]
             cur.executemany(
                 """
-                INSERT INTO staff(account_id, name, role, total_revenue, services_done, created_on)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO staff(account_id, name, role, phone, gender, email, total_revenue, services_done, created_on)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [(account_id, *d) for d in defaults],
             )
@@ -809,27 +887,8 @@ class AppointmentRepository:
         conn.close()
 
     def seed_defaults_if_empty(self, account_id):
-        conn = get_db()
-        cur = conn.cursor()
-        count = cur.execute("SELECT COUNT(*) as c FROM appointments WHERE account_id = ?", (account_id,)).fetchone()["c"]
-        if count == 0:
-            today_str = date.today().isoformat()
-            defaults = [
-                ("Ananya Sharma", "9876543210", "ananya@gmail.com", "Signature Haircut & Wash", "10:30 AM", today_str, "Alex Rivera", 450, 35, "Completed", "Likes layered bangs"),
-                ("Vikram Malhotra", "9812345678", "vikram@gmail.com", "Luxury Organic Hair Spa", "11:30 AM", today_str, "Alex Rivera", 1200, 50, "In Progress", ""),
-                ("Rohan Varma", "9823456789", "rohan@gmail.com", "Beard Styling & Shave", "12:15 PM", today_str, "Marcus Vance", 250, 20, "Confirmed", ""),
-                ("Kavita Sen", "9834567890", "kavita@gmail.com", "Hydra-Dew Glow Facial", "01:00 PM", today_str, "Sarah Jenkins", 1500, 60, "Confirmed", "Sensitive skin"),
-                ("Meera Nair", "9845678901", "meera@gmail.com", "Full Balayage & Toning", "02:30 PM", today_str, "Priya Nair", 3200, 120, "Confirmed", "Caramel highlights"),
-            ]
-            cur.executemany(
-                """
-                INSERT INTO appointments(account_id, client, phone, email, service, time, date, staff, price, duration, status, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [(account_id, *d) for d in defaults],
-            )
-            conn.commit()
-        conn.close()
+        # Cleared placeholder bookings per user specification
+        pass
 
 
 class BillRepository:
@@ -883,43 +942,83 @@ class BillRepository:
         conn.close()
         return [dict(r) for r in rows]
 
-    def get_daily_metrics(self, account_id):
+    def get_metrics(self, account_id, start_ts=None, end_ts=None):
+        """Aggregate bill KPIs for a time window (defaults to all-time).
+
+        Returns real values (never fabricated fallbacks).
+        """
         self.seed_defaults_if_empty(account_id)
         conn = get_db()
         cur = conn.cursor()
-        # compute sales
-        sales_row = cur.execute(
-            "SELECT SUM(grand_total) as total_sales, COUNT(*) as total_bills, AVG(grand_total) as avg_ticket FROM bills WHERE account_id = ?",
-            (account_id,),
-        ).fetchone()
+        if start_ts is not None and end_ts is not None:
+            sales_row = cur.execute(
+                """
+                SELECT SUM(grand_total) as total_sales, COUNT(*) as total_bills,
+                       AVG(grand_total) as avg_ticket, SUM(discount) as total_discount,
+                       SUM(tax) as total_tax
+                FROM bills
+                WHERE account_id = ? AND created_at >= ? AND created_at <= ?
+                """,
+                (account_id, start_ts, end_ts),
+            ).fetchone()
+            phone_row = cur.execute(
+                """
+                SELECT COUNT(DISTINCT client_phone) AS c FROM bills
+                WHERE account_id = ? AND created_at >= ? AND created_at <= ?
+                  AND trim(client_phone) != ''
+                """,
+                (account_id, start_ts, end_ts),
+            ).fetchone()
+        else:
+            sales_row = cur.execute(
+                """
+                SELECT SUM(grand_total) as total_sales, COUNT(*) as total_bills,
+                       AVG(grand_total) as avg_ticket, SUM(discount) as total_discount,
+                       SUM(tax) as total_tax
+                FROM bills WHERE account_id = ?
+                """,
+                (account_id,),
+            ).fetchone()
+            phone_row = cur.execute(
+                "SELECT COUNT(DISTINCT client_phone) AS c FROM bills WHERE account_id = ? AND trim(client_phone) != ''",
+                (account_id,),
+            ).fetchone()
         conn.close()
+        total_sales = int(sales_row["total_sales"] or 0)
+        total_bills = int(sales_row["total_bills"] or 0)
         return {
-            "total_sales": sales_row["total_sales"] or 24850,
-            "total_bills": sales_row["total_bills"] or 32,
-            "avg_ticket": int(sales_row["avg_ticket"] or 776),
+            "total_sales": total_sales,
+            "total_bills": total_bills,
+            "avg_ticket": round(total_sales / total_bills) if total_bills else 0,
+            "total_discount": int(sales_row["total_discount"] or 0),
+            "total_tax": int(sales_row["total_tax"] or 0),
+            "unique_customers": int(phone_row["c"] or 0),
         }
 
-    def seed_defaults_if_empty(self, account_id):
+    def get_bills_in_range(self, account_id, start_ts, end_ts):
+        """Return full bills (items parsed) between two timestamps, oldest first."""
+        self.seed_defaults_if_empty(account_id)
         conn = get_db()
         cur = conn.cursor()
-        count = cur.execute("SELECT COUNT(*) as c FROM bills WHERE account_id = ?", (account_id,)).fetchone()["c"]
-        if count == 0:
-            now = int(datetime.now().timestamp())
-            defaults = [
-                ("AP-8914", "Deepika Rao", "9898989801", 4500, 0, 810, 4800, "UPI", now - 1800, json.dumps([{"name": "Keratin Treatment + Wash", "price": 4500, "qty": 1}])),
-                ("AP-8913", "Vikram Malhotra", "9812345678", 650, 0, 117, 650, "Cash", now - 3600, json.dumps([{"name": "Executive Cut + Beard", "price": 650, "qty": 1}])),
-                ("AP-8912", "Sunita Roy", "9823456789", 1200, 0, 216, 1200, "UPI", now - 5400, json.dumps([{"name": "Luxury Hair Spa", "price": 1200, "qty": 1}])),
-                ("AP-8911", "Aditya Shah", "9834567890", 450, 0, 81, 450, "Card", now - 7200, json.dumps([{"name": "Signature Haircut", "price": 450, "qty": 1}])),
-            ]
-            cur.executemany(
-                """
-                INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [(d[0], account_id, *d[1:]) for d in defaults],
-            )
-            conn.commit()
+        rows = cur.execute(
+            "SELECT * FROM bills WHERE account_id = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at ASC",
+            (account_id, start_ts, end_ts),
+        ).fetchall()
         conn.close()
+        bills = []
+        for r in rows:
+            d = dict(r)
+            try:
+                items = json.loads(d.pop("items_json") or "[]")
+            except Exception:
+                items = []
+            d["items"] = items if isinstance(items, list) else []
+            bills.append(d)
+        return bills
+
+    def seed_defaults_if_empty(self, account_id):
+        # Cleared placeholder bills per user specification
+        pass
 
 
 class CustomerRepository:
@@ -1061,10 +1160,7 @@ class CustomerRepository:
             now = int(datetime.now().timestamp())
             defaults = [
                 ("Ananya Sharma", "9876543210", "ananya@gmail.com", "Prefers weekend slots"),
-                ("Vikram Malhotra", "9812345678", "vikram@gmail.com", ""),
-                ("Rohan Varma", "9823456789", "rohan@gmail.com", "Beard trim every 3 weeks"),
-                ("Kavita Sen", "9834567890", "kavita@gmail.com", "Sensitive skin — herbal products only"),
-                ("Meera Nair", "9845678901", "meera@gmail.com", "Loyal balayage client"),
+                ("Vikram Malhotra", "9812345678", "vikram@gmail.com", "Regular client"),
             ]
             cur.executemany(
                 """
@@ -1076,7 +1172,177 @@ class CustomerRepository:
             conn.commit()
         conn.close()
 
-    
-  
-  
 
+class ReportRepository:
+    """Read-only analytics across bills, items and appointments for the reports page."""
+
+    # Business hours shown on the hourly chart (inclusive).
+    HOUR_START = 9
+    HOUR_END = 21
+
+    @staticmethod
+    def _base(staff_name):
+        return StaffRepository.base_name(staff_name)
+
+    @staticmethod
+    def _bucket_bounds(start_ts, end_ts):
+        """Pick the right bucketing for a date range: daily / weekly / monthly."""
+        span_days = (end_ts - start_ts) / (24 * 60 * 60)
+        if span_days <= 32:
+            kind = "day"
+        elif span_days <= 190:
+            kind = "week"
+        else:
+            kind = "month"
+        return kind
+
+    def bills_in_range(self, account_id, start_ts, end_ts):
+        return BillRepository().get_bills_in_range(account_id, start_ts, end_ts)
+
+    def summary(self, account_id, start_ts, end_ts):
+        return BillRepository().get_metrics(account_id, start_ts, end_ts)
+    def revenue_by_day(self, account_id, start_ts, end_ts):
+        """Total revenue & bill count bucketed by day / week / month depending on span."""
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
+        kind = self._bucket_bounds(start_ts, end_ts)
+        buckets = {}
+
+        def key_for(ts):
+            dt = datetime.fromtimestamp(ts)
+            if kind == "day":
+                return dt.strftime("%Y-%m-%d"), dt.strftime("%d %b")
+            if kind == "week":
+                iso = dt.isocalendar()
+                start = dt - timedelta(days=dt.weekday())
+                return f"{iso[0]}-W{iso[1]:02d}", start.strftime("%d %b")
+            return dt.strftime("%Y-%m"), dt.strftime("%b %Y")
+
+        for b in bills:
+            key, label = key_for(b["created_at"])
+            if key not in buckets:
+                buckets[key] = {"label": label, "revenue": 0, "bills": 0, "sort": b["created_at"]}
+            buckets[key]["revenue"] += b["grand_total"]
+            buckets[key]["bills"] += 1
+        series = list(buckets.values())
+        series.sort(key=lambda x: x["sort"])
+        for s in series:
+            s.pop("sort", None)
+        return {"kind": kind, "points": series}
+
+    def revenue_by_hour(self, account_id, start_ts, end_ts):
+        """Revenue across the salon business day (9:00 – 21:00)."""
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
+        buckets = {h: {"hour": h, "label": f"{h:02d}:00", "revenue": 0, "bills": 0}
+                   for h in range(self.HOUR_START, self.HOUR_END + 1)}
+        for b in bills:
+            h = datetime.fromtimestamp(b["created_at"]).hour
+            if h in buckets:
+                buckets[h]["revenue"] += b["grand_total"]
+                buckets[h]["bills"] += 1
+        return list(buckets.values())
+
+    def _item_rows(self, account_id, start_ts, end_ts):
+        """Flatten bills + items with service metadata into per-line rows."""
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
+        svc_rows = ServiceRepository().get_services(account_id)
+        svc_by_name = {str(s["name"]).strip().lower(): str(s["category"] or "Other") for s in svc_rows}
+        rows = []
+        for b in bills:
+            for it in b.get("items", []):
+                if not isinstance(it, dict):
+                    continue
+                name = str(it.get("name", "") or "").strip() or "Unnamed item"
+                price = int(float(it.get("price", 0) or 0))
+                qty = int(float(it.get("qty", 1) or 1))
+                staff = str(it.get("staff", "") or "").strip()
+                category = svc_by_name.get(name.lower(), "Other")
+                rows.append({
+                    "bill_id": b["id"], "created_at": b["created_at"],
+                    "name": name, "price": price, "qty": qty,
+                    "revenue": price * qty, "staff": staff, "category": category,
+                    "mode": b["payment_mode"],
+                })
+        return rows
+
+    def top_services(self, account_id, start_ts, end_ts, limit=6):
+        rows = self._item_rows(account_id, start_ts, end_ts)
+        agg = {}
+        for r in rows:
+            key = r["name"]
+            if key not in agg:
+                agg[key] = {"name": key, "qty": 0, "revenue": 0}
+            agg[key]["qty"] += r["qty"]
+            agg[key]["revenue"] += r["revenue"]
+        services = sorted(agg.values(), key=lambda x: x["revenue"], reverse=True)
+        return services[:limit]
+
+    def staff_leaderboard(self, account_id, start_ts, end_ts):
+        rows = self._item_rows(account_id, start_ts, end_ts)
+        agg = {}
+        for r in rows:
+            base = self._base(r["staff"])
+            if not base:
+                continue
+            if base not in agg:
+                agg[base] = {"name": base, "revenue": 0, "services": 0}
+            agg[base]["revenue"] += r["revenue"]
+            agg[base]["services"] += r["qty"]
+        staff_list = StaffRepository().get_staff(account_id)
+        known = {StaffRepository.base_name(s["name"]): s["role"] for s in staff_list}
+        # Include roster members who made no sales in the window (they rank last).
+        for s in staff_list:
+            base = StaffRepository.base_name(s["name"])
+            if base not in agg:
+                agg[base] = {"name": base, "revenue": 0, "services": 0}
+        board = list(agg.values())
+        for row in board:
+            row["role"] = known.get(row["name"], "Stylist")
+            row["commission"] = int(round(row["revenue"] * 0.15))
+        board.sort(key=lambda x: x["revenue"], reverse=True)
+        return board
+
+    def payment_split(self, account_id, start_ts, end_ts):
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
+        agg = {}
+        for b in bills:
+            mode = (b["payment_mode"] or "Other").strip() or "Other"
+            if mode not in agg:
+                agg[mode] = {"mode": mode, "revenue": 0, "count": 0}
+            agg[mode]["revenue"] += b["grand_total"]
+            agg[mode]["count"] += 1
+        total = sum(v["revenue"] for v in agg.values()) or 1
+        for v in agg.values():
+            v["pct"] = round(v["revenue"] * 100 / total, 1)
+        return list(agg.values())
+
+    def category_split(self, account_id, start_ts, end_ts):
+        rows = self._item_rows(account_id, start_ts, end_ts)
+        agg = {}
+        for r in rows:
+            key = r["category"]
+            if key not in agg:
+                agg[key] = {"category": key, "revenue": 0, "qty": 0}
+            agg[key]["revenue"] += r["revenue"]
+            agg[key]["qty"] += r["qty"]
+        total = sum(v["revenue"] for v in agg.values()) or 1
+        values = sorted(agg.values(), key=lambda x: x["revenue"], reverse=True)
+        for v in values:
+            v["pct"] = round(v["revenue"] * 100 / total, 1)
+        return values
+
+    def appointments_in_range(self, account_id, start_ts, end_ts):
+        conn = get_db()
+        cur = conn.cursor()
+        start_d = datetime.fromtimestamp(start_ts).strftime("%Y-%m-%d")
+        end_d = datetime.fromtimestamp(end_ts).strftime("%Y-%m-%d")
+        rows = cur.execute(
+            "SELECT * FROM appointments WHERE account_id = ? AND date >= ? AND date <= ?",
+            (account_id, start_d, end_d),
+        ).fetchall()
+        conn.close()
+        total = len(rows)
+        by_status = {}
+        for r in rows:
+            st = r["status"] or "Confirmed"
+            by_status[st] = by_status.get(st, 0) + 1
+        return {"total": total, "by_status": by_status}

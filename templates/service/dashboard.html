@@ -4,7 +4,7 @@
 {% block page_title %}Salon Executive Overview{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="dashboardApp()">
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="dashboardApp({{ dashboard_data | tojson }})">
   
   <!-- Active Subscription Status Banner (owner only) -->
   {% if session.get('auth_level', 'admin') == 'admin' %}
@@ -15,11 +15,11 @@
       </div>
       <div>
         <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-neutral-900 dark:text-white">Studio Pro Annual Plan</span>
+          <span class="text-sm font-bold text-neutral-900 dark:text-white">Studio Pro {{ plan_display }} Plan</span>
           <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Active</span>
         </div>
         <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-          Plan active • Next renewal on <span class="font-semibold text-neutral-700 dark:text-neutral-200">March 28, 2027</span> (294 days remaining)
+          Plan active • Next renewal on <span class="font-semibold text-neutral-700 dark:text-neutral-200">{{ expires_readable or '—' }}</span> ({{ days_left }} days remaining)
         </p>
       </div>
     </div>
@@ -45,10 +45,15 @@
         </div>
       </div>
       <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="24850" data-prefix="₹">₹24,850</span>
-        <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center">+14.2%</span>
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.today_sales }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.today_sales) }}</span>
+        {% if dashboard_data.sales_delta is not none %}
+        <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.sales_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
+          {% if dashboard_data.sales_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
+          <span x-text="Math.abs({{ dashboard_data.sales_delta }}) + '%'"></span>
+        </span>
+        {% endif %}
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">From 32 closed invoices</p>
+      <p class="text-[11px] text-neutral-400 mt-1">From {{ dashboard_data.today_bills }} closed invoices today</p>
     </div>
     {% endif %}
 
@@ -61,10 +66,10 @@
         </div>
       </div>
       <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="38">38</span>
-        <span class="text-[11px] font-medium text-violet-600 dark:text-neon-cyan">6 in service</span>
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ appointments|length }}">{{ appointments|length }}</span>
+        <span class="text-[11px] font-medium text-violet-600 dark:text-neon-cyan">{{ appointments|selectattr('status', 'equalto', 'In Service')|list|length }} in service</span>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">8 upcoming walk-ins</p>
+      <p class="text-[11px] text-neutral-400 mt-1">Live queue for {{ today_label }}</p>
     </div>
 
     <!-- KPI 3: Avg Ticket Size (hidden for Billing Desk) -->
@@ -287,46 +292,16 @@
 
 {% block scripts %}
 <script>
-  function dashboardApp() {
+  function dashboardApp(dashData) {
     return {
       copiedLink: false,
 
-      todayAppointments: [
-        { id: 1, time: "11:30", client: "Ananya Sharma", service: "Signature Haircut & Spa", staff: "Alex Rivera", status: "In Service" },
-        { id: 2, time: "12:15", client: "Rohan Varma", service: "Beard Styling & Shave", staff: "Marcus Vance", status: "Next Up" },
-        { id: 3, time: "13:00", client: "Kavita Sen", service: "Hydra-Dew Glow Facial", staff: "Sarah Jenkins", status: "Confirmed" },
-        { id: 4, time: "14:30", client: "Meera Nair", service: "Full Balayage & Gloss", staff: "Priya Nair", status: "Confirmed" },
-      ],
-
-      {% if can_view_revenue %}
-      staffLeaderboard: [
-        { name: "Priya Nair (Colorist)", services: 6, revenue: 8600 },
-        { name: "Alex Rivera (Senior Stylist)", services: 8, revenue: 6450 },
-        { name: "Sarah Jenkins (Skin Specialist)", services: 4, revenue: 5200 },
-        { name: "Marcus Vance (Stylist)", services: 7, revenue: 4600 },
-      ],
-      {% else %}
-      staffLeaderboard: [
-        { name: "Priya Nair (Colorist)", services: 6, revenue: null },
-        { name: "Alex Rivera (Senior Stylist)", services: 8, revenue: null },
-        { name: "Sarah Jenkins (Skin Specialist)", services: 4, revenue: null },
-        { name: "Marcus Vance (Stylist)", services: 7, revenue: null },
-      ],
-      {% endif %}
-
-      {% if can_view_revenue %}
-      recentInvoices: [
-        { id: "AP-8914", client: "Deepika Rao", services: "Keratin Treatment + Wash", amount: 4800, payment: "UPI", time: "10:45 AM" },
-        { id: "AP-8913", client: "Vikram Malhotra", services: "Executive Cut + Beard", amount: 650, payment: "Cash", time: "10:15 AM" },
-        { id: "AP-8912", client: "Sunita Roy", services: "Luxury Hair Spa", amount: 1200, payment: "UPI", time: "09:50 AM" },
-        { id: "AP-8911", client: "Aditya Shah", services: "Signature Haircut", amount: 450, payment: "Card", time: "09:20 AM" },
-      ],
-      {% else %}
-      recentInvoices: [],
-      {% endif %}
+      todayAppointments: (dashData && dashData.today_appointments) || [],
+      staffLeaderboard: (dashData && dashData.staff_leaderboard) || [],
+      recentInvoices: (dashData && dashData.recent_invoices) || [],
 
       copyBookingLink() {
-        const url = window.location.origin + "{{ url_for('booking') }}";
+        const url = window.location.origin + "/booking/{{ salon.id if salon else 1 }}";
         navigator.clipboard.writeText(url).then(() => {
           this.copiedLink = true;
           setTimeout(() => { this.copiedLink = false; }, 2500);

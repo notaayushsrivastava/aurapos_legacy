@@ -1,0 +1,341 @@
+{% extends "layout.html" %}
+
+{% block title %}Staff — AuraPOS{% endblock %}
+{% block page_title %}Team & Staff Roster{% endblock %}
+
+{% block content %}
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data='staffApp({{ staff | tojson }})'>
+
+  <!-- Header Row -->
+  <div data-anim="up" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
+        <span>Staff Roster</span>
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 dark:text-neon-cyan border border-violet-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+          <span x-text="members.length + ' on team'"></span>
+        </span>
+      </h2>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+        Manage stylists, roles, contact details and track their live billing performance.
+      </p>
+    </div>
+
+    <button @click="openAdd()"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98]">
+      <i data-lucide="user-plus" class="w-4 h-4"></i>
+      <span>Add Staff Member</span>
+    </button>
+  </div>
+
+  <!-- Mini Stats Strip -->
+  <div data-anim="up" data-delay="80" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Members</p>
+        <p class="text-2xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="members.length"></p>
+      </div>
+      <div class="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+        <i data-lucide="users" class="w-4 h-4"></i>
+      </div>
+    </div>
+
+    <div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Services Completed</p>
+        <p class="text-2xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="totalServices()"></p>
+      </div>
+      <div class="w-9 h-9 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+        <i data-lucide="badge-check" class="w-4 h-4"></i>
+      </div>
+    </div>
+<div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">All-Time Revenue</p>
+        <p class="text-2xl font-black font-mono-num text-neutral-900 dark:text-white">₹<span x-text="totalRevenue().toLocaleString('en-IN')"></span></p>
+      </div>
+      <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+        <i data-lucide="trending-up" class="w-4 h-4"></i>
+      </div>
+    </div>
+
+    <div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Est. Commission Reserve</p>
+        <p class="text-2xl font-black font-mono-num text-neutral-900 dark:text-white">₹<span x-text="Math.round(totalRevenue() * 0.15).toLocaleString('en-IN')"></span></p>
+      </div>
+      <div class="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        <i data-lucide="coins" class="w-4 h-4"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <template x-for="(m, idx) in members" :key="m.id">
+      <div data-anim="scale" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm overflow-hidden group hover:shadow-md hover:border-violet-300 dark:hover:border-violet-500/40 transition-all">
+        <div class="h-1.5 bg-gradient-to-r" :class="bandClass(idx)"></div>
+        <div class="p-5 space-y-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-12 h-12 rounded-2xl font-black text-sm text-white flex items-center justify-center shadow-md shrink-0" :class="avatarClass(idx)">
+                <span x-text="initials(m.name)"></span>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-bold text-neutral-900 dark:text-white truncate" x-text="m.name"></p>
+                <p class="text-[11px] text-violet-600 dark:text-neon-cyan font-semibold mt-0.5 truncate" x-text="m.role"></p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button @click="openEdit(m)" title="Edit member"
+                      class="p-2 rounded-xl text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button @click="removeMember(m)" title="Remove member"
+                      class="p-2 rounded-xl text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div class="p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center gap-2 min-w-0">
+              <i data-lucide="phone" class="w-3.5 h-3.5 text-neutral-400 shrink-0"></i>
+              <span class="font-medium text-neutral-700 dark:text-neutral-300 truncate" x-text="m.phone || '—'"></span>
+            </div>
+            <div class="p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center gap-2 min-w-0">
+              <i data-lucide="venetian-mask" class="w-3.5 h-3.5 text-neutral-400 shrink-0"></i>
+              <span class="font-medium text-neutral-700 dark:text-neutral-300 truncate" x-text="m.gender || '—'"></span>
+            </div>
+            <div class="col-span-2 p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center gap-2 min-w-0">
+              <i data-lucide="mail" class="w-3.5 h-3.5 text-neutral-400 shrink-0"></i>
+              <span class="font-medium text-neutral-700 dark:text-neutral-300 truncate" x-text="m.email || '—'"></span>
+            </div>
+          </div>
+<div class="flex items-center justify-between pt-3 border-t border-neutral-100 dark:border-neutral-800">
+            <div>
+              <p class="text-[10px] text-neutral-400 font-semibold">Revenue Generated</p>
+              <p class="text-sm font-black font-mono-num text-neutral-900 dark:text-white mt-0.5">₹<span x-text="m.total_revenue.toLocaleString('en-IN')"></span></p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-neutral-400 font-semibold">Services</p>
+              <p class="text-sm font-black font-mono-num text-neutral-900 dark:text-white mt-0.5"><span x-text="m.services_done"></span></p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] text-neutral-400 font-semibold">Commission 15%</p>
+              <p class="text-sm font-black font-mono-num text-emerald-600 dark:text-emerald-400 mt-0.5">₹<span x-text="Math.round(m.total_revenue * 0.15).toLocaleString('en-IN')"></span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <div x-show="members.length === 0" class="p-10 text-center">
+    <p class="text-sm text-neutral-400">No staff members yet — add your first one.</p>
+  </div>
+
+  <!-- ================= ADD / EDIT STAFF MODAL ================= -->
+  <div x-show="showModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+         @click.away="showModal = false">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-neutral-900 dark:text-white" x-text="editingId ? 'Edit Staff Member' : 'Add Staff Member'"></h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Details sync instantly to billing &amp; leaderboards.</p>
+        </div>
+        <button @click="showModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full Name <span class="text-rose-500">*</span></label>
+            <input type="text" x-model="form.name" placeholder="e.g., Riya Sharma"
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Role <span class="text-rose-500">*</span></label>
+            <select x-model="form.role"
+                    class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <option value="Senior Stylist">Senior Stylist</option>
+              <option value="Stylist">Stylist</option>
+              <option value="Master Colorist">Master Colorist</option>
+              <option value="Grooming Specialist">Grooming Specialist</option>
+              <option value="Skin Specialist">Skin Specialist</option>
+              <option value="Nail Technician">Nail Technician</option>
+              <option value="Hair Therapist">Hair Therapist</option>
+              <option value="Junior Assistant">Junior Assistant</option>
+              <option value="Receptionist">Receptionist</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Phone Number</label>
+            <input type="tel" inputmode="numeric" x-model="form.phone" maxlength="10" @input="sanitizePhone()"
+                   placeholder="10-digit mobile number"
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+            <p class="text-[10px] text-neutral-400 mt-1"><span class="font-mono-num" x-text="form.phone.length"></span>/10 digits — exactly 10 required if provided.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Gender</label>
+            <select x-model="form.gender"
+                    class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <option value="">Prefer not to say</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+<div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email (optional)</label>
+          <input type="email" x-model="form.email" placeholder="name@salon.com"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+
+        <p x-show="formError" x-cloak class="text-[11px] font-semibold text-rose-500" x-text="formError"></p>
+      </div>
+
+      <div class="flex gap-3 pt-1">
+        <button @click="showModal = false"
+                class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          Cancel
+        </button>
+        <button @click="saveMember()" :disabled="saving"
+                class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span x-text="saving ? 'Saving…' : (editingId ? 'Save Changes' : 'Add Member')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function staffApp(initialMembers) {
+    return {
+      members: initialMembers || [],
+      showModal: false,
+      editingId: null,
+      saving: false,
+      formError: '',
+      form: { name: '', role: 'Stylist', phone: '', gender: '', email: '' },
+
+      palette: [
+        'from-neon-magenta via-violet-600 to-neon-cyan',
+        'from-violet-600 to-neon-cyan',
+        'from-neon-cyan to-emerald-500',
+        'from-amber-500 to-neon-magenta',
+      ],
+
+      bandClass(idx) { return this.palette[idx % this.palette.length]; },
+      avatarClass(idx) { return 'bg-gradient-to-br ' + this.palette[idx % this.palette.length]; },
+      initials(name) {
+        return (name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+      },
+
+      totalServices() {
+        return this.members.reduce((acc, m) => acc + (m.services_done || 0), 0);
+      },
+      totalRevenue() {
+        return this.members.reduce((acc, m) => acc + (m.total_revenue || 0), 0);
+      },
+
+      sanitizePhone() {
+        this.form.phone = (this.form.phone || '').replace(/\D/g, '').slice(0, 10);
+      },
+
+      openAdd() {
+        this.editingId = null;
+        this.form = { name: '', role: 'Stylist', phone: '', gender: '', email: '' };
+        this.formError = '';
+        this.showModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      openEdit(m) {
+        this.editingId = m.id;
+        this.form = { name: m.name, role: m.role, phone: m.phone || '', gender: m.gender || '', email: m.email || '' };
+        this.formError = '';
+        this.showModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      async saveMember() {
+        const f = this.form;
+        if (!f.name.trim()) { this.formError = 'Please enter the staff member’s name.'; return; }
+        if (f.phone && !/^\d{10}$/.test(f.phone)) { this.formError = 'Phone number must be exactly 10 digits.'; return; }
+        this.saving = true;
+        this.formError = '';
+        const payload = { name: f.name, role: f.role, phone: f.phone, gender: f.gender, email: f.email };
+        try {
+          const editing = !!this.editingId;
+          const url = editing ? '/api/staff/' + this.editingId : '/api/staff';
+          const res = await fetch(url, {
+            method: editing ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            if (editing) {
+              const idx = this.members.findIndex(m => m.id === this.editingId);
+              if (idx > -1) this.members[idx] = { ...this.members[idx], ...payload };
+              window.uiToast('Member profile updated.', 'success');
+            } else {
+              this.members.unshift({ id: data.id, ...payload, total_revenue: 0, services_done: 0 });
+              window.uiToast('Member added to the team.', 'success');
+            }
+            this.showModal = false;
+          } else {
+            this.formError = (data && data.message) || 'Could not save. Please try again.';
+          }
+        } catch (e) {
+          this.formError = 'Network error — could not save.';
+        }
+        this.saving = false;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      async removeMember(m) {
+        const ok = await window.uiConfirm({
+          title: 'Remove ' + m.name + '?',
+          message: 'They will be dropped from the roster. Past billing history is preserved.',
+          confirmText: 'Remove Member',
+          cancelText: 'Keep on Team',
+          danger: true
+        });
+        if (!ok) return;
+        try {
+          const res = await fetch('/api/staff/' + m.id, { method: 'DELETE' });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            this.members = this.members.filter(x => x.id !== m.id);
+            window.uiToast(data.message || 'Member removed.', 'success');
+          } else {
+            window.uiToast((data && data.message) || 'Could not remove member.', 'error');
+          }
+        } catch (e) {
+          window.uiToast('Network error — could not remove member.', 'error');
+        }
+      }
+    };
+  }
+</script>
+{% endblock %}

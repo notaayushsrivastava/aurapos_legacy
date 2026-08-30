@@ -159,7 +159,7 @@
     {% endwith %}
   </div>
 
-  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings'] %}
+  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports'] %}
 
   {% if is_auth_app %}
     <!-- ================= AUTHENTICATED APP LAYOUT ================= -->
@@ -227,6 +227,19 @@
             <span>Dashboard</span>
           </a>
 
+          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          <a href="{{ url_for('reports_page') }}"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
+               {% if request.path == '/reports' %}
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
+               {% else %}
+                 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
+               {% endif %}">
+            <i data-lucide="bar-chart-3" class="w-4 h-4 transition-colors {% if request.path == '/reports' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <span>Reports</span>
+          </a>
+          {% endif %}
+
           <a href="{{ url_for('billing') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/billing' %}
@@ -263,6 +276,19 @@
           </a>
 
           {% if session.get('auth_level', 'admin') != 'cashier' %}
+          <a href="{{ url_for('staff_page') }}"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
+               {% if request.path == '/staff' %}
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
+               {% else %}
+                 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
+               {% endif %}">
+            <i data-lucide="users" class="w-4 h-4 transition-colors {% if request.path == '/staff' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <span>Staff</span>
+          </a>
+          {% endif %}
+
+          {% if session.get('auth_level', 'admin') != 'cashier' %}
           <a href="{{ url_for('settings') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/settings' %}
@@ -277,7 +303,7 @@
 
           <div class="pt-4 px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Client Facing</div>
 
-          <a href="{{ url_for('booking') }}" target="_blank"
+          <a href="{{ url_for('booking', salon_id=session.get('id', 1)) }}" target="_blank"
              class="flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white transition-all group">
             <div class="flex items-center gap-3">
               <i data-lucide="globe" class="w-4 h-4 text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300"></i>

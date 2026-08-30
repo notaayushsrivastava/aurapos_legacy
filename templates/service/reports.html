@@ -1,0 +1,480 @@
+{% extends "layout.html" %}
+
+{% block title %}Reports & Analytics — AuraPOS{% endblock %}
+{% block page_title %}Reports & Analytics{% endblock %}
+
+{% block content %}
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="reportsApp()">
+
+  <!-- Header Row -->
+  <div data-anim="up" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">
+        Salon Performance Report
+      </h2>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+        Live revenue insights, trends and staff performance for the selected window.
+      </p>
+    </div>
+    <div class="flex items-center gap-2.5">
+      <button @click="exportCsv()"
+              class="px-3.5 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+        <i data-lucide="download" class="w-3.5 h-3.5 text-violet-500"></i>
+        <span>Export CSV</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Date Range Filter -->
+  <div data-anim="up" data-delay="60" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm p-4 sm:p-5 space-y-3.5">
+    <div class="flex flex-wrap items-center gap-2">
+      <template x-for="p in presets" :key="p.key">
+        <button @click="applyPreset(p.key)"
+                class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                :class="activePreset === p.key
+                  ? 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white shadow-md shadow-neon-magenta/20'
+                  : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'"
+                x-text="p.label"></button>
+      </template>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      <div class="flex items-center gap-2.5">
+        <div>
+          <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">From</label>
+          <input type="date" x-model="fromDate"
+                 class="px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <span class="text-neutral-300 dark:text-neutral-600 text-sm font-bold mt-4">→</span>
+        <div>
+          <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">To</label>
+          <input type="date" x-model="toDate"
+                 class="px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+      </div>
+
+      <button @click="loadReport()" :disabled="loading"
+              class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50">
+        <i data-lucide="refresh-cw" class="w-4 h-4" :class="loading ? 'animate-spin' : ''"></i>
+        <span x-text="loading ? 'Crunching…' : 'Apply Range'"></span>
+      </button>
+
+      <div class="sm:ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900/70 border border-neutral-200/70 dark:border-neutral-800/80 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+        <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-violet-500"></i>
+        <span x-text="rangeLabel"></span>
+      </div>
+    </div>
+  </div>
+<!-- Summary Stat Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div data-anim="up" class="p-4 rounded-3xl bg-gradient-to-br from-violet-600 to-neon-magenta text-white shadow-lg shadow-neon-magenta/20 relative overflow-hidden">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-white/70">Total Revenue</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num mt-2">₹<span x-text="fmt(summary.total_sales)"></span></p>
+      <p class="text-[10px] text-white/60 mt-1 font-semibold"><span x-text="summary.total_bills"></span> closed invoices</p>
+    </div>
+
+    <div data-anim="up" data-delay="40" class="p-4 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Number of Bills</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2" x-text="summary.total_bills"></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium">in selected range</p>
+    </div>
+
+    <div data-anim="up" data-delay="80" class="p-4 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Average Ticket</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.avg_ticket)"></span></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium">per invoice</p>
+    </div>
+
+    <div data-anim="up" data-delay="120" class="p-4 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Discounts Given</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.total_discount)"></span></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium">total savings</p>
+    </div>
+
+    <div data-anim="up" data-delay="160" class="p-4 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">GST Collected</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.total_tax)"></span></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium">18% included</p>
+    </div>
+
+    <div data-anim="up" data-delay="200" class="p-4 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
+      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Unique Customers</p>
+      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2" x-text="summary.unique_customers"></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium">by phone number</p>
+    </div>
+  </div>
+<!-- Revenue Trend Chart -->
+  <div data-anim="up" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+      <div>
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Revenue Trend</h3>
+        <p class="text-xs text-neutral-400">Per <span x-text="dayKind"></span> for the selected window</p>
+      </div>
+      <template x-if="bestDay">
+        <div class="text-right">
+          <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Best Day</p>
+          <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white"><span x-text="bestDay.label"></span> · ₹<span x-text="fmt(bestDay.revenue)"></span></p>
+        </div>
+      </template>
+    </div>
+
+    <div class="flex items-end gap-1.5 h-44 sm:h-52 overflow-x-auto pb-1">
+      <div class="flex items-end gap-1.5 min-w-full" :class="dayPoints.length > 20 ? 'w-max pr-4' : ''">
+        <template x-for="(p, i) in dayPoints" :key="i">
+          <div class="flex flex-col items-center justify-end" style="height:100%">
+            <span class="text-[9px] font-mono-num font-bold text-neutral-500 dark:text-neutral-400 mb-1 transition-all"
+                  x-show="p.revenue > 0" x-cloak
+                  x-text="p.revenue >= 1000 ? (p.revenue/1000).toFixed(1) + 'k' : p.revenue"></span>
+            <div class="w-3 sm:w-4 rounded-t-md bg-gradient-to-t from-violet-600 via-neon-magenta to-neon-cyan transition-all duration-700 ease-out"
+                 :style="'height:' + (chartShown ? barPct(p.revenue) : 0) + '%; min-height:' + (chartShown && p.revenue > 0 ? '4px' : '0')"
+                 :title="p.label + ': ₹' + p.revenue"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="flex gap-1.5 overflow-x-auto pt-1" :class="dayPoints.length > 20 ? 'pb-1' : ''">
+      <template x-for="(p, i) in dayPoints" :key="'l' + i">
+        <span class="text-[9px] font-mono-num text-neutral-400 w-3 sm:w-4 text-center shrink-0 transition-opacity"
+              x-show="shouldShowLabel(i)" x-cloak
+              x-text="p.label.split(' ')[0]"></span>
+      </template>
+    </div>
+  </div>
+<!-- Hourly + Payment + Appointments -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div data-anim="up" data-delay="80" class="lg:col-span-4 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
+      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Busiest Hours</h3>
+        <p class="text-xs text-neutral-400">Revenue by hour of day</p>
+      </div>
+      <div class="space-y-2.5">
+        <template x-for="h in hourPoints" :key="h.hour">
+          <div>
+            <div class="flex justify-between text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 mb-1">
+              <span x-text="h.label"></span>
+              <span class="font-mono-num" x-text="h.revenue ? '₹' + fmt(h.revenue) : '—'"></span>
+            </div>
+            <div class="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+              <div class="h-full rounded-full bg-gradient-to-r from-violet-600 to-neon-cyan transition-all duration-700 ease-out"
+                   :style="'width:' + (chartShown ? hourPct(h.revenue) : 0) + '%'"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div data-anim="up" data-delay="120" class="lg:col-span-4 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
+      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Payment Methods</h3>
+        <p class="text-xs text-neutral-400">Share of revenue by mode</p>
+      </div>
+      <div class="space-y-3">
+        <template x-for="mode in paymentSplit" :key="mode.mode">
+          <div class="flex items-center gap-3">
+            <div class="w-16 shrink-0">
+              <p class="text-xs font-bold text-neutral-800 dark:text-neutral-200" x-text="mode.mode"></p>
+            </div>
+            <div class="flex-1 h-2.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-700 ease-out"
+                   :class="payColor(mode.mode)"
+                   :style="'width:' + (chartShown ? mode.pct : 0) + '%'"></div>
+            </div>
+            <div class="w-20 text-right shrink-0">
+              <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white" x-text="mode.pct + '%'"></p>
+              <p class="text-[9px] text-neutral-400" x-text="mode.count + ' bills'"></p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div data-anim="up" data-delay="160" class="lg:col-span-4 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
+      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Appointments</h3>
+        <p class="text-xs text-neutral-400">Bookings in the window</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 text-center">
+        <p class="text-3xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="appointments.total"></p>
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-1">Total Bookings</p>
+      </div>
+      <div class="space-y-2">
+        <template x-for="(count, status) in appointments.by_status" :key="status">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" :class="statusColor(status)"></span>
+              <span x-text="status"></span>
+            </span>
+            <span class="font-black font-mono-num text-neutral-900 dark:text-white" x-text="count"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+<!-- Top Services + Category Split -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div data-anim="up" data-delay="80" class="lg:col-span-7 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-4">
+      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Top Services</h3>
+        <p class="text-xs text-neutral-400">Highest grossing services in the window</p>
+      </div>
+      <div class="space-y-3">
+        <template x-for="(s, i) in topServices" :key="s.name">
+          <div class="flex items-center gap-3">
+            <div class="w-6 h-6 rounded-lg bg-neutral-200 dark:bg-neutral-800 font-black text-[10px] text-neutral-700 dark:text-neutral-300 flex items-center justify-center font-mono-num shrink-0" x-text="'#' + (i + 1)"></div>
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between items-baseline gap-2 mb-1">
+                <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="s.name"></p>
+                <p class="text-[11px] font-black font-mono-num text-neutral-900 dark:text-white shrink-0">₹<span x-text="fmt(s.revenue)"></span></p>
+              </div>
+              <div class="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                <div class="h-full rounded-full bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan transition-all duration-700 ease-out"
+                     :style="'width:' + (chartShown ? svcPct(s.revenue) : 0) + '%'"></div>
+              </div>
+            </div>
+            <div class="w-14 text-right shrink-0">
+              <p class="text-[11px] font-bold font-mono-num text-neutral-500 dark:text-neutral-400" x-text="s.qty + '×'"></p>
+            </div>
+          </div>
+        </template>
+        <p x-show="topServices.length === 0" class="text-xs text-neutral-400 text-center py-4">No service sales in this window.</p>
+      </div>
+    </div>
+
+    <div data-anim="up" data-delay="120" class="lg:col-span-5 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-4">
+      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Category Split</h3>
+        <p class="text-xs text-neutral-400">Revenue share by category</p>
+      </div>
+      <div class="space-y-3">
+        <template x-for="c in categorySplit" :key="c.category">
+          <div>
+            <div class="flex justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300 mb-1">
+              <span class="truncate" x-text="c.category"></span>
+              <span class="font-mono-num font-black text-neutral-900 dark:text-white shrink-0 ml-2" x-text="c.pct + '%'"></span>
+            </div>
+            <div class="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-700 ease-out"
+                   :class="catColor(c.category)"
+                   :style="'width:' + (chartShown ? c.pct : 0) + '%'"></div>
+            </div>
+          </div>
+        </template>
+        <p x-show="categorySplit.length === 0" class="text-xs text-neutral-400 text-center py-4">No category data in this window.</p>
+      </div>
+    </div>
+  </div>
+<!-- Staff Leaderboard -->
+  <div data-anim="up" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+      <div>
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Staff Leaderboard — This Window</h3>
+        <p class="text-xs text-neutral-400">Ranked by revenue generated (15% commission basis)</p>
+      </div>
+      <span class="text-xs font-mono-num text-emerald-500 font-bold">Live</span>
+    </div>
+
+    <div class="space-y-3">
+      <template x-for="(st, idx) in staffBoard" :key="st.name">
+        <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between gap-3"
+             :class="idx === 0 ? 'ring-1 ring-violet-300 dark:ring-violet-500/40' : ''">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 rounded-xl font-black text-xs text-white flex items-center justify-center font-mono-num shrink-0"
+                 :class="idx === 0 ? 'bg-gradient-to-br from-neon-magenta to-violet-600 shadow-md shadow-neon-magenta/30' : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200'">
+              <i :data-lucide="idx === 0 ? 'trophy' : 'scissors'" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-neutral-900 dark:text-white truncate flex items-center gap-2">
+                <span x-text="st.name"></span>
+                <span x-show="idx === 0" class="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-neon-magenta to-violet-600 text-white">Top</span>
+              </p>
+              <p class="text-[10px] text-neutral-400 mt-0.5 truncate"><span x-text="st.role"></span> · <span x-text="st.services"></span> services</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-5 shrink-0">
+            <div class="flex-1 h-1.5 w-24 sm:w-32 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden hidden sm:block">
+              <div class="h-full rounded-full bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan transition-all duration-700 ease-out"
+                   :style="'width:' + (chartShown ? boardPct(st.revenue) : 0) + '%'"></div>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">₹<span x-text="fmt(st.revenue)"></span></p>
+              <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold font-mono-num">₹<span x-text="fmt(st.commission)"></span> comm.</p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <p x-show="staffBoard.length === 0" class="text-xs text-neutral-400 text-center py-4">No staff activity in this window.</p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  function reportsApp() {
+    return {
+      loading: false,
+      chartShown: false,
+      fromDate: '',
+      toDate: '',
+      activePreset: '30d',
+
+      summary: { total_sales: 0, total_bills: 0, avg_ticket: 0, total_discount: 0, total_tax: 0, unique_customers: 0 },
+      dayPoints: [],
+      dayKind: 'day',
+      bestDay: null,
+      hourPoints: [],
+      paymentSplit: [],
+      topServices: [],
+      categorySplit: [],
+      staffBoard: [],
+      appointments: { total: 0, by_status: {} },
+
+      presets: [
+        { key: 'today', label: 'Today' },
+        { key: '7d', label: '7 Days' },
+        { key: '30d', label: '30 Days' },
+        { key: 'quarter', label: 'This Quarter' },
+        { key: 'year', label: 'This Year' }
+      ],
+
+      init() {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - 29);
+        this.fromDate = this.iso(start);
+        this.toDate = this.iso(end);
+        this.loadReport();
+      },
+
+      iso(d) {
+        const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      },
+
+      applyPreset(key) {
+        this.activePreset = key;
+        const end = new Date();
+        let start = new Date();
+        if (key === 'today') start = end;
+        else if (key === '7d') start.setDate(end.getDate() - 6);
+        else if (key === '30d') start.setDate(end.getDate() - 29);
+        else if (key === 'quarter') start = new Date(end.getFullYear(), Math.floor(end.getMonth() / 3) * 3, 1);
+        else if (key === 'year') start = new Date(end.getFullYear(), 0, 1);
+        this.fromDate = this.iso(start);
+        this.toDate = this.iso(end);
+        this.loadReport();
+      },
+
+      async loadReport() {
+        if (!this.fromDate || !this.toDate) return;
+        this.loading = true;
+        this.chartShown = false;
+        try {
+          const res = await fetch('/api/reports?from=' + this.fromDate + '&to=' + this.toDate);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Failed');
+          this.summary = data.summary;
+          this.dayPoints = (data.revenue_by_day && data.revenue_by_day.points) || [];
+          this.dayKind = (data.revenue_by_day && data.revenue_by_day.kind) || 'day';
+          this.hourPoints = data.revenue_by_hour || [];
+          this.paymentSplit = data.payment_split || [];
+          this.topServices = data.top_services || [];
+          this.categorySplit = data.category_split || [];
+          this.staffBoard = data.staff_leaderboard || [];
+          this.appointments = data.appointments || { total: 0, by_status: {} };
+          const best = this.dayPoints.reduce((a, b) => (b.revenue > (a ? a.revenue : -1) ? b : a), null);
+          this.bestDay = best && best.revenue > 0 ? best : null;
+        } catch (e) {
+          window.uiToast('Could not load the report. Please try again.', 'error');
+        }
+        this.loading = false;
+        this.$nextTick(() => { this.chartShown = true; });
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      get rangeLabel() {
+        if (!this.fromDate && !this.toDate) return 'Select range';
+        const f = this.fromDate ? this.fromDate.split('-').reverse().join('/') : '…';
+        const t = this.toDate ? this.toDate.split('-').reverse().join('/') : '…';
+        return f + ' → ' + t;
+      },
+fmt(n) { return (Math.round(n) || 0).toLocaleString('en-IN'); },
+      barPct(revenue) { return this.maxDay > 0 ? Math.max(2, (revenue || 0) * 100 / this.maxDay) : 0; },
+      hourPct(revenue) { return this.maxHour > 0 ? ((revenue || 0) * 100 / this.maxHour) : 0; },
+      svcPct(revenue) { return this.maxSvc > 0 ? ((revenue || 0) * 100 / this.maxSvc) : 0; },
+      boardPct(revenue) { return this.maxBoard > 0 ? ((revenue || 0) * 100 / this.maxBoard) : 0; },
+
+      get maxDay() { return Math.max(...this.dayPoints.map(p => p.revenue), 1); },
+      get maxHour() { return Math.max(...this.hourPoints.map(h => h.revenue), 1); },
+      get maxSvc() { return Math.max(...this.topServices.map(s => s.revenue), 1); },
+      get maxBoard() { return Math.max(...this.staffBoard.map(s => s.revenue), 1); },
+
+      shouldShowLabel(i) {
+        const n = this.dayPoints.length;
+        if (n <= 8) return true;
+        const step = Math.ceil(n / 8);
+        return i % step === 0 || i === n - 1;
+      },
+
+      payColor(mode) {
+        const m = String(mode).toUpperCase();
+        if (m === 'UPI') return 'bg-gradient-to-r from-cyan-500 to-violet-600';
+        if (m === 'CASH') return 'bg-gradient-to-r from-emerald-500 to-cyan-500';
+        if (m === 'CARD') return 'bg-gradient-to-r from-neon-magenta to-amber-500';
+        return 'bg-gradient-to-r from-neutral-400 to-neutral-600';
+      },
+
+      catColor(cat) {
+        const palette = [
+          'bg-gradient-to-r from-violet-600 to-neon-cyan',
+          'bg-gradient-to-r from-neon-magenta to-violet-600',
+          'bg-gradient-to-r from-amber-500 to-neon-magenta',
+          'bg-gradient-to-r from-emerald-500 to-cyan-500',
+          'bg-gradient-to-r from-cyan-500 to-violet-600',
+          'bg-gradient-to-r from-rose-500 to-amber-500'
+        ];
+        let h = 0;
+        for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) >>> 0;
+        return palette[h % palette.length];
+      },
+
+      statusColor(status) {
+        const map = {
+          'Confirmed': 'bg-violet-500',
+          'In Service': 'bg-emerald-500',
+          'Next Up': 'bg-amber-500',
+          'Cancelled': 'bg-rose-500',
+          'Completed': 'bg-emerald-500',
+          'No Show': 'bg-rose-500'
+        };
+        return map[status] || 'bg-neutral-400';
+      },
+
+      exportCsv() {
+        if (!this.dayPoints.length) { window.uiToast('Nothing to export yet.', 'warning'); return; }
+        const rows = [['Date', 'Revenue', 'Bills']];
+        this.dayPoints.forEach(p => rows.push([p.label, p.revenue, p.bills]));
+        rows.push([]);
+        rows.push(['Total Revenue', this.summary.total_sales]);
+        rows.push(['Number of Bills', this.summary.total_bills]);
+        rows.push(['Average Ticket', this.summary.avg_ticket]);
+        rows.push(['Discounts Given', this.summary.total_discount]);
+        rows.push(['GST Collected', this.summary.total_tax]);
+        rows.push(['Unique Customers', this.summary.unique_customers]);
+        const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'aurapos-report-' + this.fromDate + '_' + this.toDate + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        window.uiToast('Report CSV downloaded.', 'success');
+      }
+    };
+  }
+</script>
+{% endblock %}

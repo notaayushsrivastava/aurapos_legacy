@@ -61,6 +61,7 @@ appointmentRepo = AppointmentRepository()
 billRepo = BillRepository()
 customerRepo = CustomerRepository()
 categoryRepo = CategoryRepository()
+reportRepo = ReportRepository()
 
 limiter = Limiter(
     get_remote_address,
@@ -104,8 +105,15 @@ def index():
 
 
 @app.route('/booking')
-def booking():
-    return render_template('service/booking.html')
+@app.route('/booking/<int:salon_id>')
+def booking(salon_id=None):
+    if not salon_id:
+        salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id) or authRepo.get_salon(1)
+    target_id = salon.id if salon else 1
+    services = serviceRepo.get_services(target_id)
+    staff = staffRepo.get_staff(target_id)
+    return render_template('service/booking.html', salon=salon, services=services, staff=staff)
 
 
 @app.route('/contact', methods=["GET", "POST"])
@@ -362,22 +370,106 @@ def check_account():
 def dashboard():
     salon_id = session.get("id", 1)
     salon = authRepo.get_salon(salon_id)
-    services = serviceRepo.get_services(salon_id)
     staff = staffRepo.get_staff(salon_id)
     appointments = appointmentRepo.get_appointments(salon_id, date.today().isoformat())
     recent_bills = billRepo.get_recent_bills(salon_id)
-    metrics = billRepo.get_daily_metrics(salon_id)
-    
+
+    now = datetime.now()
+    day_start = datetime.combine(now.date(), datetime.min.time())
+    yesterday_start = day_start - timedelta(days=1)
+    today_metrics = billRepo.get_metrics(
+        salon_id, int(day_start.timestamp()), int(now.timestamp())
+    )
+    yesterday_metrics = billRepo.get_metrics(
+        salon_id, int(yesterday_start.timestamp()), int(day_start.timestamp()) - 1
+    )
+
+    can_view_revenue = session.get("auth_level", "admin") != "cashier"
+
+    def pct_delta(current, previous):
+        if previous <= 0:
+            return None if current <= 0 else None
+        return round((current - previous) * 100 / previous, 1)
+
+    sales_delta = pct_delta(today_metrics["total_sales"], yesterday_metrics["total_sales"])
+    ticket_delta = pct_delta(today_metrics["avg_ticket"], yesterday_metrics["avg_ticket"])
+
+    invoice_time = lambda ts: datetime.fromtimestamp(ts).strftime("%I:%M %p")
+
+    staff_data = []
+    for s in sorted(staff, key=lambda x: x["total_revenue"], reverse=True):
+        display = f"{s['name']} ({s['role']})"
+        staff_data.append({
+            "name": display,
+            "services": s["services_done"],
+            "revenue": s["total_revenue"] if can_view_revenue else None,
+        })
+
+    invoice_data = []
+    if can_view_revenue:
+        for b in recent_bills:
+            items = []
+            try:
+                items = json.loads(b["items_json"] or "[]")
+            except Exception:
+                items = []
+            first_item = (items[0]["name"] if items and isinstance(items[0], dict) else "Service") or "Service"
+            invoice_data.append({
+                "id": b["id"],
+                "client": b["client_name"] or "Walk-in",
+                "services": first_item + (f" +{len(items) - 1} more" if len(items) > 1 else ""),
+                "amount": b["grand_total"],
+                "payment": b["payment_mode"],
+                "time": invoice_time(b["created_at"]),
+            })
+
+    dash_data = {
+        "today_sales": today_metrics["total_sales"],
+        "today_bills": today_metrics["total_bills"],
+        "avg_ticket": today_metrics["avg_ticket"],
+        "sales_delta": sales_delta,
+        "ticket_delta": ticket_delta,
+        "active_staff": len(staff),
+        "staff_leaderboard": staff_data,
+        "recent_invoices": invoice_data,
+        "today_appointments": [
+            {
+                "id": a["id"],
+                "time": a["time"],
+                "client": a["client"],
+                "service": a["service"],
+                "staff": a["staff"],
+                "status": a["status"],
+            }
+            for a in appointments
+        ],
+    }
+
+    # Subscription banner facts (owner only)
+    plan_display = "Monthly" if salon and salon.plan == "monthly" else "Yearly"
+    days_left = 0
+    expires_readable = None
+    if salon and salon.expires_on:
+        seconds_left = salon.expires_on - int(now.timestamp())
+        days_left = max(0, int(seconds_left / 86400))
+        expires_readable = datetime.fromtimestamp(salon.expires_on).strftime("%B %d, %Y")
+
+    today_label = now.strftime("%d %b %Y")
+
     return render_template(
         'service/dashboard.html',
         salon=salon,
-        services=services,
         staff=staff,
         appointments=appointments,
         recent_bills=recent_bills,
-        metrics=metrics,
+        metrics=today_metrics,
+        dashboard_data=dash_data,
+        plan_display=plan_display,
+        days_left=days_left,
+        expires_readable=expires_readable,
+        today_label=today_label,
         # Billing Desk sees the dashboard but never revenue figures
-        can_view_revenue=session.get("auth_level", "admin") != "cashier"
+        can_view_revenue=can_view_revenue
     )
 
 
@@ -395,7 +487,8 @@ def billing():
     salon_id = session.get("id", 1)
     service_list = serviceRepo.get_services(salon_id)
     staff_list = staffRepo.get_staff(salon_id)
-    return render_template('service/billing.html', services=service_list, staff=staff_list)
+    billing_staff = [f"{s['name']} ({s['role']})" for s in staff_list] + ["Unassigned"]
+    return render_template('service/billing.html', services=service_list, staff=staff_list, billing_staff=billing_staff)
 
 
 @app.route('/appointments')
@@ -405,6 +498,21 @@ def appointments():
     appointment_list = appointmentRepo.get_appointments(salon_id)
     staff_list = staffRepo.get_staff(salon_id)
     return render_template('service/appointments.html', appointments=appointment_list, staff=staff_list)
+
+
+@app.route('/staff')
+@role_required("admin", "manager")
+def staff_page():
+    salon_id = session.get("id", 1)
+    staff_list = staffRepo.get_staff(salon_id)
+    return render_template('service/staff.html', staff=staff_list)
+
+
+@app.route('/reports')
+@role_required("admin", "manager")
+def reports_page():
+    salon_id = session.get("id", 1)
+    return render_template('service/reports.html', staff=staffRepo.get_staff(salon_id))
 
 
 # ================= REST JSON API ENDPOINTS =================
@@ -615,17 +723,116 @@ def api_update_appointment_status(apt_id):
     return jsonify({"success": True})
 
 
+# ================= STAFF MANAGEMENT =================
+
+@app.get('/api/staff')
+@role_required("admin", "manager")
+def api_get_staff():
+    return jsonify(staffRepo.get_staff(session.get("id", 1)))
+
+
+@app.post('/api/staff')
+@role_required("admin", "manager")
+def api_add_staff():
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    role = str(data.get("role", "") or "").strip() or "Stylist"
+    phone = "".join(ch for ch in str(data.get("phone", "") or "") if ch.isdigit())
+    gender = str(data.get("gender", "") or "").strip()
+    email = str(data.get("email", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Staff name is required."}), 400
+    if phone and len(phone) != 10:
+        return jsonify({"success": False, "message": "Phone number must be exactly 10 digits."}), 400
+    new_id = staffRepo.add_staff(salon_id, name, role, phone, gender, email)
+    return jsonify({"success": True, "id": new_id, "message": f"{name} added to the team."})
+
+
+@app.put('/api/staff/<int:staff_id>')
+@role_required("admin", "manager")
+def api_update_staff(staff_id):
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    role = str(data.get("role", "") or "").strip() or "Stylist"
+    phone = "".join(ch for ch in str(data.get("phone", "") or "") if ch.isdigit())
+    gender = str(data.get("gender", "") or "").strip()
+    email = str(data.get("email", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Staff name is required."}), 400
+    if phone and len(phone) != 10:
+        return jsonify({"success": False, "message": "Phone number must be exactly 10 digits."}), 400
+    staffRepo.update_staff(staff_id, salon_id, name, role, phone, gender, email)
+    return jsonify({"success": True, "message": f"{name}'s profile updated."})
+
+
+@app.delete('/api/staff/<int:staff_id>')
+@role_required("admin", "manager")
+def api_delete_staff(staff_id):
+    salon_id = session.get("id", 1)
+    ok, message = staffRepo.delete_staff(staff_id, salon_id)
+    return jsonify({"success": ok, "message": message}), (200 if ok else 409)
+
+
+# ================= ANALYTICS REPORTS =================
+
+def _report_window():
+    """Parse from/to ISO dates into unix timestamps (default: last 30 days)."""
+    end = datetime.now()
+    start = end - timedelta(days=30)
+    from_str = request.args.get("from", "").strip()
+    to_str = request.args.get("to", "").strip()
+    if from_str:
+        try:
+            start = datetime.strptime(from_str, "%Y-%m-%d")
+        except ValueError:
+            pass
+    if to_str:
+        try:
+            to_dt = datetime.strptime(to_str, "%Y-%m-%d")
+            end = to_dt + timedelta(days=1) - timedelta(seconds=1)
+        except ValueError:
+            pass
+    return start, end
+
+
+@app.get('/api/reports')
+@role_required("admin", "manager")
+def api_reports():
+    salon_id = session.get("id", 1)
+    start, end = _report_window()
+    start_ts = int(start.timestamp())
+    end_ts = int(end.timestamp())
+    return jsonify({
+        "range": {
+            "from": start.strftime("%Y-%m-%d"),
+            "to": end.strftime("%Y-%m-%d"),
+        },
+        "summary": reportRepo.summary(salon_id, start_ts, end_ts),
+        "revenue_by_day": reportRepo.revenue_by_day(salon_id, start_ts, end_ts),
+        "revenue_by_hour": reportRepo.revenue_by_hour(salon_id, start_ts, end_ts),
+        "top_services": reportRepo.top_services(salon_id, start_ts, end_ts),
+        "staff_leaderboard": reportRepo.staff_leaderboard(salon_id, start_ts, end_ts),
+        "payment_split": reportRepo.payment_split(salon_id, start_ts, end_ts),
+        "category_split": reportRepo.category_split(salon_id, start_ts, end_ts),
+        "appointments": reportRepo.appointments_in_range(salon_id, start_ts, end_ts),
+    })
+
+
 # Public Client Portal APIs
 @app.get('/api/public/services')
 def api_public_services():
-    return jsonify(serviceRepo.get_services(1))
+    salon_id = request.args.get("salon_id", type=int) or 1
+    return jsonify(serviceRepo.get_services(salon_id))
 
 
 @app.post('/api/public/booking')
 def api_public_booking():
     data = request.get_json() or {}
+    salon_id = int(data.get("salon_id") or 1)
     new_id = appointmentRepo.create_appointment(
-        account_id=1,
+        account_id=salon_id,
         client=data.get("name", ""),
         phone=data.get("phone", ""),
         email=data.get("email", ""),

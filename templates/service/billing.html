@@ -436,9 +436,10 @@
         <button @click="showPaymentModal = false" class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
           Cancel
         </button>
-        <button @click="finalizePayment()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5">
-          <i data-lucide="check" class="w-4 h-4"></i>
-          <span>Confirm &amp; Complete</span>
+        <button @click="finalizePayment()" :disabled="processingPayment"
+                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait">
+          <i data-lucide="check" class="w-4 h-4" :class="processingPayment ? 'animate-pulse' : ''"></i>
+          <span x-text="processingPayment ? 'Saving Invoice…' : 'Confirm &amp; Complete'"></span>
         </button>
       </div>
 
@@ -622,6 +623,8 @@
       cashReceived: 0,
       showPaymentModal: false,
       showCustomItemModal: false,
+      processingPayment: false,
+      lastBillId: null,
 
       customer: {
         name: '',
@@ -643,11 +646,11 @@
       customItem: {
         name: '',
         price: 500,
-        staff: 'Alex Rivera'
+        staff: 'Unassigned'
       },
 
       categories: ['All', 'Haircuts', 'Spa & Facial', 'Color & Hair', 'Styling', 'Grooming', 'Treatments'],
-      staffList: ['Alex Rivera (Senior)', 'Priya Nair (Colorist)', 'Marcus Vance (Stylist)', 'Sarah Jenkins (Skin Specialist)', 'Unassigned'],
+      staffList: {{ billing_staff | tojson }},
 
       async init() {
         // Sync the POS catalog + category pills with the backend
@@ -903,12 +906,54 @@
         this.showPaymentModal = true;
       },
 
-      finalizePayment() {
-        this.showPaymentModal = false;
-        window.uiToast(`Payment of ₹${this.grandTotal} recorded via ${this.selectedPaymentMode}. Invoice #AP-9281 generated!`, "success");
-        this.billItems = [];
-        this.customer = { name: '', phone: '' };
-        this.discountValue = 0;
+      async finalizePayment() {
+        if (this.billItems.length === 0) {
+          window.uiToast('Add at least one service before collecting payment.', 'warning');
+          return;
+        }
+        if (this.selectedPaymentMode === 'Cash' && (this.cashReceived < this.grandTotal)) {
+          window.uiToast('Cash received is less than the total due.', 'error');
+          return;
+        }
+        if (this.processingPayment) return;
+        this.processingPayment = true;
+        try {
+          const payload = {
+            client_name: (this.customer && this.customer.name) || 'Walk-in',
+            client_phone: (this.customer && this.customer.phone) || '',
+            subtotal: this.subtotal,
+            discount: this.discountAmount,
+            tax: this.taxAmount,
+            grand_total: this.grandTotal,
+            payment_mode: this.selectedPaymentMode,
+            items: this.billItems.map(i => ({
+              name: i.name,
+              price: i.price,
+              qty: i.qty,
+              staff: i.staff || 'Unassigned'
+            }))
+          };
+          const res = await fetch('/api/bills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            this.lastBillId = data.bill_id;
+            this.showPaymentModal = false;
+            window.uiToast(`Payment of ₹${this.grandTotal} recorded via ${this.selectedPaymentMode}. Invoice #${data.bill_id} saved!`, 'success');
+            this.billItems = [];
+            this.customer = { name: '', phone: '' };
+            this.customerQuery = '';
+            this.discountValue = 0;
+          } else {
+            window.uiToast((data && data.message) || 'Could not record the payment. Please try again.', 'error');
+          }
+        } catch (e) {
+          window.uiToast('Network error — bill was not saved. Please retry.', 'error');
+        }
+        this.processingPayment = false;
       },
 
       printReceipt() {
