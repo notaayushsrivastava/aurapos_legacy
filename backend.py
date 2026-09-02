@@ -3,8 +3,74 @@ import sqlite3 as sql
 from datetime import datetime, date
 import json
 
-# Maximum team accounts allowed per salon (including the primary owner account)
-MAX_TEAM_SEATS = 3
+# ================= SUBSCRIPTION TIERS =================
+# Free-trial + two-tier subscription model:
+#   free   -> 14-day trial: single seat, core POS only (no salon address,
+#             no map location, no premium features)
+#   pro    -> entry tier: limited team seats, unlocks salon address & map pin
+#   studio -> premium tier: unlimited team seats, advanced analytics,
+#             data import/export and custom salon logo branding
+TIER_PLANS = {
+    "free": {"amount": 0, "label": "Free Trial", "price_display": "Free for 14 days"},
+    "pro": {"amount": 6900, "label": "Pro", "price_display": "₹69/month"},
+    "studio": {"amount": 14900, "label": "Studio", "price_display": "₹149/month"},
+}
+
+# Ascending tier ladder used to decide which plans an existing salon may buy.
+TIER_ORDER = ("free", "pro", "studio")
+
+# Length of the free trial in days.
+TRIAL_DAYS = 14
+
+# Team seat limit per tier (None = unlimited), including the primary owner account
+TIER_SEAT_LIMITS = {"free": 1, "pro": 2, "studio": None}
+
+# Purchaseable plan ids accepted by /create-subscription & /verify-subscription.
+# `salons.plan` always stores the pure tier (pro/studio) while `billing_cycle`
+# keeps the billing period (monthly/yearly) separate — this keeps tier gating,
+# seat limits and feature checks working identically for annual subscribers.
+# Annual = 12 months for the price of 10 (2 months free).
+PLAN_PRICING = {
+    "pro":           {"tier": "pro",    "cycle": "monthly", "amount": 6900,   "label": "Pro Monthly",    "price_display": "₹69/month"},
+    "pro_yearly":    {"tier": "pro",    "cycle": "yearly",  "amount": 69000,  "label": "Pro Annual",     "price_display": "₹690/year"},
+    "studio":        {"tier": "studio", "cycle": "monthly", "amount": 14900,  "label": "Studio Monthly", "price_display": "₹149/month"},
+    "studio_yearly": {"tier": "studio", "cycle": "yearly",  "amount": 149000, "label": "Studio Annual",  "price_display": "₹1,490/year"},
+}
+
+
+def resolve_plan(plan_id):
+    """Map a purchaseable plan id (or legacy tier name) to (tier, cycle, pricing).
+
+    Accepts both the payment plan ids ('pro', 'pro_yearly', 'studio',
+    'studio_yearly'), the free-trial tier ('free') and bare tier names ('pro',
+    'studio', or any legacy value), always falling back to the Pro monthly plan.
+    The 'free' trial uses billing_cycle 'trial' so 14-day expiry logic applies.
+    """
+    pricing = PLAN_PRICING.get(plan_id)
+    if pricing:
+        return pricing["tier"], pricing["cycle"], pricing
+    if plan_id == "free":
+        return "free", "trial", {
+            "tier": "free", "cycle": "trial", "amount": 0,
+            "label": "Free Trial", "price_display": "Free for 14 days",
+        }
+    tier = plan_id if plan_id in TIER_PLANS else "pro"
+    return tier, "monthly", PLAN_PRICING[tier]
+
+
+def expires_for(cycle, created_on=None):
+    """Unix expiry timestamp for a billing cycle.
+
+    'yearly' -> 365 days, 'trial' -> TRIAL_DAYS days, anything else (monthly)
+    -> 30 days. `created_on` defaults to now.
+    """
+    if created_on is None:
+        created_on = int(datetime.now().timestamp())
+    if cycle == "yearly":
+        return created_on + Time.year
+    if cycle == "trial":
+        return created_on + TRIAL_DAYS * Time.day
+    return created_on + Time.month
 
 # Supported access levels for salon team accounts
 AUTH_LEVELS = ("admin", "manager", "cashier")
@@ -14,6 +80,30 @@ def get_db():
     conn = sql.connect("database.db")
     conn.row_factory = sql.Row
     return conn
+
+
+def ensure_schema_upgrades():
+    """Lightweight migrations for databases created before newer columns existed."""
+    conn = get_db()
+    cur = conn.cursor()
+    salons_columns = {r["name"] for r in cur.execute("PRAGMA table_info(salons)").fetchall()}
+    if salons_columns and "logo" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN logo TEXT")
+    if salons_columns and "billing_cycle" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT 'monthly'")
+    if salons_columns and "address" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+    if salons_columns and "opening_hours" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN opening_hours TEXT NOT NULL DEFAULT '{}'")
+    if salons_columns and "latitude" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN latitude REAL")
+    if salons_columns and "longitude" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN longitude REAL")
+    subs_columns = {r["name"] for r in cur.execute("PRAGMA table_info(subscriptions)").fetchall()}
+    if subs_columns and "billing_cycle" not in subs_columns:
+        cur.execute("ALTER TABLE subscriptions ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT 'monthly'")
+    conn.commit()
+    conn.close()
 
 
 @dataclass
@@ -33,6 +123,15 @@ class Salon:
     created_on: int
     plan: str
     expires_on: int
+    logo: str | None = None
+    billing_cycle: str = "monthly"
+    address: str = ""
+    # Weekly schedule stored as a JSON string, e.g.
+    # {"monday": {"closed": false, "open": "09:00", "close": "19:00"}, ...}
+    opening_hours: str = "{}"
+    # Salon location (map pin) — a Pro-tier feature, coordinates optional.
+    latitude: float | None = None
+    longitude: float | None = None
 
     @classmethod
     def from_row(cls, row):
@@ -47,7 +146,28 @@ class Salon:
             created_on=row["created_on"],
             plan=row["plan"],
             expires_on=row["expires_on"],
+            logo=(row["logo"] if "logo" in row.keys() else None),
+            billing_cycle=(row["billing_cycle"] if "billing_cycle" in row.keys() else "monthly"),
+            address=((row["address"] if "address" in row.keys() else "") or ""),
+            opening_hours=((row["opening_hours"] if "opening_hours" in row.keys() else "") or "{}"),
+            latitude=(row["latitude"] if "latitude" in row.keys() else None),
+            longitude=(row["longitude"] if "longitude" in row.keys() else None),
         )
+
+
+# Canonical weekday keys used by the salon opening-hours schedule.
+WEEKDAY_KEYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def parse_opening_hours(salon):
+    """Return the salon's weekly schedule as a dict (empty dict when unset/invalid)."""
+    try:
+        raw = json.loads(getattr(salon, "opening_hours", "") or "{}")
+    except (ValueError, TypeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        return {}
+    return {key: raw[key] for key in WEEKDAY_KEYS if isinstance(raw.get(key), dict)}
 
 
 @dataclass
@@ -84,7 +204,13 @@ class AuthorizationRepository:
                 email TEXT NOT NULL UNIQUE,
                 created_on INTEGER NOT NULL,
                 plan TEXT NOT NULL,
-                expires_on INTEGER NOT NULL
+                billing_cycle TEXT NOT NULL DEFAULT 'monthly',
+                expires_on INTEGER NOT NULL,
+                logo TEXT,
+                address TEXT NOT NULL DEFAULT '',
+                opening_hours TEXT NOT NULL DEFAULT '{}',
+                latitude REAL,
+                longitude REAL
             );
 
             CREATE TABLE IF NOT EXISTS accounts(
@@ -111,6 +237,7 @@ class AuthorizationRepository:
                 amount INTEGER NOT NULL,
                 created_at INTEGER NOT NULL,
                 plan TEXT NOT NULL,
+                billing_cycle TEXT NOT NULL DEFAULT 'monthly',
                 receipt TEXT NOT NULL,
                 email TEXT NOT NULL,
                 phone INTEGER NOT NULL,
@@ -130,6 +257,15 @@ class AuthorizationRepository:
         )
         conn.commit()
         conn.close()
+        ensure_schema_upgrades()
+
+    def update_salon_logo(self, salon_id, logo_data):
+        """Store (or clear, with None) the salon's logo as a data URL."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE salons SET logo = ? WHERE id = ?", (logo_data, salon_id))
+        conn.commit()
+        conn.close()
 
     def create_account(self, auth_id, username, password, auth_level="admin"):
         conn = get_db()
@@ -144,19 +280,20 @@ class AuthorizationRepository:
         conn.commit()
         conn.close()
 
-    def create_auth(self, name, salon_name, phone, email, password, plan, created_on=None, auth_level="admin"):
+    def create_auth(self, name, salon_name, phone, email, password, plan="pro", created_on=None, auth_level="admin"):
         if created_on is None:
             created_on = int(datetime.now().timestamp())
-        expires_on = created_on + (Time.month if plan == "monthly" else Time.year)
+        tier, cycle, _ = resolve_plan(plan)
+        expires_on = expires_for(cycle, created_on)
         
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO salons(name, salon_name, phone, email, plan, created_on, expires_on)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO salons(name, salon_name, phone, email, plan, billing_cycle, created_on, expires_on)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, salon_name, str(phone), email, plan, created_on, expires_on),
+            (name, salon_name, str(phone), email, tier, cycle, created_on, expires_on),
         )
         auth_id = cur.lastrowid
         conn.commit()
@@ -210,18 +347,40 @@ class AuthorizationRepository:
         return row is not None
 
     # ---------- Settings: salon profile ----------
-    def update_salon_profile(self, salon_id, owner_name, salon_name, email, phone):
-        """Update the salon's public profile. Returns False on UNIQUE conflicts."""
+    def update_salon_profile(self, salon_id, owner_name, salon_name, email, phone, extra=None):
+        """Update the salon's public profile. Returns False on UNIQUE conflicts.
+
+        `extra` (optional dict) may carry:
+          - address (str): salon street address shown on bills & booking portal
+          - opening_hours (str): weekly schedule as a validated JSON string
+          - location ({'latitude': float, 'longitude': float}) to set the map pin
+          - location (False) to clear the saved map pin
+        """
+        sets = ["name = ?", "salon_name = ?", "email = ?", "phone = ?"]
+        vals = [owner_name.strip(), salon_name.strip(), email.strip(), str(phone).strip()]
+        if extra:
+            if extra.get("address") is not None:
+                sets.append("address = ?")
+                vals.append(str(extra["address"]).strip())
+            if extra.get("opening_hours") is not None:
+                sets.append("opening_hours = ?")
+                vals.append(extra["opening_hours"])
+            location = extra.get("location", None)
+            if location is False:
+                sets.append("latitude = NULL")
+                sets.append("longitude = NULL")
+            elif isinstance(location, dict) and location.get("latitude") is not None and location.get("longitude") is not None:
+                sets.append("latitude = ?")
+                vals.append(float(location["latitude"]))
+                sets.append("longitude = ?")
+                vals.append(float(location["longitude"]))
+        vals.append(salon_id)
         try:
             conn = get_db()
             cur = conn.cursor()
             cur.execute(
-                """
-                UPDATE salons
-                SET name = ?, salon_name = ?, email = ?, phone = ?
-                WHERE id = ?
-                """,
-                (owner_name.strip(), salon_name.strip(), email.strip(), str(phone).strip(), salon_id),
+                f"UPDATE salons SET {', '.join(sets)} WHERE id = ?",
+                tuple(vals),
             )
             conn.commit()
             conn.close()
@@ -297,16 +456,16 @@ class AuthorizationRepository:
         conn.close()
         return row["id"] if row else None
 
-    def add_account(self, salon_id, username, password, auth_level):
+    def add_account(self, salon_id, username, password, auth_level, seat_limit=None):
         username = (username or "").strip().lower()
         if auth_level not in AUTH_LEVELS:
             return {"success": False, "message": "Invalid access level selected."}
         if not username or not password:
             return {"success": False, "message": "Email and password are both required."}
-        if self.count_accounts(salon_id) >= MAX_TEAM_SEATS:
+        if seat_limit is not None and self.count_accounts(salon_id) >= seat_limit:
             return {
                 "success": False,
-                "message": f"Team seat limit reached â€” a salon can have up to {MAX_TEAM_SEATS} accounts.",
+                "message": f"Team seat limit reached â€” a salon can have up to {seat_limit} accounts.",
             }
         try:
             conn = get_db()
@@ -380,6 +539,36 @@ class AuthorizationRepository:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def update_salon_plan(self, salon_id, tier, cycle, expires_on):
+        """Switch a salon to a new subscription tier (used by the upgrade flow)."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE salons SET plan = ?, billing_cycle = ?, expires_on = ? WHERE id = ?",
+            (tier, cycle, int(expires_on), salon_id),
+        )
+        changed = cur.rowcount > 0
+        conn.commit()
+        conn.close()
+        return changed
+
+    def record_subscription(self, sub_id, salon_id, amount, plan, cycle, receipt, email, phone, created_at=None):
+        """Persist a completed subscription/payment associated with a salon."""
+        if created_at is None:
+            created_at = int(datetime.now().timestamp())
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO subscriptions(id, salon_id, amount, created_at, plan, billing_cycle, receipt, email, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (sub_id, salon_id, int(amount), int(created_at), plan, cycle, receipt, (email or "").strip(), str(phone or "").strip()),
+        )
+        conn.commit()
+        conn.close()
+        return True
 
     def request_account_deletion(self, salon_id, email, reason=""):
         conn = get_db()
@@ -553,6 +742,17 @@ class ServiceRepository:
         rows = cur.execute(
             "SELECT * FROM services WHERE account_id = ? ORDER BY id DESC",
             (account_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_booking_services(self, account_id):
+        self.seed_defaults_if_empty(account_id)
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT * FROM services WHERE account_id = ? AND active = 1 ORDER BY id DESC",
+            (account_id, ),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]

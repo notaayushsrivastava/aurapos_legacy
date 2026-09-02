@@ -4,7 +4,8 @@
 {% block page_title %}Reports & Analytics{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="reportsApp()">
+{% if not is_studio %}<div class="relative">{% endif %}
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 {% if not is_studio %}blur-sm pointer-events-none select-none{% endif %}" x-data="reportsApp()">
 
   <!-- Header Row -->
   <div data-anim="up" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -308,6 +309,33 @@
   </div>
 
 </div>
+
+{% if not is_studio %}
+<!-- Studio-only gate: blurred page content behind an upgrade overlay -->
+<div class="absolute inset-0 z-30 flex items-start justify-center px-4 pt-24 sm:pt-32 pb-6">
+  <div class="absolute inset-0 bg-white/30 dark:bg-[#050508]/50 backdrop-blur-[2px]"></div>
+  <div class="relative w-full max-w-md p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-2xl text-center space-y-4">
+    <div class="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-lg shadow-neon-magenta/30">
+      <i data-lucide="lock" class="w-6 h-6"></i>
+    </div>
+    <div class="space-y-1.5">
+      <h3 class="text-lg font-extrabold text-neutral-900 dark:text-white">Reports is a Studio feature</h3>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">You're on the {% if is_free %}Free trial{% else %}Pro{% endif %} plan — upgrade to Studio to unlock advanced analytics for your salon.</p>
+    </div>
+    <ul class="text-left space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Revenue trends &amp; hourly breakdowns</li>
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Staff leaderboard &amp; commissions</li>
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Payment &amp; category insights</li>
+    </ul>
+    <a href="{{ url_for('upgrade') }}"
+       class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2">
+      <i data-lucide="crown" class="w-4 h-4"></i>
+      Upgrade to Studio
+    </a>
+  </div>
+</div>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
@@ -344,7 +372,9 @@
         start.setDate(end.getDate() - 29);
         this.fromDate = this.iso(start);
         this.toDate = this.iso(end);
+        {% if is_studio %}
         this.loadReport();
+        {% endif %}
       },
 
       iso(d) {

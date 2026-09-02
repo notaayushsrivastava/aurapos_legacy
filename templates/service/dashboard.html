@@ -4,7 +4,7 @@
 {% block page_title %}Salon Executive Overview{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="dashboardApp({{ dashboard_data | tojson }})">
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data='dashboardApp({{ dashboard_data | tojson }})'>
   
   <!-- Active Subscription Status Banner (owner only) -->
   {% if session.get('auth_level', 'admin') == 'admin' %}
@@ -15,19 +15,29 @@
       </div>
       <div>
         <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-neutral-900 dark:text-white">Studio Pro {{ plan_display }} Plan</span>
+          <span class="text-sm font-bold text-neutral-900 dark:text-white">{{ plan_display }} Plan</span>
           <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Active</span>
         </div>
         <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+          {% if tier == 'free' %}
+          Free trial active • Ends on <span class="font-semibold text-neutral-700 dark:text-neutral-200">{{ expires_readable or '—' }}</span> ({{ days_left }} days left)
+          {% else %}
           Plan active • Next renewal on <span class="font-semibold text-neutral-700 dark:text-neutral-200">{{ expires_readable or '—' }}</span> ({{ days_left }} days remaining)
+          {% endif %}
         </p>
       </div>
     </div>
 
     <div class="flex items-center gap-2">
-      <a href="{{ url_for('register') }}" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
+      {% if is_studio %}
+      <a href="{{ url_for('settings') }}" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
         Manage Subscription
       </a>
+      {% else %}
+      <a href="{{ url_for('upgrade') }}" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
+        <i data-lucide="crown" class="w-3.5 h-3.5 inline"></i> Upgrade Plan
+      </a>
+      {% endif %}
     </div>
   </div>
   {% endif %}
@@ -82,10 +92,15 @@
         </div>
       </div>
       <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="776" data-prefix="₹">₹776</span>
-        <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">+8.5%</span>
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.avg_ticket }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.avg_ticket) }}</span>
+        {% if dashboard_data.ticket_delta is not none %}
+        <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.ticket_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
+          {% if dashboard_data.ticket_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
+          <span x-text="Math.abs({{ dashboard_data.ticket_delta }}) + '%'"></span>
+        </span>
+        {% endif %}
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">Cross-selling rate 34%</p>
+      <p class="text-[11px] text-neutral-400 mt-1">Across {{ dashboard_data.today_bills }} closed invoice{{ 's' if dashboard_data.today_bills != 1 else '' }} today</p>
     </div>
     {% endif %}
 
@@ -98,10 +113,10 @@
         </div>
       </div>
       <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white">8 / 10</span>
-        <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400">80% Floor</span>
+        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.active_staff }}">{{ dashboard_data.active_staff }}</span>
+        <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400" x-text="staffBookedToday() + ' booked today'"></span>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">2 on scheduled break</p>
+      <p class="text-[11px] text-neutral-400 mt-1">Team members on the active roster</p>
     </div>
 
   </div>
@@ -300,12 +315,43 @@
       staffLeaderboard: (dashData && dashData.staff_leaderboard) || [],
       recentInvoices: (dashData && dashData.recent_invoices) || [],
 
+      // Real count of staff who actually have bookings today
+      staffBookedToday() {
+        const names = new Set(
+          (this.todayAppointments || [])
+            .filter(a => a.status !== 'Cancelled' && a.staff)
+            .map(a => a.staff)
+        );
+        return names.size;
+      },
+
       copyBookingLink() {
         const url = window.location.origin + "/booking/{{ salon.id if salon else 1 }}";
-        navigator.clipboard.writeText(url).then(() => {
+        const done = () => {
           this.copiedLink = true;
           setTimeout(() => { this.copiedLink = false; }, 2500);
-        });
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(url).then(done).catch(() => this.fallbackCopy(url, done));
+        } else {
+          this.fallbackCopy(url, done);
+        }
+      },
+
+      fallbackCopy(text, done) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          done();
+        } catch (e) {
+          console.error("Copy failed:", e);
+        }
+        document.body.removeChild(ta);
       }
     };
   }

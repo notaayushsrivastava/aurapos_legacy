@@ -13,6 +13,10 @@ from flask_limiter.errors import RateLimitExceeded
 import csv
 import io
 import json
+import base64
+import sys
+import os
+import re
 
 
 def login_required(f):
@@ -50,7 +54,107 @@ def role_required(*levels):
     return decorator
 
 
-app = Flask(__name__)
+def tier_required(*tiers):
+    """Gate a route to salons subscribed to one of the given tiers (e.g. 'studio').
+
+    The salon's plan is read fresh from the database on every request, so plan
+    changes take effect immediately. JSON endpoints get a 403 payload while
+    pages redirect to the dashboard with a flash message.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if "id" not in session:
+                flash("Please sign in to access your salon terminal.", "warning")
+                return redirect(url_for("login"))
+            salon = authRepo.get_salon(session.get("id", 1))
+            plan = (salon.plan if salon else "") or ""
+            if plan not in tiers:
+                label = " / ".join(t.title() for t in tiers)
+                if request.path.startswith("/api/"):
+                    return jsonify({
+                        "success": False,
+                        "message": f"This feature is exclusive to the {label} plan — upgrade to unlock it.",
+                        "upgrade_required": True,
+                    }), 403
+                flash(f"This feature is part of the {label} plan — upgrade to unlock it.", "error")
+                return redirect(url_for("dashboard"))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+def get_seat_limit(plan):
+    """Team seat limit for a subscription plan (None = unlimited, i.e. Studio)."""
+    return TIER_SEAT_LIMITS.get(plan, TIER_SEAT_LIMITS["pro"])
+
+
+# Tiers that unlock the salon location feature (map pin + directions).
+# Pro is the entry paid tier, so Pro and Studio both unlock it.
+LOCATION_FEATURE_TIERS = ("pro", "studio")
+
+# Tiers that may set the salon address shown on bills and the booking portal.
+# The free trial gets core POS only, so its address stays locked.
+ADDRESS_FEATURE_TIERS = ("pro", "studio")
+
+
+def sanitize_opening_hours(raw):
+    """Validate a weekly schedule dict (or JSON-encoded string) and return a
+    canonical JSON string.
+
+    Expects {weekday: {"closed": bool, "open": "HH:MM", "close": "HH:MM"}} for
+    all seven weekdays. The frontend sends scheduleJson() (a JSON string), so a
+    string payload is decoded transparently. Returns None when the payload is
+    malformed so callers can reject it.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(raw, dict):
+        return None
+    time_re = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+    clean = {}
+    for day in WEEKDAY_KEYS:
+        entry = raw.get(day)
+        if not isinstance(entry, dict):
+            return None
+        closed = bool(entry.get("closed"))
+        open_t = str(entry.get("open") or "").strip()
+        close_t = str(entry.get("close") or "").strip()
+        if not closed:
+            # Same-format HH:MM validation; close < open is allowed (past-midnight
+            # closing), only identical open/close times are ambiguous.
+            if not time_re.match(open_t) or not time_re.match(close_t) or open_t == close_t:
+                return None
+        clean[day] = {
+            "closed": closed,
+            "open": open_t if time_re.match(open_t) else "09:00",
+            "close": close_t if time_re.match(close_t) else "19:00",
+        }
+    return json.dumps(clean)
+
+
+def get_salon_tier(salon_id):
+    """Return (tier, salon) for a salon id; unknown/legacy plans fall back to 'pro'."""
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "") or ""
+    tier = plan if plan in TIER_PLANS else "pro"
+    return tier, salon
+
+
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB cap for salon logo uploads
+
+
+if getattr(sys, 'frozen', False):
+    template_folder = os.path.join(sys._MEIPASS, 'templates')
+    static_folder = os.path.join(sys._MEIPASS, 'static')
+    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+else:
+    # Running as a normal Python script
+    app = Flask(__name__)
+
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
 
 # Repositories
@@ -90,10 +194,20 @@ rzp_client = razorpay.Client(
 
 @app.context_processor
 def inject_salon():
+    """Expose the current salon and its tier helpers to every template."""
     if "id" in session:
         salon = authRepo.get_salon(session["id"])
-        return dict(current_salon=salon)
-    return dict(current_salon=None)
+        plan = (salon.plan if salon else "") or ""
+        tier = plan if plan in TIER_PLANS else "pro"
+        return dict(
+            current_salon=salon,
+            tier=tier,
+            is_studio=(tier == "studio"),
+            is_pro=(tier == "pro"),
+            is_free=(tier == "free"),
+            TIER_PLANS=TIER_PLANS,
+        )
+    return dict(current_salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS)
 
 
 # ================= PUBLIC ROUTES =================
@@ -111,9 +225,40 @@ def booking(salon_id=None):
         salon_id = session.get("id", 1)
     salon = authRepo.get_salon(salon_id) or authRepo.get_salon(1)
     target_id = salon.id if salon else 1
-    services = serviceRepo.get_services(target_id)
+    services = serviceRepo.get_booking_services(target_id)
     staff = staffRepo.get_staff(target_id)
-    return render_template('service/booking.html', salon=salon, services=services, staff=staff)
+
+    # Real weekly schedule + today's open/closed state for the portal header.
+    opening_hours = parse_opening_hours(salon)
+    now = datetime.now()
+    weekday = WEEKDAY_KEYS[now.weekday()]
+    today_entry = opening_hours.get(weekday) or {}
+    open_now = False
+    today_hours_label = "Hours not set"
+    if today_entry and not today_entry.get("closed"):
+        open_t = str(today_entry.get("open") or "")
+        close_t = str(today_entry.get("close") or "")
+        if open_t and close_t:
+            fmt = lambda t: datetime.strptime(t, "%H:%M").strftime("%I:%M %p").lstrip("0")
+            now_s = now.strftime("%H:%M")
+            if close_t > open_t:
+                open_now = open_t <= now_s <= close_t
+            else:
+                # Overnight schedule (e.g. 18:00 – 02:00) wraps past midnight.
+                open_now = now_s >= open_t or now_s <= close_t
+            today_hours_label = f"{fmt(open_t)} \u2013 {fmt(close_t)}"
+    elif today_entry:
+        today_hours_label = "Closed today"
+
+    return render_template(
+        'service/booking.html',
+        salon=salon,
+        services=services,
+        staff=staff,
+        opening_hours=opening_hours,
+        today_hours_label=today_hours_label,
+        open_now=open_now,
+    )
 
 
 @app.route('/contact', methods=["GET", "POST"])
@@ -131,9 +276,47 @@ def privacy_policy():
     return render_template('intro/privacy.html')
 
 
+@limiter.exempt
+@app.route('/terms')
+def terms_of_service():
+    return render_template('intro/tos.html')
+
+
 @app.route('/register')
 def register():
     return render_template('service/register.html', razorpay_key_id='rzp_test_SxU2RG4SoMaOcI')
+
+
+def get_upgrade_options(current_tier):
+    """Purchaseable plan ids strictly above the salon's current tier.
+
+    Free-trial salons may buy Pro or Studio; Pro salons may buy Studio;
+    Studio salons have nothing strictly higher on the ladder.
+    """
+    try:
+        index = TIER_ORDER.index(current_tier)
+    except ValueError:
+        index = 0
+    return {
+        plan_id: pricing
+        for plan_id, pricing in PLAN_PRICING.items()
+        if TIER_ORDER.index(pricing["tier"]) > index
+    }
+
+
+@app.route('/upgrade')
+@login_required
+def upgrade():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    current_tier = (salon.plan if salon and salon.plan in TIER_PLANS else "free") or "free"
+    return render_template(
+        'service/upgrade.html',
+        salon=salon,
+        current_tier=current_tier,
+        razorpay_key_id='rzp_test_SxU2RG4SoMaOcI',
+        upgrade_options=get_upgrade_options(current_tier),
+    )
 
 
 # ================= AUTHENTICATION ROUTES =================
@@ -228,14 +411,14 @@ def create_subscription():
     if email and phone and authRepo.check_exists(email, phone):
         return jsonify({"error": "An account with this email address or phone number already exists. Please sign in instead."}), 400
 
-    plan = data.get("plan", "yearly")
+    plan = data.get("plan", "pro")
 
-    if plan == "monthly":
-        amount = 6900      # ₹69.00
-    elif plan == "yearly":
-        amount = 74900     # ₹749.00
-    else:
+    pricing = PLAN_PRICING.get(plan)
+    if not pricing:
         return jsonify({"error": "Invalid plan selected"}), 400
+
+    # pro ₹69/mo · pro_yearly ₹690/yr · studio ₹149/mo · studio_yearly ₹1,490/yr (2 months free)
+    amount = pricing["amount"]
 
     receipt = str(uuid4())
 
@@ -247,7 +430,7 @@ def create_subscription():
             "payment_capture": 1
         })
     except Exception as e:
-        # Development fallback order
+        print(f"RAZORPAY ERROR : {e}")
         order = {
             "id": f"order_{str(uuid4())[:14]}",
             "amount": amount,
@@ -304,14 +487,21 @@ def verify_subscription():
     except Exception as e:
         print("Signature check warning:", e)
 
-    plan = account_data.get("plan", "yearly")
+    plan = account_data.get("plan", "pro")
+    pricing = PLAN_PRICING.get(plan)
+    if not pricing:
+        conn.close()
+        return jsonify({"success": False, "message": "Invalid plan selected."}), 400
+    tier, cycle = pricing["tier"], pricing["cycle"]
+
     now_ts = int(datetime.now().timestamp())
-    expires_ts = now_ts + (Time.month if plan == "monthly" else Time.year)
+    # Annual plans bill 12 months upfront (2 months free); monthly renews every 30 days
+    expires_ts = now_ts + (Time.year if cycle == "yearly" else Time.month)
 
     cur.execute(
         """
-        INSERT INTO salons(name, phone, salon_name, email, created_on, plan, expires_on)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO salons(name, phone, salon_name, email, created_on, plan, billing_cycle, expires_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             account_data.get("owner_name", "Salon Owner").capitalize(),
@@ -319,7 +509,8 @@ def verify_subscription():
             account_data.get("salon_name", "Studio Elite"),
             email,
             now_ts,
-            plan,
+            tier,
+            cycle,
             expires_ts
         )
     )
@@ -346,6 +537,168 @@ def verify_subscription():
     billRepo.seed_defaults_if_empty(accid)
 
     flash("🎉 Subscription activated successfully! Welcome to AuraPOS.", "success")
+
+    return jsonify({
+        "success": True,
+        "redirect": url_for("dashboard")
+    })
+
+
+# ================= FREE 14-DAY TRIAL =================
+
+@limiter.exempt
+@app.post("/register-trial")
+def register_trial():
+    """Create a brand-new salon on the 14-day free trial (single seat)."""
+    data = request.get_json() or {}
+    owner_name = (data.get("owner_name") or "Salon Owner").strip().capitalize()
+    salon_name = (data.get("salon_name") or "My Salon").strip()
+    email = (data.get("email") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    password = data.get("password") or ""
+
+    if authRepo.check_exists(email, phone):
+        return jsonify({
+            "success": False,
+            "message": "An account with this email address or phone number already exists. Please sign in."
+        }), 400
+
+    # resolve_plan("free") → plan "free", billing_cycle "trial", 14-day expiry.
+    accid = authRepo.create_auth(owner_name, salon_name, phone, email, password, plan="free")
+
+    session["id"] = accid
+    session["username"] = email
+    session["auth_level"] = "admin"
+
+    serviceRepo.seed_defaults_if_empty(accid)
+    staffRepo.seed_defaults_if_empty(accid)
+    appointmentRepo.seed_defaults_if_empty(accid)
+    billRepo.seed_defaults_if_empty(accid)
+
+    flash("🚀 Your 14-day free trial is active — welcome to AuraPOS!", "success")
+    return jsonify({
+        "success": True,
+        "redirect": url_for("dashboard")
+    })
+
+
+# ================= PLAN UPGRADES (existing salons) =================
+
+@limiter.exempt
+@app.post("/create-upgrade")
+@login_required
+def create_upgrade():
+    """Create a Razorpay order when an existing salon upgrades to a higher tier."""
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    current_tier = (salon.plan if salon else "") or ""
+
+    data = request.get_json() or {}
+    plan = data.get("plan", "")
+
+    pricing = PLAN_PRICING.get(plan)
+    if not pricing:
+        return jsonify({"error": "Invalid plan selected"}), 400
+
+    current_index = TIER_ORDER.index(current_tier) if current_tier in TIER_ORDER else 0
+    target_index = TIER_ORDER.index(pricing["tier"])
+    if target_index < current_index:
+        return jsonify({"error": "That plan is below your current tier."}), 400
+    if current_tier == pricing["tier"]:
+        return jsonify({"error": "You are already on the " + TIER_PLANS[pricing["tier"]]["label"] + " plan."}), 400
+
+    receipt = str(uuid4())
+    try:
+        order = rzp_client.order.create({
+            "amount": int(pricing["amount"]),
+            "currency": "INR",
+            "receipt": receipt,
+            "payment_capture": 1,
+        })
+    except Exception as e:
+        print(f"RAZORPAY ERROR : {e}")
+        order = {
+            "id": f"order_{str(uuid4())[:14]}",
+            "amount": int(pricing["amount"]),
+            "currency": "INR",
+            "receipt": receipt,
+            "created_at": int(datetime.now().timestamp()),
+        }
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO pendingorders(id, amount, created_at, plan, receipt, email, phone, salon_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (order["id"], order["amount"], order["created_at"], plan, receipt,
+         (salon.email if salon else "") or "", (salon.phone if salon else "") or "", salon_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify(order)
+
+
+@limiter.exempt
+@app.post("/verify-upgrade")
+@login_required
+def verify_upgrade():
+    """Finalise an upgrade: verify the payment, switch the salon's plan and log the receipt."""
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+
+    payload = request.get_json() or {}
+    data = payload.get("payment", {})
+    account_data = payload.get("formData", {})
+
+    plan = account_data.get("plan", "")
+    pricing = PLAN_PRICING.get(plan)
+    if not pricing:
+        return jsonify({"success": False, "message": "Invalid plan selected."}), 400
+
+    # Best-effort signature check (mirrors the register flow's test-mode bypass).
+    if data.get("razorpay_signature"):
+        try:
+            rzp_client.utility.verify_payment_signature({
+                "razorpay_order_id": data.get("razorpay_order_id"),
+                "razorpay_payment_id": data.get("razorpay_payment_id"),
+                "razorpay_signature": data.get("razorpay_signature"),
+            })
+        except Exception:
+            pass  # Allow test mode bypass in development
+
+    # Soft ownership check — the pending order should belong to this salon.
+    try:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT id FROM pendingorders WHERE id = ? AND salon_id = ?",
+            (data.get("razorpay_order_id", ""), salon_id),
+        ).fetchone()
+        conn.close()
+        if not row:
+            print(f"UPGRADE WARNING: pending order not found for salon {salon_id}")
+    except Exception as e:
+        print("Upgrade order lookup warning:", e)
+
+    tier, cycle = pricing["tier"], pricing["cycle"]
+    now_ts = int(datetime.now().timestamp())
+    expires_ts = now_ts + (Time.year if cycle == "yearly" else Time.month)
+
+    authRepo.update_salon_plan(salon_id, tier, cycle, expires_ts)
+    authRepo.record_subscription(
+        sub_id=data.get("razorpay_payment_id") or f"sub_{str(uuid4())[:14]}",
+        salon_id=salon_id,
+        amount=pricing["amount"],
+        plan=tier,
+        cycle=cycle,
+        receipt=data.get("razorpay_order_id") or str(uuid4()),
+        email=(salon.email if salon else "") or "",
+        phone=(salon.phone if salon else "") or "",
+    )
+
+    flash(f"🎉 You're on the {TIER_PLANS[tier]['label']} plan now!", "success")
 
     return jsonify({
         "success": True,
@@ -446,7 +799,12 @@ def dashboard():
     }
 
     # Subscription banner facts (owner only)
-    plan_display = "Monthly" if salon and salon.plan == "monthly" else "Yearly"
+    tier_label = salon.plan.title() if salon and salon.plan in TIER_PLANS else "Pro"
+    cycle_label = "Annual" if salon and getattr(salon, "billing_cycle", "monthly") == "yearly" else "Monthly"
+    if salon and getattr(salon, "billing_cycle", "monthly") == "trial":
+        plan_display = "Free 14-day Trial"
+    else:
+        plan_display = f"{tier_label} {cycle_label}"
     days_left = 0
     expires_readable = None
     if salon and salon.expires_on:
@@ -799,6 +1157,7 @@ def _report_window():
 
 @app.get('/api/reports')
 @role_required("admin", "manager")
+@tier_required("studio")
 def api_reports():
     salon_id = session.get("id", 1)
     start, end = _report_window()
@@ -824,7 +1183,7 @@ def api_reports():
 @app.get('/api/public/services')
 def api_public_services():
     salon_id = request.args.get("salon_id", type=int) or 1
-    return jsonify(serviceRepo.get_services(salon_id))
+    return jsonify(serviceRepo.get_booking_services(salon_id))
 
 
 @app.post('/api/public/booking')
@@ -875,11 +1234,12 @@ def settings():
         primary_account_id=authRepo.get_primary_account_id(salon_id),
         subscriptions=subscriptions,
         deletion_request=deletion_request,
-        max_team_seats=MAX_TEAM_SEATS,
+        max_team_seats=get_seat_limit(salon.plan if salon else ""),
     )
 
 
 @app.patch('/api/settings/profile')
+@app.patch('/api/settings/profile/')
 @role_required("admin")
 def api_update_profile():
     salon_id = session.get("id", 1)
@@ -890,10 +1250,96 @@ def api_update_profile():
     phone = (data.get("phone") or "").strip()
     if not all([owner_name, salon_name, email, phone]):
         return jsonify({"success": False, "message": "All profile fields are required."}), 400
-    ok = authRepo.update_salon_profile(salon_id, owner_name, salon_name, email, phone)
+
+    extra = {}
+
+    # Salon Address — exclusive to the Pro tier and above.
+    if "address" in data:
+        salon = authRepo.get_salon(salon_id)
+        plan = (salon.plan if salon else "") or ""
+        if plan not in ADDRESS_FEATURE_TIERS:
+            if (data.get("address") or "").strip() != ((salon.address if salon else "") or ""):
+                label = " / ".join(t.title() for t in ADDRESS_FEATURE_TIERS)
+                return jsonify({
+                    "success": False,
+                    "message": f"The salon address field is exclusive to the {label} plan — upgrade to unlock it.",
+                    "upgrade_required": True,
+                }), 403
+            # Unchanged address on a locked tier: drop it so the rest of the profile still saves.
+        else:
+            extra["address"] = (data.get("address") or "").strip()
+
+    # Weekly opening/closing schedule (optional field).
+    if "opening_hours" in data:
+        opening_hours_json = sanitize_opening_hours(data.get("opening_hours"))
+        if opening_hours_json is None:
+            return jsonify({"success": False, "message": "Opening hours are invalid — check each day's open/close times."}), 400
+        extra["opening_hours"] = opening_hours_json
+
+    # Location (map pin) — exclusive to the Pro tier and above.
+    loc = data.get("location", None)
+    if isinstance(loc, dict) and loc.get("latitude") is not None and loc.get("longitude") is not None:
+        salon = authRepo.get_salon(salon_id)
+        plan = (salon.plan if salon else "") or ""
+        if plan not in LOCATION_FEATURE_TIERS:
+            label = " / ".join(t.title() for t in LOCATION_FEATURE_TIERS)
+            return jsonify({
+                "success": False,
+                "message": f"The salon location feature is exclusive to the {label} plan — upgrade to unlock it.",
+                "upgrade_required": True,
+            }), 403
+        try:
+            extra["location"] = {
+                "latitude": float(loc["latitude"]),
+                "longitude": float(loc["longitude"]),
+            }
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "Invalid map coordinates."}), 400
+    elif loc is False:
+        extra["location"] = False
+
+    ok = authRepo.update_salon_profile(salon_id, owner_name, salon_name, email, phone, extra=extra)
     if not ok:
         return jsonify({"success": False, "message": "That email or phone is already linked to another salon."}), 400
     return jsonify({"success": True, "message": "Salon profile updated."})
+
+
+# Studio-exclusive salon branding: logo is stored as a base64 data URL.
+ALLOWED_LOGO_MIMES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
+
+
+@app.post('/api/settings/logo')
+@role_required("admin")
+@tier_required("studio")
+def api_upload_logo():
+    """Handle salon logo image uploads (Studio tier only)."""
+    salon_id = session.get("id", 1)
+    file = request.files.get("logo")
+    if not file or not file.filename:
+        return jsonify({"success": False, "message": "Choose a logo image to upload."}), 400
+
+    mime = (file.mimetype or "").lower()
+    if mime not in ALLOWED_LOGO_MIMES:
+        return jsonify({"success": False, "message": "Logo must be a PNG, JPG, WEBP or SVG image."}), 400
+
+    blob = file.read()
+    if not blob:
+        return jsonify({"success": False, "message": "The selected file is empty."}), 400
+    if len(blob) > MAX_LOGO_SIZE_BYTES:
+        return jsonify({"success": False, "message": "Logo is too large — the maximum size is 2 MB."}), 400
+
+    data_url = f"data:{mime};base64,{base64.b64encode(blob).decode('ascii')}"
+    authRepo.update_salon_logo(salon_id, data_url)
+    return jsonify({"success": True, "message": "Salon logo updated.", "logo": data_url})
+
+
+@app.delete('/api/settings/logo')
+@role_required("admin")
+@tier_required("studio")
+def api_remove_logo():
+    """Clear the salon logo (Studio tier only)."""
+    authRepo.update_salon_logo(session.get("id", 1), None)
+    return jsonify({"success": True, "message": "Salon logo removed."})
 
 
 @app.post('/api/settings/password')
@@ -920,10 +1366,12 @@ def api_change_password():
 def api_get_accounts():
     salon_id = session.get("id", 1)
     accounts = [{**acc, "password": "********"} for acc in authRepo.get_accounts(salon_id)]
+    tier, _salon = get_salon_tier(salon_id)
     return jsonify({
         "accounts": accounts,
         "primary_account_id": authRepo.get_primary_account_id(salon_id),
-        "max_seats": MAX_TEAM_SEATS,
+        "max_seats": get_seat_limit(tier),
+        "tier": tier,
     })
 
 
@@ -934,11 +1382,13 @@ def api_add_account():
         return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
+    tier, _salon = get_salon_tier(salon_id)
     result = authRepo.add_account(
         salon_id,
         data.get("email", ""),
         data.get("password", ""),
         data.get("auth_level", "cashier"),
+        seat_limit=get_seat_limit(tier),
     )
     return jsonify(result), (200 if result["success"] else 400)
 
@@ -992,6 +1442,7 @@ def _csv_response(filename, header, rows):
 
 @app.get('/api/settings/export/<dataset>')
 @role_required("admin")
+@tier_required("studio")
 def api_export_data(dataset):
     salon_id = session.get("id", 1)
     stamp = date.today().isoformat()
@@ -1039,6 +1490,7 @@ def api_export_data(dataset):
 
 @app.get('/api/settings/export/template/<dataset>')
 @role_required("admin")
+@tier_required("studio")
 def api_import_template(dataset):
     """Downloadable sample CSVs showing the exact mass-upload format."""
     if dataset == "customers":
@@ -1064,6 +1516,7 @@ def api_import_template(dataset):
 
 @app.post('/api/settings/import/<dataset>')
 @login_required
+@tier_required("studio")
 def api_import_data(dataset):
     """Mass upload customers or services from a CSV file."""
     if session.get("auth_level") != "admin":

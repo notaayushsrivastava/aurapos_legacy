@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}AuraPOS â€” Kinetic Salon Billing &amp; Studio Management{% endblock %}
+{% block title %}AuraPOS - Kinetic Salon Billing &amp; Studio Management{% endblock %}
 
 {% block head %}
 <script>window.AURA_NO_REVEAL = true; /* the reel runs its own choreography */</script>
@@ -15,7 +15,7 @@
     body{
       background:var(--bg); color:#f3f4f6;
       font-family:'Plus Jakarta Sans',sans-serif;
-      overflow-x:hidden; -webkit-font-smoothing:antialiased;
+      -webkit-font-smoothing:antialiased;
     }
     ::selection{background:var(--cyan);color:#000}
     ::-webkit-scrollbar{width:10px}
@@ -93,7 +93,7 @@
     }
 
   /* page-scoped overrides: the reel is always deep-dark */
-  body{background:#050508!important;color:#f3f4f6!important;overflow-x:hidden}
+  body{background:#050508!important;color:#f3f4f6!important}
 </style>
 {% endblock %}
 
@@ -181,7 +181,7 @@
             <div class="text-xs text-neutral-500 font-medium mt-1">Average Invoice Checkout</div>
           </div>
           <div>
-            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-neon-cyan">₹749/yr</div>
+            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-neon-cyan">₹69/mo</div>
             <div class="text-xs text-neutral-500 font-medium mt-1">Affordable Flat Pricing</div>
           </div>
           <div>
@@ -228,8 +228,8 @@
         </div>
 
         <!-- thermal receipt -->
-        <div class="order-1 lg:order-2 flex justify-center perspective-1200">
-          <div id="r-card" class="relative w-[300px] sm:w-[320px] rotate-2 will-change-transform">
+        <div class="order-1 lg:order-2 flex justify-center perspective-1200 overflow-visible p-4">
+          <div id="r-card" class="relative w-[min(300px,82vw)] sm:w-[320px] rotate-2 will-change-transform">
             <div class="bg-[#f7f7f2] text-neutral-900 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] px-5 pt-6 pb-3 font-mono-num text-[11px] leading-relaxed">
               <div class="r-head text-center">
                 <p class="text-[13px] font-bold tracking-[0.18em]">AURA SALON &amp; SPA</p>
@@ -274,7 +274,9 @@
   </section>
   <!-- ===== CH.02 — THE SANDBOX (progressive bill · ported from about.html #pos-demo) ===== -->
   <section id="ch-sandbox" data-chapter class="relative py-28 sm:py-36 scroll-mt-14" x-data="posSimulator()">
-    <div class="glow-orb w-[420px] h-[420px] bg-neon-cyan top-20 -right-40 opacity-[0.14]" aria-hidden="true"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div class="glow-orb w-[420px] h-[420px] bg-neon-cyan top-20 -right-40 opacity-[0.14]"></div>
+    </div>
     <div class="max-w-7xl mx-auto px-5 sm:px-8">
 
       <div class="text-center max-w-3xl mx-auto mb-12">
@@ -318,7 +320,7 @@
             </template>
           </div>
 
-          <div class="p-3.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/60 text-xs text-neutral-400 flex items-center justify-between gap-3">
+          <div class="p-3.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/60 text-xs text-neutral-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>💡 Need custom price? Add any customized charge with 1-click in the live POS.</span>
             <a href="{{ url_for('billing') }}" class="text-neon-cyan hover:underline font-semibold whitespace-nowrap">Open Full POS &rarr;</a>
           </div>
@@ -411,7 +413,9 @@
 
   <!-- ===== CH.03 — THE CHAIRS ===== -->
   <section id="ch-chairs" data-chapter class="relative py-28 sm:py-36">
-    <div class="glow-orb w-[420px] h-[420px] bg-neon-violet top-10 -left-40 opacity-[0.18]" aria-hidden="true"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div class="glow-orb w-[420px] h-[420px] bg-neon-violet top-10 -left-40 opacity-[0.18]"></div>
+    </div>
     <div class="max-w-6xl mx-auto px-5 sm:px-8 grid lg:grid-cols-2 gap-14 lg:gap-20 items-start">
 
       <div class="lg:sticky lg:top-32">
@@ -492,7 +496,9 @@
   </section>
   <!-- ===== CH.04 — THE CRAFT (feature info cards · ported from about.html #features) ===== -->
   <section id="ch-craft" data-chapter class="relative py-28 sm:py-36 scroll-mt-14">
-    <div class="glow-orb w-[440px] h-[440px] bg-neon-violet top-1/4 -right-48 opacity-[0.14]" aria-hidden="true"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div class="glow-orb w-[440px] h-[440px] bg-neon-violet top-1/4 -right-48 opacity-[0.14]"></div>
+    </div>
     <div class="max-w-7xl mx-auto px-5 sm:px-8">
 
       <div class="text-center max-w-3xl mx-auto mb-16">
@@ -590,7 +596,9 @@
 
   <!-- ===== CH.05 — THE NUMBERS ===== -->
   <section id="ch-numbers" data-chapter class="relative py-28 sm:py-36">
-    <div class="glow-orb w-[460px] h-[460px] bg-neon-cyan top-1/3 -right-48 opacity-[0.14]" aria-hidden="true"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div class="glow-orb w-[460px] h-[460px] bg-neon-cyan top-1/3 -right-48 opacity-[0.14]"></div>
+    </div>
     <div class="max-w-6xl mx-auto px-5 sm:px-8">
 
       <div class="text-center max-w-2xl mx-auto mb-14">
@@ -654,8 +662,10 @@
   </section>
 
   <!-- ===== CH.06 — THE PRICE (pricing tabs · ported from about.html #pricing) ===== -->
-  <section id="ch-pricing" data-chapter class="relative py-28 sm:py-36 scroll-mt-14" x-data="{ billingCycle: 'yearly' }">
-    <div class="glow-orb w-[440px] h-[440px] bg-neon-magenta bottom-0 -left-48 opacity-[0.12]" aria-hidden="true"></div>
+  <section id="ch-pricing" data-chapter class="relative py-28 sm:py-36 scroll-mt-14">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div class="glow-orb w-[440px] h-[440px] bg-neon-magenta bottom-0 -left-48 opacity-[0.12]"></div>
+    </div>
     <div class="max-w-7xl mx-auto px-5 sm:px-8">
 
       <div class="text-center max-w-3xl mx-auto mb-12">
@@ -665,84 +675,93 @@
           <span class="font-mono-num text-[11px] tracking-[0.35em] text-neutral-500 uppercase">The Price</span>
         </div>
         <h2 class="text-3xl sm:text-5xl font-extrabold tracking-tight" data-anim="up" data-delay="80">
-          ONE SIMPLE PLAN <span class="text-outline">FOR&nbsp;ALL&nbsp;SALONS.</span>
+          TWO PLANS. <span class="text-outline">ZERO&nbsp;GUESSWORK.</span>
         </h2>
         <p class="text-neutral-400 mt-4 text-base" data-anim="up" data-delay="160">
-          No hidden setup fees. No per-seat limits. Full access to all features.
+          No hidden setup fees. Start on Pro — move up to Studio when your chairs fill up.
         </p>
-
-        <!-- Billing Cycle Switcher -->
-        <div class="inline-flex items-center p-1.5 rounded-2xl bg-[#0c0c12] border border-neutral-800 mt-8" data-anim="scale" data-delay="240">
-          <button @click="billingCycle = 'monthly'; window.__aura && window.__aura.pricingPulse('price-monthly')"
-                  :class="billingCycle === 'monthly' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400 hover:text-white'"
-                  class="px-5 py-2 rounded-xl text-xs font-bold transition-all">
-            Monthly Billing
-          </button>
-          <button @click="billingCycle = 'yearly'; window.__aura && window.__aura.pricingPulse('price-yearly')"
-                  :class="billingCycle === 'yearly' ? 'bg-gradient-to-r from-neon-magenta to-violet-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'"
-                  class="px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-            <span>Yearly Billing</span>
-            <span class="text-[10px] bg-white text-neutral-950 px-1.5 py-0.5 rounded font-black">SAVE 10%</span>
-          </button>
-        </div>
       </div>
 
       <!-- Pricing Comparison Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
 
-        <!-- Monthly Tier -->
-        <div id="price-monthly" data-anim="scale"
-             class="p-8 sm:p-10 rounded-3xl bg-[#0c0c12] flex flex-col justify-between relative transition-all"
-             :class="billingCycle === 'monthly' ? 'border-2 border-neon-magenta/70 shadow-2xl shadow-neon-magenta/10' : 'border border-neutral-800'">
+        <!-- Pro Tier -->
+        <div id="price-pro" data-anim="scale"
+             class="p-8 sm:p-10 rounded-3xl bg-[#0c0c12] border border-neutral-800 flex flex-col justify-between relative transition-all hover:border-neutral-700">
           <div>
-            <div class="text-xs font-bold uppercase tracking-wider text-neutral-400">Monthly Flexible</div>
+            <div class="text-xs font-bold uppercase tracking-wider text-neutral-400">Pro</div>
             <div class="mt-4 flex items-baseline gap-2">
               <span class="text-4xl sm:text-5xl font-extrabold font-mono-num text-white">₹69</span>
               <span class="text-sm text-neutral-400">/ month</span>
             </div>
             <p class="text-xs text-neutral-500 mt-2">Billed monthly, cancel anytime in 1-click.</p>
 
+            <!-- Annual option — 12 months for the price of 10 -->
+            <div class="mt-3 p-3 rounded-xl border border-neutral-800 bg-neutral-900/60 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold text-white font-mono-num">₹690 / year</p>
+                <p class="text-[10px] text-neutral-500">12 months for the price of 10</p>
+              </div>
+              <a href="{{ url_for('register') }}?plan=pro_yearly"
+                 class="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all whitespace-nowrap uppercase tracking-wider">
+                2 Months Free
+              </a>
+            </div>
+
             <ul class="mt-8 space-y-3 text-sm text-neutral-300">
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Unlimited POS Invoicing</li>
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Unlimited Staff Profiles</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Up to 2 Team Seats</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Online Client Booking Portal</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Automatic GST / Tax Calculations</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Email &amp; WhatsApp Receipt Preview</li>
+              <li class="flex items-center gap-3 text-emerald-400"><i data-lucide="gift" class="w-4 h-4"></i> 2 Months Free with Annual billing</li>
             </ul>
           </div>
 
-          <a href="{{ url_for('register') }}" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-sm transition-all">
-            Subscribe Monthly
+          <a href="{{ url_for('register') }}?plan=pro" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-sm transition-all">
+            Start with Pro
           </a>
         </div>
 
-        <!-- Yearly Tier (Highlighted) -->
-        <div id="price-yearly" data-anim="scale" data-delay="120"
-             class="p-8 sm:p-10 rounded-3xl bg-gradient-to-b from-[#141420] to-[#0c0c12] flex flex-col justify-between relative overflow-hidden transition-all"
-             :class="billingCycle === 'yearly' ? 'border-2 border-neon-magenta shadow-2xl shadow-neon-magenta/15' : 'border border-neutral-800'">
+        <!-- Studio Tier (Highlighted) -->
+        <div id="price-studio" data-anim="scale" data-delay="120"
+             class="p-8 sm:p-10 rounded-3xl bg-gradient-to-b from-[#141420] to-[#0c0c12] border-2 border-neon-magenta shadow-2xl shadow-neon-magenta/15 flex flex-col justify-between relative overflow-hidden transition-all">
           <div class="absolute top-4 right-4 bg-neon-magenta text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
             Best Value
           </div>
 
           <div>
-            <div class="text-xs font-bold uppercase tracking-wider text-neon-cyan">Yearly Studio Pro</div>
+            <div class="text-xs font-bold uppercase tracking-wider text-neon-cyan">Studio</div>
             <div class="mt-4 flex items-baseline gap-2">
-              <span class="text-4xl sm:text-5xl font-extrabold font-mono-num text-white">₹749</span>
-              <span class="text-sm text-neutral-400">/ year</span>
+              <span class="text-4xl sm:text-5xl font-extrabold font-mono-num text-white">₹149</span>
+              <span class="text-sm text-neutral-400">/ month</span>
             </div>
-            <p class="text-xs text-neutral-400 mt-2">Full 12-month access with priority VIP support.</p>
+            <p class="text-xs text-neutral-400 mt-2">Everything in Pro, plus room to grow.</p>
+
+            <!-- Annual option — 12 months for the price of 10 -->
+            <div class="mt-3 p-3 rounded-xl border border-neon-magenta/30 bg-neon-magenta/5 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold text-white font-mono-num">₹1,490 / year</p>
+                <p class="text-[10px] text-neutral-400">12 months for the price of 10</p>
+              </div>
+              <a href="{{ url_for('register') }}?plan=studio_yearly"
+                 class="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all whitespace-nowrap uppercase tracking-wider">
+                2 Months Free
+              </a>
+            </div>
 
             <ul class="mt-8 space-y-3 text-sm text-neutral-200">
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> <strong>Everything in Monthly, plus:</strong></li>
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> 2 Months Free (₹749 vs ₹828)</li>
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Priority 24/7 Phone &amp; Chat Support</li>
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Custom Logo on Thermal Invoices</li>
-              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Free Data Import from Old Software</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> <strong>Everything in Pro, plus:</strong></li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Unlimited Team Seats</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Custom Salon Logo Branding</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Advanced Analytics Reports</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> CSV Data Import &amp; Export</li>
+              <li class="flex items-center gap-3 text-emerald-400"><i data-lucide="gift" class="w-4 h-4"></i> 2 Months Free with Annual billing</li>
             </ul>
           </div>
 
-          <a href="{{ url_for('register') }}" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white font-bold text-sm transition-all hover:opacity-90">
-            Subscribe Yearly &amp; Save
+          <a href="{{ url_for('register') }}?plan=studio" class="mt-10 block w-full py-3.5 text-center rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white font-bold text-sm transition-all hover:opacity-90">
+            Go Studio
           </a>
         </div>
 
@@ -768,7 +787,7 @@
       </h2>
 
       <p class="mt-8 text-neutral-400 leading-relaxed max-w-xl mx-auto" data-anim="up" data-delay="180">
-        Fourteen days free. Flat <span class="font-mono-num text-neutral-200">₹749</span> a year after.
+        Fourteen days free. From <span class="font-mono-num text-neutral-200">₹69</span> a month after.
         No commissions on your craft — ever. The register is warm, the chairs are full, and the reel has ended.
       </p>
 
@@ -791,11 +810,12 @@
         </a>
       </div>
 
-      <p class="mt-10 font-mono-num text-[10px] tracking-[0.35em] text-neutral-600" data-anim="up" data-delay="380">
-        FLAT&nbsp;₹749/YR&nbsp;·&nbsp;NO&nbsp;COMMISSIONS&nbsp;·&nbsp;CANCEL&nbsp;ANYTIME
+      <p class="mt-10 max-w-full px-4 font-mono-num text-[10px] tracking-[0.2em] sm:tracking-[0.35em] text-neutral-600 leading-relaxed" data-anim="up" data-delay="380">
+        FROM ₹69/MO · NO COMMISSIONS · CANCEL ANYTIME
       </p>
     </div>
-  </section>
+  </section>
+
 {% endblock %}
 
 {% block scripts %}
@@ -1028,18 +1048,12 @@
       }
     }
 
-    /* ---------- aura helper APIs (used by Alpine sandbox & pricing tabs) ---------- */
+    /* ---------- aura helper APIs (used by Alpine sandbox) ---------- */
     window.__aura.pulseGrand = function () {
       if (reduce || typeof anime === 'undefined') return;
       var g = $('#sb-grand'); if (!g) return;
       anime.remove(g);
       anime({ targets: g, scale: [1, 1.22, 1], duration: 480, easing: 'easeOutQuad' });
-    };
-    window.__aura.pricingPulse = function (id) {
-      if (reduce || typeof anime === 'undefined') return;
-      var el = doc.getElementById(id); if (!el) return;
-      anime.remove(el);
-      anime({ targets: el, scale: [1, 1.02, 1], duration: 520, easing: 'easeOutQuad' });
     };
     window.__aura.celebrate = function (e) {
       if (reduce || typeof anime === 'undefined') return;

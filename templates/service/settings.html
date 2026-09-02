@@ -5,6 +5,8 @@
 
 {% block content %}
 {% set is_admin = session.get('auth_level', 'admin') == 'admin' %}
+{% set plan_tier = ((salon.plan or '')|lower) %}
+{% set is_free = plan_tier == 'free' %}
 <div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="settingsApp()">
 
   <!-- Page Heading -->
@@ -17,9 +19,32 @@
       {% if is_admin %}
       <span class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-neon-magenta/10 via-violet-500/10 to-neon-cyan/10 border border-violet-200/60 dark:border-violet-500/20 text-[11px] font-bold uppercase tracking-wider text-violet-700 dark:text-neon-cyan" x-text="salon.plan ? (salon.plan + ' Plan') : 'No Plan'"></span>
       <span class="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 text-[11px] font-semibold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="daysLeft + ' days left'"></span>
+      {% if not is_studio %}
+      <a href="{{ url_for('upgrade') }}" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-[11px] font-bold shadow-sm shadow-neon-magenta/25 hover:opacity-95 transition-all flex items-center gap-1.5">
+        <i data-lucide="crown" class="w-3.5 h-3.5"></i> Upgrade
+      </a>
+      {% endif %}
       {% endif %}
     </div>
   </div>
+
+  {% if is_free and is_admin %}
+  <!-- Free Trial Banner -->
+  <div data-anim="up" data-delay="40" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/25 dark:via-[#0a1412] dark:to-[#050508] border border-emerald-200/70 dark:border-emerald-800/40">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+        <i data-lucide="timer" class="w-4 h-4"></i>
+      </div>
+      <div class="min-w-0">
+        <p class="text-sm font-bold text-emerald-900 dark:text-emerald-300">Your 14-day free trial is active — <span class="font-mono-num" x-text="daysLeft + ' days left'"></span></p>
+        <p class="text-[11px] text-emerald-700/80 dark:text-emerald-400/70">Upgrade to Pro or Studio to unlock salon address, map location, more seats and premium features.</p>
+      </div>
+    </div>
+    <a href="{{ url_for('upgrade') }}" class="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 transition-all active:scale-95">
+      <i data-lucide="crown" class="w-3.5 h-3.5"></i> Upgrade Now
+    </a>
+  </div>
+  {% endif %}
 
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
@@ -41,7 +66,7 @@
           <i data-lucide="users" class="w-4 h-4" :class="tab === 'team' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
           <span>Team Accounts</span>
         </span>
-        <span class="px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="accounts.length + '/' + maxSeats"></span>
+        <span class="px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="accounts.length + (maxSeats === null ? '' :'/'+ maxSeats)"></span>
       </button>
 
       {% if is_admin %}
@@ -103,6 +128,30 @@
               <input type="tel" x-model="profile.phone" placeholder="9876543210" {% if not is_admin %}disabled{% endif %}
                      class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 disabled:opacity-60">
             </div>
+            <div class="sm:col-span-2">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Salon Address</label>
+                {% if is_admin and not is_free %}
+                <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-700 dark:text-neon-cyan uppercase tracking-wider">Pro</span>
+                {% endif %}
+              </div>
+              <textarea x-model="profile.address" rows="2" placeholder="Shop 12, High Street Mall, Bandra West, Mumbai — 400050"
+                        {% if not is_admin or is_free %}disabled{% endif %}
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 disabled:opacity-60 resize-none"></textarea>
+              {% if is_free %}
+              <div class="mt-2 flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40">
+                <p class="text-[10px] text-amber-700 dark:text-amber-300 leading-snug">
+                  <span class="font-bold">Locked on the Free trial.</span> Show your salon address on bills &amp; bookings with any paid plan.
+                </p>
+                <a href="{{ url_for('upgrade') }}"
+                   class="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-[10px] font-bold shadow-sm">
+                  <i data-lucide="crown" class="w-3 h-3"></i> Upgrade
+                </a>
+              </div>
+              {% else %}
+              <p class="mt-1 text-[10px] text-neutral-400">Shown on POS bills and your public booking portal.</p>
+              {% endif %}
+            </div>
           </div>
 
           <div class="flex items-center justify-between pt-1">
@@ -121,6 +170,114 @@
             {% endif %}
           </div>
         </div>
+
+        <!-- Opening & Closing Schedule -->
+        <div data-anim="up" data-delay="240" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-5">
+          <div class="flex items-center gap-3 pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <i data-lucide="clock" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-neutral-900 dark:text-white">Opening &amp; Closing Hours</h3>
+              <p class="text-xs text-neutral-400">Weekly schedule shown to clients on the booking portal</p>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <template x-for="day in dayKeys" :key="day.key">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80">
+                <label class="flex items-center gap-2.5 sm:w-44 cursor-pointer select-none">
+                  <input type="checkbox" x-model="schedule[day.key].closed" {% if not is_admin %}disabled{% endif %}
+                         class="w-4 h-4 rounded accent-violet-600">
+                  <span class="text-xs font-bold text-neutral-800 dark:text-neutral-200" x-text="day.label"></span>
+                </label>
+                <div class="flex items-center gap-2" x-show="!schedule[day.key].closed">
+                  <input type="time" x-model="schedule[day.key].open" {% if not is_admin %}disabled{% endif %}
+                         class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 disabled:opacity-60">
+                  <span class="text-[10px] uppercase tracking-wider text-neutral-400">to</span>
+                  <input type="time" x-model="schedule[day.key].close" {% if not is_admin %}disabled{% endif %}
+                         class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 disabled:opacity-60">
+                </div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-rose-500" x-show="schedule[day.key].closed" x-cloak>Closed all day</span>
+              </div>
+            </template>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            {% if is_admin %}
+            <p class="text-[11px] text-neutral-400">Time slots on the booking portal are generated from this schedule.</p>
+            <button @click="saveProfile()" :disabled="savingProfile"
+                    class="px-4 py-2.5 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2 active:scale-95">
+              <i data-lucide="calendar-check" class="w-4 h-4"></i>
+              <span x-text="savingProfile ? 'Saving...' : 'Save Schedule'"></span>
+            </button>
+            {% else %}
+            <p class="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+              <i data-lucide="info" class="w-3.5 h-3.5"></i>
+              Only the salon owner can modify the schedule.
+            </p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Salon Location (Pro-tier feature) -->
+        {% if is_admin %}
+        {% set plan_unlocked = plan_tier in ['pro', 'studio'] %}
+        <div data-anim="up" data-delay="280" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-5 relative overflow-hidden">
+          <div class="flex items-center gap-3 pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="w-9 h-9 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+              <i data-lucide="map-pin" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                Salon Location
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-neon-magenta/10 via-violet-500/10 to-neon-cyan/10 border border-violet-200/60 dark:border-violet-500/20 text-violet-700 dark:text-neon-cyan">Pro</span>
+              </h3>
+              <p class="text-xs text-neutral-400">Pin your salon so clients get one-tap directions</p>
+            </div>
+          </div>
+
+          {% if plan_unlocked %}
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <button @click="useMyLocation()" :disabled="locating"
+                    class="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2 active:scale-95">
+              <i data-lucide="locate-fixed" class="w-4 h-4"></i>
+              <span x-text="locating ? 'Detecting location...' : (hasLocation ? 'Re-detect My Location' : 'Use My Current Location')"></span>
+            </button>
+            <button @click="clearLocation()" x-show="hasLocation" x-cloak
+                    class="px-4 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-bold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2">
+              <i data-lucide="pin-off" class="w-4 h-4"></i>
+              <span>Clear Pin</span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-neutral-400">
+            <span>Coordinates</span>
+            <span class="font-mono-num font-semibold text-neutral-700 dark:text-neutral-200" x-text="hasLocation ? (location.latitude + ', ' + location.longitude) : 'Not set'"></span>
+          </div>
+
+          <template x-if="hasLocation">
+            <iframe :src="mapPreviewSrc" title="Salon location map" loading="lazy"
+                    class="w-full h-52 rounded-2xl border border-neutral-200 dark:border-neutral-800"></iframe>
+          </template>
+          <p class="text-[11px] text-neutral-400" x-show="!hasLocation">No location saved yet — detect it above and hit "Save Changes" in the Salon Profile card.</p>
+          {% else %}
+          <div class="p-5 rounded-2xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-violet-950/30 dark:via-[#12081f] dark:to-[#050508] border border-violet-200/60 dark:border-violet-500/20 text-center space-y-3">
+            <div class="w-10 h-10 mx-auto rounded-2xl bg-white dark:bg-neutral-900 border border-violet-200 dark:border-violet-500/30 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+              <i data-lucide="lock" class="w-5 h-5"></i>
+            </div>
+            <p class="text-sm font-bold text-neutral-900 dark:text-white">Pro Exclusive Feature</p>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed max-w-sm mx-auto">
+              Pin your salon on the map and share one-tap directions with clients. This feature is available on the Pro plan and above.
+            </p>
+            <a href="{{ url_for('upgrade') }}" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-xs font-bold shadow-sm">
+              <i data-lucide="crown" class="w-3.5 h-3.5"></i>
+              <span>Upgrade Plan</span>
+            </a>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
 
                 <!-- Change Password -->
         <div data-anim="up" data-delay="200" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-5">
@@ -160,6 +317,71 @@
             </button>
           </div>
         </div>
+
+        <!-- Salon Logo (Studio Exclusive) -->
+        <div data-anim="up" data-delay="240" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-5 relative overflow-hidden">
+          <div class="flex items-center gap-3 pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="w-9 h-9 rounded-xl bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center">
+              <i data-lucide="image" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-neutral-900 dark:text-white">Salon Logo</h3>
+              <p class="text-xs text-neutral-400">Shown on invoices and the client booking portal</p>
+            </div>
+            <span class="ml-auto text-[9px] font-black px-2 py-1 rounded-full bg-gradient-to-r from-neon-magenta to-violet-600 text-white uppercase tracking-wider">Studio</span>
+          </div>
+
+          {% if is_studio %}
+          <div class="flex items-center gap-4">
+            <div class="w-16 h-16 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
+              <template x-if="logoUrl">
+                <img :src="logoUrl" alt="Salon logo" class="w-full h-full object-cover">
+              </template>
+              <i data-lucide="image" class="w-6 h-6 text-neutral-300 dark:text-neutral-700" x-show="!logoUrl"></i>
+            </div>
+            <div class="flex flex-col gap-2">
+              <input type="file" x-ref="logoInput" accept="image/png, image/jpeg, image/webp" class="hidden"
+                     @change="handleLogoUpload($event)" {% if not is_admin %}disabled{% endif %}>
+              <div class="flex items-center gap-2">
+                <button @click="$refs.logoInput.click()" :disabled="uploadingLogo || !is_admin"
+                        class="px-4 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                  <span x-text="uploadingLogo ? 'Uploading...' : (logoUrl ? 'Replace Logo' : 'Upload Logo')"></span>
+                </button>
+                <button x-show="logoUrl" @click="removeLogo()"
+                        class="px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all">
+                  Remove
+                </button>
+              </div>
+              {% if not is_admin %}
+              <p class="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <i data-lucide="info" class="w-3.5 h-3.5"></i> Only the salon owner can change the salon logo.
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <!-- Locked for Pro tier -->
+          <div class="relative p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-dashed border-neutral-200 dark:border-neutral-800">
+            <div class="flex items-center gap-4 opacity-40 pointer-events-none select-none blur-[1px]" aria-hidden="true">
+              <div class="w-16 h-16 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 flex items-center justify-center shrink-0">
+                <i data-lucide="image" class="w-6 h-6 text-neutral-300 dark:text-neutral-700"></i>
+              </div>
+              <div class="space-y-2">
+                <div class="h-2.5 w-32 rounded-full bg-neutral-200 dark:bg-neutral-800"></div>
+                <div class="h-2.5 w-24 rounded-full bg-neutral-200 dark:bg-neutral-800"></div>
+              </div>
+              <span class="ml-auto px-3 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-bold">Upload Logo</span>
+            </div>
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-neon-magenta to-violet-600 text-white text-[10px] font-black uppercase tracking-wider shadow-lg shadow-violet-600/25">
+                <i data-lucide="lock" class="w-3 h-3"></i> Upgrade to Studio
+              </span>
+              <p class="text-[10px] text-neutral-500 dark:text-neutral-400">Custom salon branding is a Studio exclusive feature.</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
       </section>
 
       <!-- ============ CATEGORY 2: TEAM ACCOUNTS ============ -->
@@ -174,14 +396,14 @@
               </div>
               <div>
                 <h3 class="text-base font-bold text-neutral-900 dark:text-white">Team Accounts</h3>
-                <p class="text-xs text-neutral-400">Up to 3 logins under your salon — each with its own email &amp; password</p>
+                <p class="text-xs text-neutral-400">{% if is_studio %}Unlimited team logins — each with its own email &amp; password{% elif is_free %}1 seat on the Free trial — upgrade for more team logins{% else %}Up to 2 logins on Pro — upgrade to Studio for unlimited seats{% endif %}</p>
               </div>
             </div>
             <div class="flex items-center gap-1.5">
-              <template x-for="i in maxSeats" :key="i">
+              <template x-for="i in (maxSeats || 0)" :key="i">
                 <span class="w-2.5 h-2.5 rounded-full" :class="i <= accounts.length ? 'bg-gradient-to-r from-neon-magenta to-violet-600' : 'bg-neutral-200 dark:bg-neutral-800'"></span>
               </template>
-              <span class="ml-1.5 text-[11px] font-semibold font-mono-num text-neutral-500 dark:text-neutral-400" x-text="accounts.length + ' of ' + maxSeats + ' seats'"></span>
+              <span class="ml-1.5 text-[11px] font-semibold font-mono-num text-neutral-500 dark:text-neutral-400" x-text="maxSeats === null ? 'Unlimited seats · Studio' : (accounts.length + ' of ' + maxSeats + ' seats')"></span>
             </div>
           </div>
 
@@ -192,7 +414,7 @@
           </div>
 
           <!-- Add Account Form -->
-          <div x-show="is_admin && seatsUsed < maxSeats" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800 space-y-3">
+          <div x-show="is_admin && (maxSeats === null || seatsUsed < maxSeats)" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800 space-y-3">
             <p class="text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
               <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
               Add Team Account
@@ -225,9 +447,9 @@
             </div>
           </div>
 
-          <div x-show="is_admin && seatsUsed >= maxSeats" class="p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900/50 text-xs text-violet-700 dark:text-neon-cyan flex items-center gap-2">
+          <div x-show="is_admin && maxSeats !== null && seatsUsed >= maxSeats" class="p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900/50 text-xs text-violet-700 dark:text-neon-cyan flex items-center gap-2">
             <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
-            <span>All 3 team seats are in use. Remove an account below to free a seat.</span>
+            <span x-text="'All ' + maxSeats + ' team seats are in use. Remove an account below to free a seat, or upgrade to Studio for unlimited accounts.'"></span>
           </div>
         </div>
 
@@ -303,7 +525,8 @@
 
       {% if is_admin %}
       <!-- ============ CATEGORY 3: DATA & BACKUP ============ -->
-      <section x-show="tab === 'data'" x-cloak class="space-y-6">
+      <section x-show="tab === 'data'" x-cloak class="space-y-6 {% if not is_studio %}relative{% endif %}">
+        <div class="space-y-6 {% if not is_studio %}blur-sm pointer-events-none select-none{% endif %}">
 
         <!-- Export Data -->
         <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
@@ -410,6 +633,33 @@
 
           </div>
         </div>
+        </div><!-- /data-gate blur wrapper -->
+
+        {% if not is_studio %}
+        <!-- Studio-only gate: blurred data tools behind an upgrade overlay -->
+        <div class="absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6">
+          <div class="absolute inset-0 bg-white/30 dark:bg-[#050508]/50 backdrop-blur-[2px]"></div>
+          <div class="relative w-full max-w-md p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-lg shadow-neon-magenta/30">
+              <i data-lucide="lock" class="w-6 h-6"></i>
+            </div>
+            <div class="space-y-1.5">
+              <h3 class="text-lg font-extrabold text-neutral-900 dark:text-white">Data Portability is a Studio feature</h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400">You're on the {% if is_free %}Free trial{% else %}Pro{% endif %} plan — upgrade to Studio to export and bulk-import your salon data.</p>
+            </div>
+            <ul class="text-left space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+              <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Export customers, services, bills &amp; more</li>
+              <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Bulk import via CSV templates</li>
+              <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Full data ownership &amp; portability</li>
+            </ul>
+            <a href="{{ url_for('upgrade') }}"
+               class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="crown" class="w-4 h-4"></i>
+              Upgrade to Studio
+            </a>
+          </div>
+        </div>
+        {% endif %}
 
       </section>
       {% endif %}
@@ -427,7 +677,7 @@
               </div>
               <div>
                 <h3 class="text-base font-bold text-neutral-900 dark:text-white">Subscription Details</h3>
-                <p class="text-xs text-neutral-400">AuraPOS <span class="font-semibold capitalize" x-text="salon.plan || 'free'"></span> plan</p>
+                <p class="text-xs text-neutral-400">AuraPOS <span class="font-semibold capitalize" x-text="salon.plan === 'free' ? 'Free 14-day Trial' : (salon.plan ? (salon.plan + (salon.billing_cycle === 'yearly' ? ' (Annual)' : ' (Monthly)')) : 'free')"></span> plan</p>
               </div>
             </div>
             <span class="px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider w-fit"
@@ -602,19 +852,34 @@
         owner_name: SETTINGS_BOOT.salon.name || '',
         email: SETTINGS_BOOT.salon.email || '',
         phone: SETTINGS_BOOT.salon.phone || '',
+        address: SETTINGS_BOOT.salon.address || '',
       },
       savingProfile: false,
       async saveProfile() {
         this.savingProfile = true;
         try {
+          const payload = { ...this.profile, opening_hours: this.scheduleJson() };
+          if (this.locationUnlocked) {
+            if (this.locationCleared) payload.location = false;
+            else if (this.hasLocation) payload.location = { latitude: this.location.latitude, longitude: this.location.longitude };
+          }
           const res = await fetch('/api/settings/profile', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.profile),
+            body: JSON.stringify(payload),
           });
           const data = await res.json();
           if (data.success) {
             this.salon.email = this.profile.email;
+            this.salon.address = this.profile.address;
+            if (this.locationCleared) {
+              this.salon.latitude = null;
+              this.salon.longitude = null;
+            } else if (this.hasLocation) {
+              this.salon.latitude = this.location.latitude;
+              this.salon.longitude = this.location.longitude;
+            }
+            this.locationCleared = false;
             this.notify(data.message);
           } else {
             this.notify(data.message || 'Could not update profile.', 'error');
@@ -623,6 +888,76 @@
           this.notify('Network error — please retry.', 'error');
         }
         this.savingProfile = false;
+      },
+
+      // ---------- Opening Hours ----------
+      dayKeys: [
+        { key: 'monday', label: 'Monday' },
+        { key: 'tuesday', label: 'Tuesday' },
+        { key: 'wednesday', label: 'Wednesday' },
+        { key: 'thursday', label: 'Thursday' },
+        { key: 'friday', label: 'Friday' },
+        { key: 'saturday', label: 'Saturday' },
+        { key: 'sunday', label: 'Sunday' },
+      ],
+      schedule: (() => {
+        const build = (entry) => ({
+          closed: !!(entry && entry.closed),
+          open: (entry && entry.open) || '09:00',
+          close: (entry && entry.close) || '19:00',
+        });
+        let saved = {};
+        try { saved = JSON.parse(SETTINGS_BOOT.salon.opening_hours || '{}') || {}; } catch (e) { saved = {}; }
+        const out = {};
+        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach((key) => {
+          out[key] = saved[key] ? build(saved[key]) : { closed: key === 'sunday', open: '09:00', close: '19:00' };
+        });
+        return out;
+      })(),
+      scheduleJson() { return JSON.stringify(this.schedule); },
+
+      // ---------- Salon Location (Pro-tier feature) ----------
+      planTier: (SETTINGS_BOOT.salon.plan || '').toLowerCase(),
+      get locationUnlocked() { return ['pro', 'studio'].includes(this.planTier); },
+      location: {
+        latitude: SETTINGS_BOOT.salon.latitude,
+        longitude: SETTINGS_BOOT.salon.longitude,
+      },
+      locating: false,
+      locationCleared: false,
+      get hasLocation() { return this.location.latitude != null && this.location.longitude != null; },
+      get mapPreviewSrc() {
+        if (!this.hasLocation) return '';
+        const lat = this.location.latitude, lng = this.location.longitude, d = 0.004;
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${(lng - d).toFixed(6)}%2C${(lat - d / 2).toFixed(6)}%2C${(lng + d).toFixed(6)}%2C${(lat + d / 2).toFixed(6)}&layer=mapnik&marker=${lat}%2C${lng}`;
+      },
+      useMyLocation() {
+        if (!navigator.geolocation) {
+          this.notify('Geolocation is not supported by this browser.', 'error');
+          return;
+        }
+        this.locating = true;
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = parseFloat(pos.coords.latitude.toFixed(6));
+          const lng = parseFloat(pos.coords.longitude.toFixed(6));
+          this.location = { latitude: lat, longitude: lng };
+          this.locationCleared = false;
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+            const data = await res.json();
+            if (data && data.display_name) this.profile.address = data.display_name;
+          } catch (e) { /* keep the manually entered address */ }
+          this.locating = false;
+          this.notify('Location captured — save your changes to apply.');
+        }, () => {
+          this.locating = false;
+          this.notify('Could not read your location. Check browser permissions.', 'error');
+        }, { enableHighAccuracy: true, timeout: 10000 });
+      },
+      clearLocation() {
+        this.location = { latitude: null, longitude: null };
+        this.locationCleared = true;
+        this.notify('Location cleared — save your changes to apply.');
       },
 
       // ---------- Change Password ----------
@@ -643,6 +978,40 @@
           this.notify('Network error — please retry.', 'error');
         }
         this.changingPwd = false;
+      },
+
+      // ---------- Salon Logo (Studio) ----------
+      logoUrl: SETTINGS_BOOT.salon.logo || '',
+      uploadingLogo: false,
+      handleLogoUpload(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('logo', file);
+        this.uploadingLogo = true;
+        fetch('/api/settings/logo', { method: 'POST', body: formData })
+          .then((r) => r.json())
+          .then((data) => {
+            this.notify(data.message, data.success ? 'success' : 'error');
+            if (data.success) this.logoUrl = data.logo;
+          })
+          .catch(() => this.notify('Network error — please retry.', 'error'))
+          .finally(() => {
+            this.uploadingLogo = false;
+            event.target.value = '';
+            this.refreshIcons();
+          });
+      },
+      async removeLogo() {
+        try {
+          const res = await fetch('/api/settings/logo', { method: 'DELETE' });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data.success) this.logoUrl = '';
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+        this.refreshIcons();
       },
 
       // ---------- Team Accounts ----------

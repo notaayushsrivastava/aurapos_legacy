@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'%3E%3C/circle%3E%3Cpath d='M8.12 8.12 12 12'%3E%3C/path%3E%3Cpath d='M20 4 8.12 15.88'%3E%3C/path%3E%3Ccircle cx='6' cy='18' r='3'%3E%3C/circle%3E%3Cpath d='M14.8 14.8 20 20'%3E%3C/path%3E%3C/svg%3E">
-  <title>{% block title %}AuraPOS — Salon Billing & Management Software{% endblock %}</title>
+  <title>{% block title %}AuraPOS - Salon Billing & Management Software{% endblock %}</title>
   
   <!-- Preconnect Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,42 +28,6 @@
 
   <!-- Tailwind CSS Compiled & Tailwind CDN (with config) for instantaneous styling -->
   <link rel="stylesheet" href="{{ url_for('static', filename='output.css') }}">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          colors: {
-            aura: {
-              50: '#f5f7fa',
-              100: '#ebeff4',
-              200: '#d3dde8',
-              300: '#adbfd4',
-              400: '#819cbb',
-              500: '#607fa4',
-              600: '#4a6589',
-              700: '#3c5270',
-              800: '#34455d',
-              900: '#2e3c4e',
-              950: '#090a0f',
-            },
-            neon: {
-              cyan: '#00f5d4',
-              magenta: '#f72585',
-              violet: '#7b2cbf',
-              emerald: '#10b981',
-              amber: '#f59e0b',
-            }
-          }
-        }
-      }
-    }
-  </script>
 
   <!-- anime.js — shared kinetic motion engine for all pages -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
@@ -159,7 +123,7 @@
     {% endwith %}
   </div>
 
-  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports'] %}
+  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports', '/upgrade'] %}
 
   {% if is_auth_app %}
     <!-- ================= AUTHENTICATED APP LAYOUT ================= -->
@@ -190,7 +154,8 @@
             <div>
               <span class="text-base font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-1.5">
                 AuraPOS
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">PRO</span>
+                {% set tier_badge = 'TRIAL' if (tier == 'free') else (tier|upper if tier in ['pro','studio'] else 'PRO') %}
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">{{ tier_badge }}</span>
               </span>
               <p class="text-[11px] text-neutral-500 dark:text-neutral-400 truncate max-w-[120px]">
                 {{ session.get('username', 'Studio Elite') }}
@@ -228,6 +193,7 @@
           </a>
 
           {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if is_studio %}
           <a href="{{ url_for('reports_page') }}"
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/reports' %}
@@ -238,6 +204,15 @@
             <i data-lucide="bar-chart-3" class="w-4 h-4 transition-colors {% if request.path == '/reports' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>Reports</span>
           </a>
+          {% else %}
+          <a href="{{ url_for('reports_page') }}"
+             title="Advanced Analytics is a Studio feature — upgrade to unlock"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group opacity-70 text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-900/60">
+            <i data-lucide="lock" class="w-4 h-4 text-neutral-400 dark:text-neutral-500"></i>
+            <span>Reports</span>
+            <span class="ml-auto text-[8px] font-black px-1.5 py-0.5 rounded bg-gradient-to-r from-neon-magenta to-violet-600 text-white uppercase tracking-wider">Studio</span>
+          </a>
+          {% endif %}
           {% endif %}
 
           <a href="{{ url_for('billing') }}" 
@@ -312,6 +287,26 @@
             <i data-lucide="external-link" class="w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
           </a>
         </nav>
+
+        {% if tier != 'studio' and request.path != '/upgrade' %}
+        <!-- Upgrade Promo -->
+        <div class="px-3 pb-3">
+          <a href="{{ url_for('upgrade') }}"
+             class="block p-3.5 rounded-2xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-violet-950/30 dark:via-[#12081f] dark:to-[#050508] border border-violet-200/60 dark:border-violet-500/20 hover:border-violet-400/70 transition-all">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-sm">
+                <i data-lucide="crown" class="w-3.5 h-3.5"></i>
+              </div>
+              <p class="text-xs font-bold text-neutral-900 dark:text-white">
+                {% if tier == 'free' %}Upgrade to Pro{% else %}Go Studio{% endif %}
+              </p>
+            </div>
+            <p class="mt-1.5 text-[10px] leading-snug text-neutral-500 dark:text-neutral-400">
+              {% if tier == 'free' %}More seats, salon address &amp; map location.{% else %}Unlimited seats, reports, logo &amp; data tools.{% endif %}
+            </p>
+          </a>
+        </div>
+        {% endif %}
 
         <!-- Sidebar Footer: Theme Toggle & Account -->
         <div class="p-3 border-t border-neutral-200 dark:border-neutral-800/80 space-y-2">
@@ -465,6 +460,7 @@
         </div>
         <div class="flex items-center gap-6 text-xs font-medium">
           <a href="{{ url_for('privacy_policy') }}" class="hover:text-neutral-900 dark:hover:text-white transition-colors">Privacy Policy</a>
+          <a href="{{ url_for('terms_of_service') }}" class="hover:text-neutral-900 dark:hover:text-white transition-colors">Terms of Service</a>
           <a href="{{ url_for('contact') }}" class="hover:text-neutral-900 dark:hover:text-white transition-colors">Contact Support</a>
           <a href="{{ url_for('register') }}" class="hover:text-neutral-900 dark:hover:text-white transition-colors">Subscribe</a>
           <a href="{{ url_for('login') }}" class="hover:text-neutral-900 dark:hover:text-white transition-colors">Admin Login</a>

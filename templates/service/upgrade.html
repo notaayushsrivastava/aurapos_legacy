@@ -1,0 +1,299 @@
+{% extends "layout.html" %}
+
+{% block title %}Upgrade Plan — AuraPOS{% endblock %}
+
+{% block head %}
+<!-- Razorpay Checkout SDK -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+{% endblock %}
+
+{% block content %}
+{% set plan_label = (TIER_PLANS.get(current_tier, {}).get('label') or current_tier.title() or 'Free Trial') %}
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="upgradeApp()">
+
+  <!-- Page Heading -->
+  <div data-anim="up" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Upgrade Your Plan</h2>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+        You're currently on the <span class="font-bold text-violet-600 dark:text-neon-cyan">{{ plan_label }}</span> plan —
+        pick a higher tier below to unlock more seats and premium features.
+      </p>
+    </div>
+    <span class="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 text-[11px] font-semibold font-mono-num text-neutral-600 dark:text-neutral-300">
+      {{ salon.salon_name if salon else 'My Salon' }} · {{ plan_label }}
+    </span>
+  </div>
+
+  <!-- Current Plan Strip -->
+  <div data-anim="up" data-delay="60" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-md shadow-neon-magenta/25 shrink-0">
+        <i data-lucide="badge-check" class="w-5 h-5"></i>
+      </div>
+      <div class="min-w-0">
+        <p class="text-sm font-bold text-neutral-900 dark:text-white">Current plan: {{ plan_label }}</p>
+        <p class="text-[11px] text-neutral-400">
+          {% if current_tier == 'free' %}
+            Free 14-day trial with 1 seat. Upgrade any time to keep premium features active.
+          {% elif current_tier == 'pro' %}
+            Pro plan with 2 team seats. Go Studio for unlimited seats, reports, logo &amp; data tools.
+          {% else %}
+            You're on the top-tier Studio plan — everything is unlocked.
+          {% endif %}
+        </p>
+      </div>
+    </div>
+    {% if current_tier == 'studio' %}
+    <a href="{{ url_for('settings') }}" class="px-4 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-neutral-700 dark:text-neutral-200 text-xs font-bold transition-colors">
+      Manage Settings
+    </a>
+    {% else %}
+    <div class="flex items-center gap-2 text-[11px] font-semibold">
+      <span class="text-neutral-400">Upgrade to:</span>
+      <span class="px-2 py-1 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-neon-cyan font-bold">Pro ₹69/mo</span>
+      <span class="text-neutral-300 dark:text-neutral-600">or</span>
+      <span class="px-2 py-1 rounded-lg bg-gradient-to-r from-neon-magenta/15 via-violet-500/15 to-neon-cyan/15 border border-violet-200/60 dark:border-violet-500/20 text-violet-700 dark:text-neon-cyan font-bold">Studio ₹149/mo</span>
+    </div>
+    {% endif %}
+  </div>
+<!-- Plan Comparison -->
+  <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm">
+    <h3 class="text-base font-bold text-neutral-900 dark:text-white mb-4 flex items-center gap-2">
+      <i data-lucide="scale" class="w-4 h-4 text-violet-600 dark:text-neon-cyan"></i>
+      Plan Comparison
+    </h3>
+    <div class="overflow-x-auto -mx-5 px-5">
+      <table class="w-full text-xs min-w-[560px]">
+        <thead>
+          <tr class="text-left text-[10px] uppercase tracking-wider text-neutral-400 border-b border-neutral-100 dark:border-neutral-800">
+            <th class="py-3 pr-4 font-bold">Feature</th>
+            <th class="py-3 px-4 font-bold">Free Trial</th>
+            <th class="py-3 px-4 font-bold text-violet-600 dark:text-neon-cyan">Pro</th>
+            <th class="py-3 px-4 font-bold">Studio</th>
+          </tr>
+        </thead>
+        <tbody class="text-neutral-600 dark:text-neutral-300">
+          {% macro yes() -%}<span class="text-neon-cyan"><i data-lucide="check" class="w-3.5 h-3.5 inline"></i></span>{%- endmacro %}
+          {% macro no() -%}<span class="text-neutral-300 dark:text-neutral-700"><i data-lucide="x" class="w-3.5 h-3.5 inline"></i></span>{%- endmacro %}
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Core POS Billing &amp; Invoices</td>
+            <td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Online Client Booking Link</td>
+            <td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Salon Address &amp; Map Location</td>
+            <td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Team Seats</td>
+            <td class="py-3 px-4 text-neutral-400">1 seat</td><td class="py-3 px-4 text-neutral-400">2 seats</td><td class="py-3 px-4 text-neutral-400">Unlimited</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Advanced Analytics Reports</td>
+            <td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Custom Salon Logo Branding</td>
+            <td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Data Export &amp; CSV Import</td>
+            <td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ no() }}</td><td class="py-3 px-4">{{ yes() }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% if current_tier != 'studio' %}
+
+  <!-- Purchasable Upgrade Cards -->
+  <div data-anim="up" data-delay="180">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="sparkles" class="w-4 h-4 text-violet-600 dark:text-neon-cyan"></i>
+        Choose Your Upgrade
+      </h3>
+      <!-- Billing Cycle Toggle -->
+      <div class="flex items-center gap-2 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800">
+        <button type="button" @click="billingCycle = 'monthly'"
+                :class="billingCycle === 'monthly' ? 'bg-white dark:bg-neutral-800 text-violet-700 dark:text-neon-cyan shadow-sm' : 'text-neutral-500 dark:text-neutral-400'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Monthly</button>
+        <button type="button" @click="billingCycle = 'yearly'"
+                :class="billingCycle === 'yearly' ? 'bg-white dark:bg-neutral-800 text-violet-700 dark:text-neon-cyan shadow-sm' : 'text-neutral-500 dark:text-neutral-400'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">Yearly <span class="text-emerald-500">2 mo free</span></button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {% if 'pro' in upgrade_options %}
+      <!-- Pro Card -->
+      <div x-show="availablePlans.includes('pro')" :class="selectedPlan === 'pro' ? 'border-violet-600 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800'"
+           class="p-6 rounded-3xl bg-white dark:bg-[#0c0c12] border shadow-sm relative overflow-hidden transition-all">
+        <div class="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-violet-500/10 blur-2xl"></div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-neon-cyan flex items-center justify-center"><i data-lucide="zap" class="w-4 h-4"></i></div>
+            <h4 class="text-base font-bold text-neutral-900 dark:text-white">Pro</h4>
+          </div>
+          <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-700 dark:text-neon-cyan uppercase tracking-wider">Popular</span>
+        </div>
+        <div class="mt-4 flex items-baseline gap-1">
+          <span class="text-3xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="billingCycle === 'yearly' ? '₹690' : '₹69'"></span>
+          <span class="text-xs text-neutral-400" x-text="billingCycle === 'yearly' ? '/ year' : '/ month'"></span>
+        </div>
+        <ul class="mt-4 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>2 team seats</li>
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Salon address &amp; map location</li>
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Online client booking link</li>
+        </ul>
+        <button type="button" @click="selectPlan('pro')" :disabled="isSubmitting"
+                :class="selectedPlan === 'pro' ? 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white shadow-lg shadow-neon-magenta/25' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200 hover:border-violet-500/60'"
+                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95">
+          <i data-lucide="check" class="w-3.5 h-3.5" x-show="selectedPlan === 'pro'"></i>
+          <span x-text="selectedPlan === 'pro' ? 'Selected — Upgrade to Pro' : 'Upgrade to Pro'"></span>
+        </button>
+      </div>
+      {% endif %}
+{% if 'studio' in upgrade_options %}
+      <!-- Studio Card -->
+      <div x-show="availablePlans.includes('studio')" :class="selectedPlan === 'studio' ? 'border-violet-600 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800'"
+           class="p-6 rounded-3xl bg-white dark:bg-[#0c0c12] border shadow-sm relative overflow-hidden transition-all">
+        <div class="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-neon-magenta/10 blur-2xl"></div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-md shadow-neon-magenta/25"><i data-lucide="crown" class="w-4 h-4"></i></div>
+            <h4 class="text-base font-bold text-neutral-900 dark:text-white">Studio</h4>
+          </div>
+          <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white uppercase tracking-wider">Most Powerful</span>
+        </div>
+        <div class="mt-4 flex items-baseline gap-1">
+          <span class="text-3xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="billingCycle === 'yearly' ? '₹1,490' : '₹149'"></span>
+          <span class="text-xs text-neutral-400" x-text="billingCycle === 'yearly' ? '/ year' : '/ month'"></span>
+        </div>
+        <ul class="mt-4 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Unlimited team seats</li>
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Advanced analytics reports</li>
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Logo branding + data export/import</li>
+        </ul>
+        <button type="button" @click="selectPlan('studio')" :disabled="isSubmitting"
+                :class="selectedPlan === 'studio' ? 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white shadow-lg shadow-neon-magenta/25' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200 hover:border-violet-500/60'"
+                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95">
+          <i data-lucide="check" class="w-3.5 h-3.5" x-show="selectedPlan === 'studio'"></i>
+          <span x-text="selectedPlan === 'studio' ? 'Selected — Upgrade to Studio' : 'Upgrade to Studio'"></span>
+        </button>
+      </div>
+      {% endif %}
+    </div>
+<!-- Checkout CTA -->
+    <div class="mt-6 p-5 rounded-3xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-violet-950/30 dark:via-[#12081f] dark:to-[#050508] border border-violet-200/60 dark:border-violet-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="text-xs text-neutral-600 dark:text-neutral-300 space-y-1">
+        <p class="font-bold text-neutral-900 dark:text-white" x-text="selectedPlan ? ('Ready to switch to ' + (selectedPlan === 'pro' ? 'Pro' : 'Studio') + '?') : 'Select a plan above'"></p>
+        <p x-show="selectedPlan" class="font-mono-num font-black text-lg text-violet-700 dark:text-neon-cyan" x-text="placeTotalLabel()"></p>
+        <p class="text-[10px] text-neutral-400">Secure checkout via Razorpay. Upgrades apply instantly after payment.</p>
+      </div>
+      <button @click="checkout()" :disabled="!selectedPlan || isSubmitting"
+              class="shrink-0 px-6 py-3.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2 active:scale-95">
+        <i data-lucide="credit-card" class="w-4 h-4" x-show="!isSubmitting"></i>
+        <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="isSubmitting"></i>
+        <span x-text="isSubmitting ? 'Connecting to Razorpay...' : 'Proceed to Payment'"></span>
+      </button>
+    </div>
+
+  </div>
+  {% endif %}
+
+</div>
+<script>
+  // Higher-tier purchase options the backend exposed for this salon.
+  const UPGRADE_OPTIONS = {{ upgrade_options | tojson }};
+
+  function upgradeApp() {
+    return {
+      billingCycle: 'monthly',
+      selectedPlan: null,
+      isSubmitting: false,
+
+      // Distinct tier roots available, e.g. ['pro'] or ['pro', 'studio'].
+      get availablePlans() {
+        const tiers = new Set(Object.values(UPGRADE_OPTIONS).map((p) => p.tier));
+        return [...tiers];
+      },
+
+      get planId() {
+        if (!this.selectedPlan) return null;
+        return this.billingCycle === 'yearly' ? this.selectedPlan + '_yearly' : this.selectedPlan;
+      },
+
+      selectPlan(tier) {
+        this.selectedPlan = this.selectedPlan === tier ? null : tier;
+      },
+
+      placeTotalLabel() {
+        if (!this.selectedPlan || !this.planId) return '';
+        const info = UPGRADE_OPTIONS[this.planId];
+        return info ? ('₹' + (info.amount / 100).toLocaleString('en-IN')) : '';
+      },
+
+      async checkout() {
+        if (!this.planId || !UPGRADE_OPTIONS[this.planId]) {
+          window.uiToast('Please select a plan first.', 'warning');
+          return;
+        }
+        this.isSubmitting = true;
+        try {
+          const res = await fetch('{{ url_for("create_upgrade") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan: this.planId })
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to create upgrade order');
+          }
+          const order = await res.json();
+
+          const info = UPGRADE_OPTIONS[this.planId];
+          const options = {
+            key: "{{ razorpay_key_id }}",
+            amount: order.amount,
+            currency: 'INR',
+            name: 'AuraPOS Plan Upgrade',
+            description: 'Upgrade to ' + info.label,
+            order_id: order.id,
+            theme: { color: '#7b2cbf' },
+            handler: async (response) => {
+              try {
+                const verifyRes = await fetch('{{ url_for("verify_upgrade") }}', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ payment: response, formData: { plan: this.planId } })
+                });
+                const verifyData = await verifyRes.json();
+                if (verifyData.success) {
+                  window.location.href = verifyData.redirect || '{{ url_for("dashboard") }}';
+                } else {
+                  window.uiToast(verifyData.message || 'Payment signature verification failed.', 'error');
+                  this.isSubmitting = false;
+                }
+              } catch (e) {
+                window.uiToast('Error verifying upgrade: ' + e.message, 'error');
+                this.isSubmitting = false;
+              }
+            },
+            modal: { ondismiss: () => { this.isSubmitting = false; } }
+          };
+          const rzp = new Razorpay(options);
+          rzp.open();
+        } catch (e) {
+          window.uiToast('Error: ' + e.message, 'error');
+          this.isSubmitting = false;
+        }
+      }
+    };
+  }
+</script>
+{% endblock %}

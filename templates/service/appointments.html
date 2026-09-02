@@ -4,7 +4,7 @@
 {% block page_title %}Appointments &amp; Schedule{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="appointmentsApp()">
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data='appointmentsApp({{ appointments | tojson }}, {{ staff | tojson }})'>
   
   <!-- Header & Controls -->
   <div data-anim="up" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -127,7 +127,8 @@
             </a>
 
             <!-- Status Changer Dropdown -->
-            <select x-model="apt.status" 
+            <select x-model="apt.status"
+                    @change="updateStatus(apt)"
                     class="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 focus:outline-none">
               <option value="Confirmed">Confirmed</option>
               <option value="In Progress">In Progress</option>
@@ -161,7 +162,7 @@
         <div class="space-y-2.5 text-xs">
           <div class="flex justify-between text-neutral-500 dark:text-neutral-400">
             <span>Total Bookings:</span>
-            <span class="font-bold text-neutral-900 dark:text-white" x-text="appointments.length"></span>
+            <span class="font-bold text-neutral-900 dark:text-white" x-text="dayAppointments.length"></span>
           </div>
           <div class="flex justify-between text-neutral-500 dark:text-neutral-400">
             <span>Confirmed / In Service:</span>
@@ -219,28 +220,31 @@
         <div>
           <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Select Service</label>
           <select x-model="form.service" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-            <option value="Signature Haircut & Wash">Signature Haircut &amp; Wash (₹450)</option>
-            <option value="Women's Layer Cut & Blowdry">Women's Layer Cut &amp; Blowdry (₹750)</option>
-            <option value="Hydra-Dew Glow Facial">Hydra-Dew Glow Facial (₹1500)</option>
-            <option value="Full Balayage & Toning">Full Balayage &amp; Toning (₹3200)</option>
-            <option value="Luxury Organic Hair Spa">Luxury Organic Hair Spa (₹1200)</option>
+            <template x-for="svc in serviceOptions" :key="svc.id">
+              <option :value="svc.name" x-text="svc.name + ' (₹' + svc.price + ' · ' + svc.duration + ' mins)'"></option>
+            </template>
           </select>
+          <p class="mt-1.5 text-[10px] font-mono-num text-neutral-400" x-text="selectedServiceObj ? ('Price: ₹' + selectedServiceObj.price + ' • Duration: ' + selectedServiceObj.duration + ' mins') : ''"></p>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Appointment Date</label>
+            <input type="date" x-model="form.date" required class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+          <div>
             <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Time Slot</label>
             <input type="time" x-model="form.time" required class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Assign Stylist</label>
-            <select x-model="form.staff" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-              <option value="Alex Rivera (Senior)">Alex Rivera (Senior)</option>
-              <option value="Priya Nair (Colorist)">Priya Nair (Colorist)</option>
-              <option value="Marcus Vance (Stylist)">Marcus Vance (Stylist)</option>
-              <option value="Sarah Jenkins (Skin Specialist)">Sarah Jenkins (Skin Specialist)</option>
-            </select>
-          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Assign Stylist</label>
+          <select x-model="form.staff" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+            <template x-for="opt in staffOptions" :key="opt.value">
+              <option :value="opt.value" x-text="opt.value"></option>
+            </template>
+          </select>
         </div>
 
         <div class="flex gap-3 pt-3">
@@ -258,46 +262,116 @@
 
 {% block scripts %}
 <script>
-  function appointmentsApp() {
+  function appointmentsApp(initialAppointments, staffList) {
     return {
+      // Real appointments loaded from the backend (passed server-side via Jinja)
+      appointments: Array.isArray(initialAppointments) ? initialAppointments : [],
+      staffList: Array.isArray(staffList) ? staffList : [],
+
       selectedDate: new Date(),
       selectedStatus: 'All',
       showModal: false,
+      loading: false,
+      saving: false,
 
       statusOptions: ['All', 'Confirmed', 'In Progress', 'Completed', 'Cancelled'],
 
       form: {
         client: '',
         phone: '',
-        service: 'Signature Haircut & Wash',
+        service: '',
+        date: '',
         time: '12:00',
-        staff: 'Alex Rivera (Senior)',
-        duration: 40,
-        price: 450
+        staff: ''
       },
 
-      appointments: [
-        { id: 1, time: "10:30", duration: 35, client: "Ananya Sharma", phone: "9876543210", service: "Signature Haircut & Wash", price: 450, staff: "Alex Rivera", status: "Completed" },
-        { id: 2, time: "11:30", duration: 50, client: "Vikram Malhotra", phone: "9812345678", service: "Luxury Organic Hair Spa", price: 1200, staff: "Alex Rivera", status: "In Progress" },
-        { id: 3, time: "12:15", duration: 25, client: "Rohan Varma", phone: "9823456789", service: "Beard Styling & Shave", price: 250, staff: "Marcus Vance", status: "Confirmed" },
-        { id: 4, time: "13:00", duration: 60, client: "Kavita Sen", phone: "9834567890", service: "Hydra-Dew Glow Facial", price: 1500, staff: "Sarah Jenkins", status: "Confirmed" },
-        { id: 5, time: "14:30", duration: 120, client: "Meera Nair", phone: "9845678901", service: "Full Balayage & Toning", price: 3200, staff: "Priya Nair", status: "Confirmed" },
-      ],
+      // Live service menu — fetched from the backend for real prices/durations
+      serviceOptions: [],
+
+      init() {
+        // Keep the date navigation in sync with the backend day view
+        this.$watch('selectedDate', () => this.loadForDate());
+        this.loadServices();
+      },
+
+      async loadServices() {
+        try {
+          const res = await fetch('/api/services');
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length) {
+              this.serviceOptions = data;
+              if (!this.form.service) this.form.service = data[0].name;
+            }
+          }
+        } catch (e) { /* fall back to whatever is already set */ }
+      },
+
+      get staffOptions() {
+        if (this.staffList && this.staffList.length) {
+          return this.staffList.map(s => ({ value: `${s.name} (${s.role})` }));
+        }
+        return [{ value: 'Unassigned' }];
+      },
+
+      get selectedServiceObj() {
+        return this.serviceOptions.find(s => s.name === this.form.service) || null;
+      },
+
+      dateKey(d) {
+        const dt = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+        return dt.toISOString().split('T')[0];
+      },
+
+      async loadForDate() {
+        this.loading = true;
+        try {
+          const res = await fetch(`/api/appointments?date=${this.dateKey(this.selectedDate)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) this.appointments = data;
+          }
+        } catch (e) { /* keep the current list on network errors */ }
+        this.loading = false;
+      },
 
       get selectedDateFormatted() {
         return this.selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       },
 
+      get dayAppointments() {
+        const key = this.dateKey(this.selectedDate);
+        return this.appointments.filter(a => a.date === key);
+      },
+
       get filteredAppointments() {
-        return this.appointments.filter(a => {
+        return this.dayAppointments.filter(a => {
           return this.selectedStatus === 'All' || a.status === this.selectedStatus;
         });
       },
 
       get expectedRevenue() {
-        return this.appointments
+        return this.dayAppointments
           .filter(a => a.status !== 'Cancelled')
-          .reduce((acc, a) => acc + a.price, 0);
+          .reduce((acc, a) => acc + (a.price || 0), 0);
+      },
+
+      async updateStatus(apt) {
+        try {
+          const res = await fetch(`/api/appointments/${apt.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: apt.status })
+          });
+          const data = await res.json();
+          if (data && data.success) {
+            if (window.uiToast) uiToast(`Appointment marked as ${apt.status.toLowerCase()}.`, 'success');
+          } else {
+            throw new Error((data && data.message) || 'Update failed');
+          }
+        } catch (e) {
+          if (window.uiToast) uiToast('Could not update the appointment status.', 'error');
+        }
       },
 
       prevDay() {
@@ -319,22 +393,56 @@
       openNewModal() {
         this.form.client = '';
         this.form.phone = '';
+        this.form.date = this.dateKey(this.selectedDate);
+        this.form.time = '12:00';
+        if (this.serviceOptions.length && !this.selectedServiceObj) {
+          this.form.service = this.serviceOptions[0].name;
+        }
+        this.form.staff = this.staffOptions[0].value;
         this.showModal = true;
+        this.refreshIcons();
       },
 
-      createAppointment() {
-        this.appointments.push({
-          id: Date.now(),
-          time: this.form.time,
-          duration: 40,
+      refreshIcons() {
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      async createAppointment() {
+        this.saving = true;
+        const svc = this.selectedServiceObj;
+        const payload = {
           client: this.form.client,
           phone: this.form.phone,
           service: this.form.service,
-          price: 450,
-          staff: this.form.staff.split(' ')[0],
+          time: this.form.time,
+          date: this.form.date || this.dateKey(this.selectedDate),
+          staff: this.form.staff || 'Unassigned',
+          price: svc ? svc.price : 0,
+          duration: svc ? svc.duration : 30,
           status: 'Confirmed'
-        });
-        this.showModal = false;
+        };
+        try {
+          const res = await fetch('/api/appointments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (data && data.success) {
+            this.appointments.unshift({ id: data.id, email: '', notes: '', ...payload });
+            if (payload.date !== this.dateKey(this.selectedDate)) {
+              this.selectedDate = new Date(payload.date + 'T00:00:00');
+            }
+            this.showModal = false;
+            this.refreshIcons();
+            if (window.uiToast) uiToast(`Appointment booked for ${payload.client}.`, 'success');
+          } else {
+            if (window.uiToast) uiToast((data && data.message) || 'Could not create the appointment.', 'error');
+          }
+        } catch (e) {
+          if (window.uiToast) uiToast('Network error — please retry.', 'error');
+        }
+        this.saving = false;
       }
     };
   }

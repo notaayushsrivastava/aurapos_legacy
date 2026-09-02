@@ -4,7 +4,7 @@
 
 {% block public_content %}
 <div class="min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-10 bg-neutral-100 dark:bg-[#050508] flex items-center justify-center"
-     x-data="clientBookingApp({{ salon.id if salon else 1 }}, {{ services | tojson }}, {{ staff | tojson }})">
+     x-data='clientBookingApp({{ salon.id if salon else 1 }}, {{ services | tojson }}, {{ staff | tojson }}, {{ opening_hours | tojson }})'>
   
   <div class="w-full max-w-3xl bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
     
@@ -17,14 +17,24 @@
           </div>
           <div>
             <h1 class="text-xl font-extrabold tracking-tight">{{ salon.salon_name if salon else 'Aura Luxury Salon & Studio' }}</h1>
-            <p class="text-xs text-neutral-300">Phone: {{ salon.phone if salon else '9876543210' }} • Open Today 9:00 AM – 9:00 PM</p>
+            <p class="text-xs text-neutral-300 mt-0.5">
+              Phone: {{ salon.phone if salon else '—' }}
+              {% if salon and salon.address %} · {{ salon.address }}{% endif %}
+              · Today: {{ today_hours_label }}
+            </p>
           </div>
         </div>
-        
-        <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Instant Confirmation
-        </span>
+
+        <div class="flex flex-col items-end gap-2">
+          <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold {{ 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' if open_now else 'bg-rose-500/20 text-rose-300 border border-rose-500/30' }}">
+            <span class="w-2 h-2 rounded-full {{ 'bg-emerald-400 animate-pulse' if open_now else 'bg-rose-400' }}"></span>
+            {{ 'Open Now' if open_now else 'Closed Now' }}
+          </span>
+          <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Instant Confirmation
+          </span>
+        </div>
       </div>
 
       <!-- Step Indicator -->
@@ -43,6 +53,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Location strip (only when the salon saved an address/map pin) -->
+    {% if salon and (salon.address or (salon.latitude and salon.longitude)) %}
+    <div class="px-6 sm:px-8 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 min-w-0">
+        <i data-lucide="map-pin" class="w-3.5 h-3.5 text-violet-500 shrink-0"></i>
+        <span class="truncate">{{ salon.address or (salon.salon_name ~ ' — check the map for directions') }}</span>
+      </div>
+      {% if salon.latitude and salon.longitude %}
+      <a href="https://www.google.com/maps?q={{ salon.latitude }},{{ salon.longitude }}" target="_blank"
+         class="text-xs font-semibold text-violet-600 dark:text-neon-cyan hover:underline whitespace-nowrap shrink-0">Directions &rarr;</a>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Booking Form Steps -->
     <div data-anim="up" data-delay="120" class="p-6 sm:p-8">
@@ -143,7 +167,10 @@
 
           <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1">Available Time Slots</label>
-            <div class="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
+            <p class="text-xs font-semibold text-rose-500 mb-2" x-show="dayClosed" x-cloak>The salon is closed on this day — please pick another date.</p>
+            <div class="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto"
+                 x-show="!dayClosed"
+                 x-effect="if (!timeSlots.includes(selectedSlot)) selectedSlot = timeSlots[0] || ''">
               <template x-for="slot in timeSlots" :key="slot">
                 <button type="button"
                         @click="selectedSlot = slot"
@@ -251,14 +278,20 @@
 
       <div>
         <h3 class="text-lg font-black text-neutral-900 dark:text-white">Appointment Confirmed!</h3>
-        <p class="text-xs text-neutral-400 mt-1">Booking Ref: <span class="font-mono-num font-bold text-violet-400">#BK-9482</span></p>
+        <p class="text-xs text-neutral-400 mt-1">Booking Ref: <span class="font-mono-num font-bold text-violet-400" x-text="bookingRef"></span></p>
       </div>
 
       <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-left text-xs space-y-1.5">
         <p><strong class="text-neutral-400">Client:</strong> <span x-text="client.name"></span></p>
         <p><strong class="text-neutral-400">Stylist:</strong> <span x-text="selectedStylist"></span></p>
         <p><strong class="text-neutral-400">Slot:</strong> <span x-text="bookingDate + ' at ' + selectedSlot"></span></p>
-        <p><strong class="text-neutral-400">Venue:</strong> Aura Luxury Salon, Studio 402</p>
+        <p><strong class="text-neutral-400">Venue:</strong> {{ salon.salon_name if salon else 'Our Salon' }}{% if salon and salon.address %}, {{ salon.address }}{% endif %}</p>
+        {% if salon and salon.latitude and salon.longitude %}
+        <p>
+          <a href="https://www.google.com/maps?q={{ salon.latitude }},{{ salon.longitude }}" target="_blank"
+             class="text-violet-600 dark:text-neon-cyan font-semibold hover:underline">Get Directions &rarr;</a>
+        </p>
+        {% endif %}
       </div>
 
       <p class="text-[11px] text-neutral-400">
@@ -277,7 +310,7 @@
 
 {% block scripts %}
 <script>
-  function clientBookingApp(salonId, rawServices, rawStaff) {
+  function clientBookingApp(salonId, rawServices, rawStaff, openingHours) {
     const parsedServices = (rawServices && rawServices.length) ? rawServices.map(s => ({
       id: s.id,
       name: s.name,
@@ -307,9 +340,47 @@
       selectedCategory: 'All',
       selectedStylist: 'Any Available Stylist',
       bookingDate: new Date().toISOString().split('T')[0],
-      selectedSlot: '11:00 AM',
+      selectedSlot: '',
       showSuccessModal: false,
       bookingRef: '#BK-1001',
+
+      // Real weekly schedule from the salon's settings (empty object when unset)
+      openingHours: openingHours || {},
+      defaultSlots: ['10:00 AM', '11:00 AM', '12:00 PM', '01:30 PM', '02:30 PM', '04:00 PM', '05:30 PM', '07:00 PM'],
+
+      hoursFor(dateStr) {
+        if (!dateStr) return null;
+        try {
+          const d = new Date(dateStr + 'T00:00:00');
+          const key = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()];
+          return this.openingHours[key] || null;
+        } catch (e) { return null; }
+      },
+
+      get dayClosed() {
+        const hours = this.hoursFor(this.bookingDate);
+        return hours ? !!hours.closed : false;
+      },
+
+      slotsForDate(dateStr) {
+        const hours = this.hoursFor(dateStr);
+        if (hours && !hours.closed && hours.open && hours.close) {
+          const toMin = (t) => { const parts = String(t).split(':').map(Number); return (parts[0] * 60) + (parts[1] || 0); };
+          const fmt = (mins) => {
+            let h = Math.floor(mins / 60);
+            const mm = mins % 60;
+            const ap = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ap}`;
+          };
+          const slots = [];
+          for (let t = toMin(hours.open); t < toMin(hours.close); t += 30) slots.push(fmt(t));
+          return slots;
+        }
+        return this.defaultSlots;
+      },
+
+      get timeSlots() { return this.slotsForDate(this.bookingDate); },
 
       client: {
         name: '',

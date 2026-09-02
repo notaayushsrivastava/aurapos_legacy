@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+
+{% block title %}Terms of Service — AuraPOS{% endblock %}
+
+{% block public_content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-neutral-800 dark:text-neutral-200">
+
+  <div data-anim="up" class="space-y-4 pb-8 border-b border-neutral-200 dark:border-neutral-800">
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 dark:text-neon-cyan border border-violet-500/20">
+      Legal &amp; Compliance
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-extrabold text-neutral-900 dark:text-white tracking-tight">
+      Terms of Service
+    </h1>
+    <p class="text-xs text-neutral-400">Last updated: August 2026</p>
+  </div>
+
+  <div class="mt-8 space-y-8 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+
+    <section class="space-y-2" data-anim="up">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">1. Acceptance of Terms</h2>
+      <p>
+        By creating an account, subscribing to a paid plan, or using the AuraPOS software in any
+        way, you agree to be bound by these Terms of Service. If you are registering on behalf of
+        a salon or studio, you confirm that you have the authority to bind that business to this
+        agreement.
+      </p>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="60">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">2. Free Trial</h2>
+      <ul class="list-disc pl-5 space-y-1">
+        <li>New salons receive a <strong>free 14-day trial</strong> on the Free plan with a single team seat.</li>
+        <li>Some features — such as salon address, map location, team seats beyond one, advanced reports, data export/import, and custom logo branding — are locked on the Free tier and require a paid subscription.</li>
+        <li>At the end of the trial you may upgrade to a paid plan or your access to premium features will be limited.</li>
+        <li>One trial per salon, per contact email and phone number.</li>
+      </ul>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="120">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">3. Subscriptions &amp; Billing</h2>
+      <ul class="list-disc pl-5 space-y-1">
+        <li>Paid plans (Pro, Studio) are billed monthly or annually in advance through Razorpay.</li>
+        <li>Upgrades take effect immediately after payment verification; the new billing period starts from that date.</li>
+        <li>Prices are quoted in Indian Rupees (INR) and may include applicable taxes.</li>
+        <li>We do not offer partial refunds for partially used billing periods. Refund eligibility is evaluated case-by-case within 7 days of payment.</li>
+      </ul>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="180">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">4. Acceptable Use</h2>
+      <p>
+        You agree not to misuse the platform, attempt to circumvent tier-based feature restrictions,
+        resell access without written consent, reverse engineer the software, or use the service for
+        any unlawful activity. You are responsible for safeguarding your login credentials and for
+        all activity under your account.
+      </p>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="240">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">5. Data Ownership &amp; Termination</h2>
+      <p>
+        You retain full ownership of the salon data you enter. You may export your data on the Studio
+        plan or request account deletion at any time. We may suspend or terminate access for
+        violations of these terms; where possible we will provide reasonable notice and a chance to
+        remedy the issue.
+      </p>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="300">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">6. Limitation of Liability</h2>
+      <p>
+        AuraPOS is provided "as is" without warranties of any kind. To the fullest extent permitted
+        by law, we are not liable for indirect, incidental, or consequential damages arising from
+        your use of the service, including lost profits or interrupted operations.
+      </p>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="360">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">7. Changes to These Terms</h2>
+      <p>
+        We may update these Terms from time to time. Material changes will be communicated through
+        the dashboard or by email. Continued use of AuraPOS after changes take effect constitutes
+        acceptance of the revised Terms.
+      </p>
+    </section>
+
+    <section class="space-y-2" data-anim="up" data-delay="420">
+      <h2 class="text-lg font-bold text-neutral-900 dark:text-white">8. Contacting Us</h2>
+      <p>
+        Questions about these Terms may be directed to
+        <a href="mailto:salonbillingsoftware@gmail.com" class="text-violet-600 dark:text-neon-cyan underline">salonbillingsoftware@gmail.com</a>.
+        You can also review our <a href="{{ url_for('privacy_policy') }}" class="text-violet-600 dark:text-neon-cyan underline">Privacy Policy</a>.
+      </p>
+    </section>
+
+  </div>
+
+</div>
+{% endblock %}
