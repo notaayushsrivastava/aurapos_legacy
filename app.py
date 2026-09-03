@@ -159,13 +159,16 @@ def get_salon_tier(salon_id):
 MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB cap for salon logo uploads
 
 
+
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
     static_folder = os.path.join(sys._MEIPASS, 'public')
-    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 else:
-    # Running as a normal Python script
-    app = Flask(__name__, template_folder='templates', static_folder='public')
+    template_folder = 'templates'
+    static_folder = 'public'
+
+# 'app' must be declared at the module root level
+app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
 
