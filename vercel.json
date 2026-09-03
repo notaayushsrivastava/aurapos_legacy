@@ -2,7 +2,13 @@
   "builds": [
     {
       "src": "app.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "public/**",
+          "templates/**"
+        ]
+      }
     }
   ],
   "routes": [
@@ -11,7 +17,7 @@
       "headers": {
         "Content-Type": "text/css; charset=utf-8"
       },
-      "dest": "/public/output.css"
+      "dest": "public/output.css"
     },
     {
       "src": "/(.*)",
