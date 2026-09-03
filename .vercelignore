@@ -1,0 +1,8 @@
+# Local dev-only artifacts — never deploy
+.env
+backend.py
+venv/
+__pycache__/
+*.pyc
+smoke_test_supabase.py
+mobile/*

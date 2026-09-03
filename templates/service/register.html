@@ -111,6 +111,10 @@
       <!-- Plan Toggle Selector -->
       <div>
         <label class="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2">Choose Your Plan</label>
+        <div x-show="!acceptingPublic" x-cloak class="mb-3 flex items-start gap-2 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200/70 dark:border-violet-800/60 text-[11px] text-violet-800 dark:text-violet-200">
+          <i data-lucide="flask-conical" class="w-4 h-4 shrink-0 mt-0.5"></i>
+          <span x-text="betaMessage"></span>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
           <button type="button"
@@ -126,21 +130,27 @@
           </button>
 
           <button type="button" 
-                  @click="selectedPlan = 'pro'" 
+                  @click="acceptingPublic && (selectedPlan = 'pro')" 
+                  :disabled="!acceptingPublic"
                   :class="selectedPlan === 'pro' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 text-violet-900 dark:text-neon-cyan ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300'"
-                  class="p-3.5 rounded-2xl border text-left transition-all">
-            <div class="text-xs font-semibold">Pro</div>
+                  class="p-3.5 rounded-2xl border text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden">
+            <div class="text-xs font-semibold flex items-center justify-between">
+              <span>Pro</span>
+              <span x-show="!acceptingPublic" x-cloak class="text-[9px] bg-neutral-400 dark:bg-neutral-700 text-white font-black px-1.5 py-0.5 rounded">BETA</span>
+            </div>
             <div class="text-base font-bold font-mono-num mt-0.5 text-neutral-900 dark:text-white">₹69 <span class="text-[10px] font-normal text-neutral-400">/mo</span></div>
             <div class="text-[10px] text-neutral-400 mt-0.5">Up to 2 team seats</div>
           </button>
 
           <button type="button" 
-                  @click="selectedPlan = 'studio'" 
+                  @click="acceptingPublic && (selectedPlan = 'studio')" 
+                  :disabled="!acceptingPublic"
                   :class="selectedPlan === 'studio' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 text-violet-900 dark:text-neon-cyan ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300'"
-                  class="p-3.5 rounded-2xl border text-left transition-all relative overflow-hidden">
+                  class="p-3.5 rounded-2xl border text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden">
             <div class="text-xs font-semibold flex items-center justify-between">
               <span>Studio</span>
-              <span class="text-[9px] bg-emerald-500 text-white font-black px-1.5 py-0.5 rounded">BEST VALUE</span>
+              <span x-show="!acceptingPublic" x-cloak class="text-[9px] bg-neutral-400 dark:bg-neutral-700 text-white font-black px-1.5 py-0.5 rounded">BETA</span>
+              <span x-show="acceptingPublic" class="text-[9px] bg-emerald-500 text-white font-black px-1.5 py-0.5 rounded">BEST VALUE</span>
             </div>
             <div class="text-base font-bold font-mono-num mt-0.5 text-neutral-900 dark:text-white">₹149 <span class="text-[10px] font-normal text-neutral-400">/mo</span></div>
             <div class="text-[10px] text-neutral-400 mt-0.5">Unlimited seats · Logo · Reports</div>
@@ -283,11 +293,15 @@
   function registerApp() {
     return {
       selectedPlan: (() => {
+        const accepting = {{ accepting_public | tojson }};
+        if (!accepting) return 'free';
         const planParam = new URLSearchParams(location.search).get('plan') || '';
         if (planParam === 'free') return 'free';
         return ['studio', 'studio_yearly'].includes(planParam) ? 'studio' : 'pro';
       })(),
       billingCycle: (new URLSearchParams(location.search).get('plan') || '').endsWith('_yearly') ? 'yearly' : 'monthly',
+      acceptingPublic: {{ accepting_public | tojson }},
+      betaMessage: {{ beta_message | tojson }},
       showPassword: false,
       isSubmitting: false,
 
@@ -305,6 +319,11 @@
       },
 
       async submitRegistration() {
+        if (!this.acceptingPublic && this.selectedPlan !== 'free') {
+          window.uiToast(this.betaMessage, "warning");
+          this.selectedPlan = 'free';
+          return;
+        }
         if (!this.formData.phone || this.formData.phone.length < 10) {
           window.uiToast("Please enter a valid 10-digit phone number.", "error");
           return;

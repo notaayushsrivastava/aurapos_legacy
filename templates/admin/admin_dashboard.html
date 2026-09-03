@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Console — AuraPOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='output.css') }}">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .font-mono-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-neutral-100 dark:bg-[#050508] text-neutral-900 dark:text-neutral-100 min-h-screen font-sans antialiased"
+      x-data="adminApp()">
+
+  <!-- Toast -->
+  <div x-cloak x-show="toastShow" x-transition
+       class="fixed top-5 right-5 z-[60] p-4 rounded-xl border shadow-xl text-sm font-medium max-w-md"
+       :class="toastOk ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-300'"
+       x-text="toastMsg"></div>
+
+  <div class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-neon-magenta to-neon-cyan grid place-items-center text-white font-black text-lg">A</div>
+        <div>
+          <h1 class="text-lg font-black tracking-tight">AuraPOS Admin</h1>
+          <p class="text-[11px] text-neutral-500">Signed in as <span class="font-semibold">{{ admin_user }}</span></p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border"
+              :class="publicOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                                  : 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-300'">
+          Public testing: <span x-text="publicOpen ? 'OPEN' : 'CLOSED (beta)'"></span>
+        </span>
+        <button @click="createOpen = true"
+                class="px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-600/25 transition-all active:scale-95 flex items-center gap-1.5">
+          <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Create account
+        </button>
+        <button @click="togglePublic()" :disabled="busy"
+                class="px-4 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 disabled:opacity-50"
+                :class="publicOpen ? 'bg-rose-600/10 border-rose-500/30 text-rose-500 hover:bg-rose-600/20'
+                                    : 'bg-emerald-600/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600/20'"
+                x-text="publicOpen ? 'Close to public' : 'Open to public'"></button>
+        <form method="post" action="{{ url_for('admin.admin_logout') }}">
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors">
+            Logout
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {% if using_default_admin_pwd %}
+      <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-xs font-medium">
+        &#9888; The admin password is still the default — change <code>ADMIN_PASSWORD</code> in your environment before deploying.
+      </div>
+    {% endif %}
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Salons</p>
+        <p class="text-2xl font-black font-mono-num mt-1">{{ stats.total }}</p>
+      </div>
+      <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Pro</p>
+        <p class="text-2xl font-black font-mono-num mt-1 text-violet-500">{{ stats.pro }}</p>
+      </div>
+      <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Studio</p>
+        <p class="text-2xl font-black font-mono-num mt-1 text-neon-magenta">{{ stats.studio }}</p>
+      </div>
+      <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
+        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Free / Trial</p>
+        <p class="text-2xl font-black font-mono-num mt-1 text-emerald-500">{{ stats.free }}</p>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <form method="get" action="{{ url_for('admin.admin_home') }}" class="flex gap-2">
+      <input name="q" value="{{ q }}" placeholder="Search by salon, owner, email, phone or #id"
+             class="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-[#0c0c12] border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+      <button type="submit" class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors">Search</button>
+      {% if q %}<a href="{{ url_for('admin.admin_home') }}" class="px-4 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-bold grid place-items-center">Clear</a>{% endif %}
+    </form>
+
+    <!-- Salons table -->
+    <div class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
+      <table class="w-full text-xs min-w-[860px]">
+        <thead>
+          <tr class="text-left text-[10px] uppercase tracking-wider text-neutral-400 border-b border-neutral-200 dark:border-neutral-800">
+            <th class="px-4 py-3">Salon</th>
+            <th class="px-4 py-3">Owner</th>
+            <th class="px-4 py-3">Contact</th>
+            <th class="px-4 py-3">Plan</th>
+            <th class="px-4 py-3">Expires</th>
+            <th class="px-4 py-3 text-center">Seats</th>
+            <th class="px-4 py-3 text-center">Bills</th>
+            <th class="px-4 py-3 text-right">Revenue</th>
+            <th class="px-4 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in salons %}
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/60 hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors">
+            <td class="px-4 py-3">
+              <p class="font-bold">{{ s.salon_name }}</p>
+              <p class="text-[10px] text-neutral-400 font-mono-num">#{{ s.id }} · joined {{ s.created_str }}</p>
+            </td>
+            <td class="px-4 py-3">{{ s.name }}</td>
+            <td class="px-4 py-3">
+              <p>{{ s.email or '—' }}</p>
+              <p class="text-[10px] text-neutral-400 font-mono-num">{{ s.phone or '—' }}</p>
+            </td>
+            <td class="px-4 py-3">
+              <span class="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide
+                {% if s.plan == 'studio' %}bg-gradient-to-r from-neon-magenta/15 to-neon-cyan/15 text-neon-magenta border border-neon-magenta/30
+                {% elif s.plan == 'pro' %}bg-violet-500/10 text-violet-500 border border-violet-500/30
+                {% else %}bg-emerald-500/10 text-emerald-500 border border-emerald-500/30{% endif %}">{{ s.plan_label }}</span>
+              <p class="text-[10px] text-neutral-400 mt-0.5">{{ s.cycle }}</p>
+            </td>
+            <td class="px-4 py-3 font-mono-num">
+              {{ s.expires_str }}
+              {% if s.is_expired %}<span class="block text-[10px] text-rose-500 font-bold">expired</span>{% endif %}
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="font-mono-num font-bold">{{ s.accounts_count }}</span>
+              {% if s.account_names %}
+              <div class="text-[10px] text-neutral-400 mt-1 max-w-[190px] truncate mx-auto"
+                   title="{{ s.account_names | join(', ') }}">
+                {{ s.account_names[:2] | join(', ') }}{% if s.account_names|length > 2 %} +{{ s.account_names|length - 2 }} more{% endif %}
+              </div>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-center font-mono-num">{{ s.bills_count }}</td>
+            <td class="px-4 py-3 text-right font-mono-num font-bold">{{ s.revenue_str }}</td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              <button @click="openDetails({{ s.id }})"
+                      class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-violet-500/60 text-[11px] font-bold transition-colors">
+                Details
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="px-4 py-10 text-center text-neutral-400 text-sm">
+              {% if q %}No salons match “{{ q }}”.{% else %}No salons registered yet.{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Details modal -->
+  <div x-cloak x-show="selected" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm grid place-items-center p-4"
+       @click.self="selected = null" @keydown.escape.window="selected = null">
+    <div class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 w-full max-w-3xl max-h-[88vh] overflow-y-auto p-5 sm:p-6 space-y-5">
+
+      <template x-if="details">
+        <div class="space-y-5">
+          <!-- Modal header -->
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-black tracking-tight" x-text="details.salon.salon_name"></h2>
+              <p class="text-[11px] text-neutral-400 font-mono-num">
+                #<span x-text="details.salon.id"></span> · <span x-text="details.salon.name"></span> · joined <span x-text="fmtDate(details.salon.created_on)"></span>
+              </p>
+            </div>
+            <button @click="selected = null" class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold">Close</button>
+          </div>
+
+          <!-- Key facts -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Contact</p>
+              <p class="mt-1 truncate" x-text="details.salon.email || '—'"></p>
+              <p class="font-mono-num" x-text="details.salon.phone || '—'"></p>
+            </div>
+            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Plan</p>
+              <p class="mt-1 font-bold capitalize" x-text="(details.salon.plan || 'free') + ' · ' + (details.salon.billing_cycle || '—')"></p>
+              <p class="text-[10px] text-neutral-400" x-text="'expires ' + fmtDate(details.salon.expires_on)"></p>
+            </div>
+            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">All-time revenue</p>
+              <p class="mt-1 font-black font-mono-num" x-text="fmtMoney(details.revenue_total)"></p>
+              <p class="text-[10px] text-neutral-400" x-text="details.bills_count + ' bills'"></p>
+            </div>
+            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Records</p>
+              <p class="mt-1" x-text="details.services_count + ' services'"></p>
+              <p class="text-[10px] text-neutral-400" x-text="details.customers_count + ' customers · ' + details.appointments_count + ' appts'"></p>
+            </div>
+          </div>
+
+          <!-- Grant plan -->
+          <div class="p-4 rounded-2xl border border-violet-500/30 bg-violet-500/5 space-y-3">
+            <p class="text-xs font-black uppercase tracking-wider text-violet-500 dark:text-violet-400">Grant beta plan</p>
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="text-[11px] font-semibold text-neutral-400">
+                Plan
+                <select x-model="grant.plan" class="mt-1 block px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+                  <option value="pro">Pro</option>
+                  <option value="studio">Studio</option>
+                  <option value="free">Free Trial (revoke paid)</option>
+                </select>
+              </label>
+              <label class="text-[11px] font-semibold text-neutral-400" x-show="grant.plan !== 'free'">
+                Cycle
+                <select x-model="grant.cycle" class="mt-1 block px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly (2 months free)</option>
+                </select>
+              </label>
+              <button @click="grantPlan()" :disabled="busy"
+                      class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-600/25 active:scale-95 transition-all">
+                Apply plan
+              </button>
+            </div>
+            <p class="text-[10px] text-neutral-400">Zero-cost grant — logged in the salon's subscription history with receipt “granted-by:…”.</p>
+          </div>
+
+          <!-- Team accounts -->
+          <div>
+            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Team accounts (<span x-text="details.accounts.length"></span>)</p>
+            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
+              <template x-for="a in details.accounts" :key="a.id">
+                <div class="flex items-center justify-between px-3 py-2 text-xs">
+                  <span class="font-medium" x-text="a.username"></span>
+                  <span class="px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-[10px] font-bold uppercase" x-text="a.auth_level"></span>
+                </div>
+              </template>
+              <template x-if="!details.accounts.length">
+                <p class="px-3 py-3 text-xs text-neutral-400">No accounts.</p>
+              </template>
+            </div>
+          </div>
+
+          <!-- Staff -->
+          <div>
+            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Staff (<span x-text="details.staff.length"></span>)</p>
+            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
+              <template x-for="st in details.staff" :key="st.id">
+                <div class="flex items-center justify-between px-3 py-2 text-xs">
+                  <span><span class="font-medium" x-text="st.name"></span> <span class="text-neutral-400" x-text="'· ' + (st.role || '')"></span></span>
+                  <span class="font-mono-num text-neutral-400" x-text="fmtMoney(st.total_revenue) + ' · ' + (st.services_done || 0) + ' services'"></span>
+                </div>
+              </template>
+              <template x-if="!details.staff.length">
+                <p class="px-3 py-3 text-xs text-neutral-400">No staff on record.</p>
+              </template>
+            </div>
+          </div>
+
+          <!-- Subscription history -->
+          <div>
+            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Subscription history</p>
+            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
+              <template x-for="sub in details.subscriptions" :key="sub.id">
+                <div class="flex items-center justify-between px-3 py-2 text-xs gap-3">
+                  <span class="font-mono-num truncate" x-text="sub.id"></span>
+                  <span class="text-neutral-400" x-text="(sub.plan || '—') + ' · ' + (sub.billing_cycle || '—')"></span>
+                  <span class="font-mono-num" x-text="fmtMoney(sub.amount)"></span>
+                  <span class="text-neutral-400" x-text="fmtDate(sub.created_at)"></span>
+                </div>
+              </template>
+              <template x-if="!details.subscriptions.length">
+                <p class="px-3 py-3 text-xs text-neutral-400">No payments recorded.</p>
+              </template>
+            </div>
+          </div>
+
+          <!-- Recent bills -->
+          <div>
+            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Recent bills</p>
+            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
+              <template x-for="b in details.bills" :key="b.id">
+                <div class="flex items-center justify-between px-3 py-2 text-xs gap-3">
+                  <span class="font-mono-num truncate" x-text="b.id"></span>
+                  <span class="text-neutral-400 truncate" x-text="b.client_name || '—'"></span>
+                  <span class="text-neutral-400" x-text="b.payment_mode"></span>
+                  <span class="font-mono-num font-bold" x-text="fmtMoney(b.grand_total)"></span>
+                  <span class="text-neutral-400" x-text="fmtDate(b.created_at)"></span>
+                </div>
+              </template>
+              <template x-if="!details.bills.length">
+                <p class="px-3 py-3 text-xs text-neutral-400">No bills yet.</p>
+              </template>
+            </div>
+          </div>
+
+          <!-- Deletion requests -->
+          <template x-if="details.deletion_requests.length">
+            <div class="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5">
+              <p class="text-xs font-black uppercase tracking-wider text-rose-500 mb-2">Deletion requests</p>
+              <template x-for="(d, i) in details.deletion_requests" :key="i">
+                <p class="text-xs text-rose-600 dark:text-rose-300">
+                  <span x-text="fmtDate(d.requested_at)"></span> — <span x-text="d.email || 'no email'"></span>
+                  <span class="text-neutral-400" x-text="d.reason ? ('· ' + d.reason) : ''"></span>
+                </p>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <template x-if="!details && loadingDetails">
+        <p class="text-sm text-neutral-400 text-center py-8">Loading salon details…</p>
+      </template>
+    </div>
+  </div>
+
+  <!-- Create account modal -->
+  <div x-cloak x-show="createOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm grid place-items-center p-4"
+       @click.self="createOpen = false" @keydown.escape.window="createOpen = false">
+    <div class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-4">
+
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-black tracking-tight">Create account</h2>
+          <p class="text-[11px] text-neutral-400">Provisions a salon + pre-confirmed owner login with a custom plan validity.</p>
+        </div>
+        <button @click="createOpen = false" class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold">Close</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
+          Owner name
+          <input x-model="newAcc.owner_name" placeholder="Riya Kapoor"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
+          Salon / Studio name
+          <input x-model="newAcc.salon_name" placeholder="Glow Studio"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
+          Owner email (login)
+          <input x-model="newAcc.email" type="email" placeholder="riya@glow.in"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400">
+          Phone
+          <input x-model="newAcc.phone" inputmode="numeric" placeholder="9876500007" maxlength="10"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 font-mono-num">
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400">
+          Password
+          <input x-model="newAcc.password" type="text" placeholder="min 6 characters"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400">
+          Plan
+          <select x-model="newAcc.plan"
+                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+            <option value="free">Free (trial)</option>
+            <option value="pro">Pro</option>
+            <option value="studio">Studio</option>
+          </select>
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400">
+          Default cycle
+          <select x-model="newAcc.cycle"
+                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+            <option value="">Auto</option>
+            <option value="monthly">Monthly (30d)</option>
+            <option value="yearly">Yearly (365d)</option>
+            <option value="trial">Trial (14d)</option>
+          </select>
+        </label>
+        <label class="text-[11px] font-semibold text-neutral-400 col-span-2" x-show="newAcc.plan !== 'free'">
+          Custom validity (days)
+          <input x-model="newAcc.days" inputmode="numeric" placeholder="e.g. 90 — leave blank for default cycle"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 font-mono-num">
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-1">
+        <button @click="createOpen = false" class="px-4 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-bold">Cancel</button>
+        <button @click="createAccount()" :disabled="createBusy"
+                class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-600/25 active:scale-95 transition-all">
+          <span x-text="createBusy ? 'Creating…' : 'Create account'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_BASE = {{ url_for('admin.admin_home') | tojson }};
+
+    function adminApp() {
+      return {
+        publicOpen: {{ 'true' if public_open else 'false' }},
+        busy: false,
+        selected: null,
+        details: null,
+        loadingDetails: false,
+                grant: { plan: 'pro', cycle: 'monthly' },
+        createOpen: false,
+        createBusy: false,
+        newAcc: { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' },
+        toastMsg: '', toastOk: true, toastShow: false, toastTimer: null,
+
+        toast(msg, ok = true) {
+          this.toastMsg = msg; this.toastOk = ok; this.toastShow = true;
+          clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => { this.toastShow = false; }, 4500);
+        },
+
+        fmtMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); },
+        fmtDate(ts) {
+          if (!ts) return '—';
+          return new Date(ts * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        },
+
+        async togglePublic() {
+          this.busy = true;
+          try {
+            const res = await fetch(ADMIN_BASE + '/public-toggle', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+              this.publicOpen = data.accepting_public;
+              this.toast(data.message, true);
+            } else {
+              this.toast(data.message || 'Toggle failed.', false);
+            }
+          } catch (e) { this.toast('Network error: ' + e.message, false); }
+          this.busy = false;
+        },
+
+        async openDetails(id) {
+          this.selected = id; this.details = null; this.loadingDetails = true;
+          this.grant = { plan: 'pro', cycle: 'monthly' };
+          try {
+            const res = await fetch(ADMIN_BASE + '/api/salon/' + id);
+            const data = await res.json();
+            if (data.success) { this.details = data; }
+            else { this.toast(data.message || 'Could not load details.', false); this.selected = null; }
+          } catch (e) { this.toast('Network error: ' + e.message, false); this.selected = null; }
+          this.loadingDetails = false;
+                },
+
+        async createAccount() {
+          this.createBusy = true;
+          let res, data;
+          try {
+            res = await fetch(ADMIN_BASE + '/create-account', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newAcc)
+            });
+            data = await res.json();
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+            this.createBusy = false;
+            return;
+          }
+          this.toast(data.message, !!data.success);
+          if (data.success) {
+            this.createOpen = false;
+            this.newAcc = { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' };
+            setTimeout(() => window.location.reload(), 1100);
+          }
+          this.createBusy = false;
+        },
+
+        async grantPlan() {
+          if (!this.selected) return;
+          this.busy = true;
+          try {
+            const res = await fetch(ADMIN_BASE + '/grant-plan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ salon_id: this.selected, plan: this.grant.plan, cycle: this.grant.cycle })
+            });
+            const data = await res.json();
+            this.toast(data.message || (data.success ? 'Plan applied.' : 'Failed.'), !!data.success);
+            if (data.success) {
+              this.selected = null; this.details = null;
+              setTimeout(() => window.location.reload(), 1100);
+            }
+          } catch (e) { this.toast('Network error: ' + e.message, false); }
+          this.busy = false;
+        }
+      };
+    }
+  </script>
+</body>
+</html>

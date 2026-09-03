@@ -25,6 +25,14 @@
     </span>
   </div>
 
+  {% if not accepting_public %}
+  <!-- Beta Notice -->
+  <div class="flex items-start gap-2 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200/70 dark:border-violet-800/60 text-xs text-violet-800 dark:text-violet-200">
+    <i data-lucide="flask-conical" class="w-4 h-4 shrink-0 mt-0.5"></i>
+    <span>{{ beta_message }}</span>
+  </div>
+  {% endif %}
+
   <!-- Current Plan Strip -->
   <div data-anim="up" data-delay="60" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div class="flex items-center gap-3 min-w-0">
@@ -150,9 +158,9 @@
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Salon address &amp; map location</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Online client booking link</li>
         </ul>
-        <button type="button" @click="selectPlan('pro')" :disabled="isSubmitting"
+        <button type="button" @click="selectPlan('pro')" :disabled="!acceptingPublic || isSubmitting"
                 :class="selectedPlan === 'pro' ? 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white shadow-lg shadow-neon-magenta/25' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200 hover:border-violet-500/60'"
-                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95">
+                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <i data-lucide="check" class="w-3.5 h-3.5" x-show="selectedPlan === 'pro'"></i>
           <span x-text="selectedPlan === 'pro' ? 'Selected — Upgrade to Pro' : 'Upgrade to Pro'"></span>
         </button>
@@ -179,9 +187,9 @@
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Advanced analytics reports</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Logo branding + data export/import</li>
         </ul>
-        <button type="button" @click="selectPlan('studio')" :disabled="isSubmitting"
+        <button type="button" @click="selectPlan('studio')" :disabled="!acceptingPublic || isSubmitting"
                 :class="selectedPlan === 'studio' ? 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white shadow-lg shadow-neon-magenta/25' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200 hover:border-violet-500/60'"
-                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95">
+                class="mt-5 w-full px-4 py-3 rounded-xl border border-transparent text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
           <i data-lucide="check" class="w-3.5 h-3.5" x-show="selectedPlan === 'studio'"></i>
           <span x-text="selectedPlan === 'studio' ? 'Selected — Upgrade to Studio' : 'Upgrade to Studio'"></span>
         </button>
@@ -195,7 +203,7 @@
         <p x-show="selectedPlan" class="font-mono-num font-black text-lg text-violet-700 dark:text-neon-cyan" x-text="placeTotalLabel()"></p>
         <p class="text-[10px] text-neutral-400">Secure checkout via Razorpay. Upgrades apply instantly after payment.</p>
       </div>
-      <button @click="checkout()" :disabled="!selectedPlan || isSubmitting"
+      <button @click="checkout()" :disabled="!selectedPlan || isSubmitting || !acceptingPublic"
               class="shrink-0 px-6 py-3.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2 active:scale-95">
         <i data-lucide="credit-card" class="w-4 h-4" x-show="!isSubmitting"></i>
         <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="isSubmitting"></i>
@@ -216,6 +224,8 @@
       billingCycle: 'monthly',
       selectedPlan: null,
       isSubmitting: false,
+      acceptingPublic: {{ accepting_public | tojson }},
+      betaMessage: {{ beta_message | tojson }},
 
       // Distinct tier roots available, e.g. ['pro'] or ['pro', 'studio'].
       get availablePlans() {
@@ -229,6 +239,10 @@
       },
 
       selectPlan(tier) {
+        if (!this.acceptingPublic) {
+          window.uiToast(this.betaMessage, 'warning');
+          return;
+        }
         this.selectedPlan = this.selectedPlan === tier ? null : tier;
       },
 
@@ -239,6 +253,10 @@
       },
 
       async checkout() {
+        if (!this.acceptingPublic) {
+          window.uiToast(this.betaMessage, 'warning');
+          return;
+        }
         if (!this.planId || !UPGRADE_OPTIONS[this.planId]) {
           window.uiToast('Please select a plan first.', 'warning');
           return;

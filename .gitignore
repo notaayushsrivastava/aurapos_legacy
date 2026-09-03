@@ -1,8 +1,10 @@
 /venv/*
 /node_modules/*
-*.json
+package.json
+package-lock.json
 *.env
 /build/*
 /dist/*
 /.vscode/*
 /__pycache__/*
+input.css

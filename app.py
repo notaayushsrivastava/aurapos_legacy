@@ -1,9 +1,10 @@
 from flask import (
-    Flask, jsonify, request, render_template, flash, redirect, url_for, session, Response
+    Flask, jsonify, request, render_template, flash, redirect, url_for, session, Response,
+    Blueprint,
 )
 import razorpay
 from uuid import uuid4
-from backend import *
+from supabase_backend import *
 from flask_mail import Mail, Message
 from functools import wraps
 from datetime import timedelta, datetime, date
@@ -14,9 +15,20 @@ import csv
 import io
 import json
 import base64
+import hmac
 import sys
 import os
 import re
+
+ACCEPTING_PUBLIC = os.environ.get("ACCEPTING_PUBLIC", "").strip().lower() in ("1", "true", "yes", "on")
+BETA_PUBLIC_MESSAGE = "We are currently in beta testing. This will be available to the general public very soon."
+
+# ================= ADMIN CONSOLE (/admin) CREDENTIALS =================
+# Used by the admin console at /admin. ADMIN_PASSWORD is required — without it
+# the admin login stays disabled. Change the default below before deploying.
+ADMIN_USER = (os.environ.get("ADMIN_USER") or "admin").strip()
+ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+DEFAULT_ADMIN_PASSWORD = "aurapos-admin"
 
 
 def login_required(f):
@@ -149,11 +161,11 @@ MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB cap for salon logo uploads
 
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
-    static_folder = os.path.join(sys._MEIPASS, 'static')
+    static_folder = os.path.join(sys._MEIPASS, 'public')
     app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 else:
     # Running as a normal Python script
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='templates', static_folder='public')
 
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
 
@@ -166,12 +178,26 @@ billRepo = BillRepository()
 customerRepo = CustomerRepository()
 categoryRepo = CategoryRepository()
 reportRepo = ReportRepository()
+adminRepo = AdminRepository()
+
+
+def public_signup_state():
+    """Effective public-signup flag for the beta gate.
+
+    The /admin console override stored in Supabase (app_settings) wins over
+    the ACCEPTING_PUBLIC environment default; if the setting cannot be read,
+    the env default is used (fail-safe).
+    """
+    val = adminRepo.get_setting(AdminRepository.SETTING_ACCEPTING_PUBLIC)
+    if val is None:
+        return ACCEPTING_PUBLIC
+    return str(val).strip().lower() == "true"
 
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["50 per second"],
-    storage_uri="memory://",
+    default_limits=["20 per second"],
+    storage_uri=os.environ.get("REDIS_URL", "memory://"),
 )
 
 # Flask-Mail configuration
@@ -284,7 +310,12 @@ def terms_of_service():
 
 @app.route('/register')
 def register():
-    return render_template('service/register.html', razorpay_key_id='rzp_test_SxU2RG4SoMaOcI')
+    return render_template(
+        'service/register.html',
+        razorpay_key_id='rzp_test_SxU2RG4SoMaOcI',
+        accepting_public=public_signup_state(),
+        beta_message=BETA_PUBLIC_MESSAGE,
+    )
 
 
 def get_upgrade_options(current_tier):
@@ -316,6 +347,8 @@ def upgrade():
         current_tier=current_tier,
         razorpay_key_id='rzp_test_SxU2RG4SoMaOcI',
         upgrade_options=get_upgrade_options(current_tier),
+        accepting_public=public_signup_state(),
+        beta_message=BETA_PUBLIC_MESSAGE,
     )
 
 
@@ -417,6 +450,10 @@ def create_subscription():
     if not pricing:
         return jsonify({"error": "Invalid plan selected"}), 400
 
+    # Beta gating: paid plans are closed to the public until launch.
+    if not public_signup_state() and pricing["tier"] in ("pro", "studio"):
+        return jsonify({"error": BETA_PUBLIC_MESSAGE}), 403
+
     # pro ₹69/mo · pro_yearly ₹690/yr · studio ₹149/mo · studio_yearly ₹1,490/yr (2 months free)
     amount = pricing["amount"]
 
@@ -439,17 +476,15 @@ def create_subscription():
             "created_at": int(datetime.now().timestamp())
         }
 
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO pendingorders(id, amount, created_at, plan, receipt, email, phone)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (order["id"], order["amount"], order["created_at"], plan, receipt, email, phone)
+    authRepo.create_pendingorder(
+        order_id=order["id"],
+        amount=order["amount"],
+        created_at=order["created_at"],
+        plan=plan,
+        receipt=receipt,
+        email=email,
+        phone=phone,
     )
-    conn.commit()
-    conn.close()
 
     return jsonify(order)
 
@@ -470,9 +505,6 @@ def verify_subscription():
             "message": "An account with this email address or phone number already exists. Please sign in."
         }), 400
 
-    conn = get_db()
-    cur = conn.cursor()
-
     try:
         # Verify Razorpay signature if live keys used
         if "razorpay_signature" in data and data["razorpay_signature"]:
@@ -490,41 +522,22 @@ def verify_subscription():
     plan = account_data.get("plan", "pro")
     pricing = PLAN_PRICING.get(plan)
     if not pricing:
-        conn.close()
         return jsonify({"success": False, "message": "Invalid plan selected."}), 400
-    tier, cycle = pricing["tier"], pricing["cycle"]
 
-    now_ts = int(datetime.now().timestamp())
-    # Annual plans bill 12 months upfront (2 months free); monthly renews every 30 days
-    expires_ts = now_ts + (Time.year if cycle == "yearly" else Time.month)
+    # Beta gating: creating paid accounts is closed while in beta.
+    if not public_signup_state() and pricing["tier"] in ("pro", "studio"):
+        return jsonify({"success": False, "message": BETA_PUBLIC_MESSAGE}), 403
 
-    cur.execute(
-        """
-        INSERT INTO salons(name, phone, salon_name, email, created_on, plan, billing_cycle, expires_on)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            account_data.get("owner_name", "Salon Owner").capitalize(),
-            phone,
-            account_data.get("salon_name", "Studio Elite"),
-            email,
-            now_ts,
-            tier,
-            cycle,
-            expires_ts
-        )
+    # Creates the salon + owner account (and provisions the Supabase Auth user)
+    # with the resolved tier, billing cycle and expiry window applied.
+    accid = authRepo.create_auth(
+        account_data.get("owner_name", "Salon Owner").capitalize(),
+        account_data.get("salon_name", "Studio Elite"),
+        phone,
+        email,
+        account_data.get("password", ""),
+        plan=plan,
     )
-    accid = cur.lastrowid
-
-    cur.execute(
-        """
-        INSERT INTO accounts(auth_id, username, password)
-        VALUES (?, ?, ?)
-        """,
-        (accid, email, account_data.get("password", ""))
-    )
-    conn.commit()
-    conn.close()
 
     # Automatically initialize defaults and login the newly subscribed user
     session["id"] = accid
@@ -600,6 +613,10 @@ def create_upgrade():
     if not pricing:
         return jsonify({"error": "Invalid plan selected"}), 400
 
+    # Beta gating: paid plan upgrades are closed to the public until launch.
+    if not public_signup_state() and pricing["tier"] in ("pro", "studio"):
+        return jsonify({"error": BETA_PUBLIC_MESSAGE}), 403
+
     current_index = TIER_ORDER.index(current_tier) if current_tier in TIER_ORDER else 0
     target_index = TIER_ORDER.index(pricing["tier"])
     if target_index < current_index:
@@ -625,18 +642,16 @@ def create_upgrade():
             "created_at": int(datetime.now().timestamp()),
         }
 
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO pendingorders(id, amount, created_at, plan, receipt, email, phone, salon_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (order["id"], order["amount"], order["created_at"], plan, receipt,
-         (salon.email if salon else "") or "", (salon.phone if salon else "") or "", salon_id),
+    authRepo.create_pendingorder(
+        order_id=order["id"],
+        amount=order["amount"],
+        created_at=order["created_at"],
+        plan=plan,
+        receipt=receipt,
+        email=(salon.email if salon else "") or "",
+        phone=(salon.phone if salon else "") or "",
+        salon_id=salon_id,
     )
-    conn.commit()
-    conn.close()
 
     return jsonify(order)
 
@@ -658,6 +673,10 @@ def verify_upgrade():
     if not pricing:
         return jsonify({"success": False, "message": "Invalid plan selected."}), 400
 
+    # Beta gating: paid plan upgrades are closed while in beta.
+    if not public_signup_state() and pricing["tier"] in ("pro", "studio"):
+        return jsonify({"success": False, "message": BETA_PUBLIC_MESSAGE}), 403
+
     # Best-effort signature check (mirrors the register flow's test-mode bypass).
     if data.get("razorpay_signature"):
         try:
@@ -671,13 +690,8 @@ def verify_upgrade():
 
     # Soft ownership check — the pending order should belong to this salon.
     try:
-        conn = get_db()
-        row = conn.execute(
-            "SELECT id FROM pendingorders WHERE id = ? AND salon_id = ?",
-            (data.get("razorpay_order_id", ""), salon_id),
-        ).fetchone()
-        conn.close()
-        if not row:
+        order = authRepo.get_pendingorder(data.get("razorpay_order_id", ""))
+        if not order or order.get("salon_id") != salon_id:
             print(f"UPGRADE WARNING: pending order not found for salon {salon_id}")
     except Exception as e:
         print("Upgrade order lookup warning:", e)
@@ -1583,10 +1597,278 @@ def api_delete_request():
     })
 
 
+# ================= ADMIN CONSOLE (/admin) =================
+
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def admin_required(view):
+    """Gate an admin route: pages bounce to /admin, API routes get a 401 JSON."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("is_admin"):
+            if request.path.startswith("/admin/api/"):
+                return jsonify({"success": False, "message": "Admin authentication required."}), 401
+            return redirect(url_for("admin.admin_home"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def _fmt_date(ts):
+    try:
+        return datetime.fromtimestamp(int(ts)).strftime("%d %b %Y")
+    except (TypeError, ValueError):
+        return "—"
+
+
+@admin_bp.get("/")
+def admin_home():
+    if not session.get("is_admin"):
+        return render_template(
+            "admin/admin_login.html",
+            admin_user=ADMIN_USER,
+            login_enabled=bool(ADMIN_PASSWORD),
+            using_default=bool(ADMIN_PASSWORD) and ADMIN_PASSWORD == DEFAULT_ADMIN_PASSWORD,
+        )
+
+    q = (request.args.get("q") or "").strip()
+    try:
+        salons = adminRepo.list_salons()
+    except Exception as exc:
+        salons = []
+        flash(f"Could not load salons from Supabase: {exc}", "error")
+
+    if q:
+        ql = q.lower().lstrip("#")
+
+        def _match(s):
+            hay = " ".join(str(s.get(k) or "") for k in ("salon_name", "name", "email", "phone")).lower()
+            return ql in hay or (ql.isdigit() and str(s.get("id")) == ql)
+
+        salons = [s for s in salons if _match(s)]
+
+    now_ts = int(datetime.now().timestamp())
+    rows = []
+    for s in salons:
+        plan = (s.get("plan") or "free").lower()
+        expires_on = s.get("expires_on")
+        rows.append({
+            **s,
+            "plan_label": TIER_PLANS.get(plan, {}).get("label", (plan or "unknown").title()),
+            "cycle": s.get("billing_cycle") or "—",
+            "created_str": _fmt_date(s.get("created_on")),
+            "expires_str": _fmt_date(expires_on) if expires_on else "—",
+            "is_expired": bool(expires_on) and int(expires_on) < now_ts,
+            "revenue_str": f"₹{int(s.get('revenue_total') or 0):,}",
+        })
+
+    stats = {
+        "total": len(rows),
+        "pro": sum(1 for r in rows if r.get("plan") == "pro"),
+        "studio": sum(1 for r in rows if r.get("plan") == "studio"),
+        "free": sum(1 for r in rows if (r.get("plan") or "free") not in ("pro", "studio")),
+    }
+
+    return render_template(
+        "admin/admin_dashboard.html",
+        salons=rows,
+        stats=stats,
+        q=q,
+        public_open=public_signup_state(),
+        admin_user=session.get("admin_user", ADMIN_USER),
+        using_default_admin_pwd=ADMIN_PASSWORD == DEFAULT_ADMIN_PASSWORD,
+    )
+
+
+@admin_bp.post("/login")
+@limiter.limit("3 per 10 seconds", override_defaults=True)
+def admin_login():
+    if not ADMIN_PASSWORD:
+        flash("Admin login is disabled — set ADMIN_PASSWORD in the environment.", "error")
+        return redirect(url_for("admin.admin_home"))
+
+    data = request.form if request.form else (request.get_json(silent=True) or {})
+    username = str(data.get("username") or "").strip()
+    password = str(data.get("password") or "")
+
+    user_ok = hmac.compare_digest(username.encode("utf-8"), ADMIN_USER.encode("utf-8"))
+    pass_ok = hmac.compare_digest(password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))
+    if not (user_ok and pass_ok):
+        flash("Invalid admin credentials.", "error")
+        return redirect(url_for("admin.admin_home"))
+
+    session["is_admin"] = True
+    session["admin_user"] = username or ADMIN_USER
+    return redirect(url_for("admin.admin_home"))
+
+
+@admin_bp.post("/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    session.pop("admin_user", None)
+    return redirect(url_for("admin.admin_home"))
+
+
+@admin_bp.post("/public-toggle")
+@admin_required
+def admin_public_toggle():
+    current = public_signup_state()
+    new_state = not current
+    if not adminRepo.set_setting(AdminRepository.SETTING_ACCEPTING_PUBLIC, "true" if new_state else "false"):
+        return jsonify({"success": False, "message": "Could not save the setting — check Supabase connectivity."}), 502
+    message = ("Public sign-ups are now OPEN — Pro/Studio purchases are enabled."
+               if new_state else
+               "Public sign-ups are CLOSED — Pro/Studio purchases stay blocked (beta).")
+    return jsonify({"success": True, "accepting_public": new_state, "message": message})
+
+
+@admin_bp.post("/grant-plan")
+@admin_required
+def admin_grant_plan():
+    data = request.get_json(silent=True) or {}
+    try:
+        salon_id = int(data.get("salon_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Invalid salon id."}), 400
+    plan = (data.get("plan") or "").strip().lower()
+    cycle = (data.get("cycle") or "monthly").strip().lower()
+    if plan not in ("pro", "studio", "free"):
+        return jsonify({"success": False, "message": "Plan must be pro, studio or free."}), 400
+    if plan == "free":
+        cycle = "trial"
+    elif cycle not in ("monthly", "yearly"):
+        return jsonify({"success": False, "message": "Cycle must be monthly or yearly."}), 400
+
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+
+    plan_id = plan if cycle != "yearly" else f"{plan}_yearly"
+    tier, resolved_cycle, pricing = resolve_plan(plan_id)
+    expires_ts = expires_for(resolved_cycle)
+
+    if not authRepo.update_salon_plan(salon_id, tier, resolved_cycle, expires_ts):
+        return jsonify({"success": False, "message": "Plan update failed — salon row not found."}), 502
+
+    try:
+        authRepo.record_subscription(
+            sub_id=f"admin_{str(uuid4())[:12]}",
+            salon_id=salon_id,
+            amount=0,
+            plan=tier,
+            cycle=resolved_cycle,
+            receipt=f"granted-by:{session.get('admin_user', ADMIN_USER)}",
+            email=salon.email or "",
+            phone=salon.phone or "",
+        )
+    except Exception as exc:
+        print("Admin grant: subscription log failed (plan still applied):", exc)
+
+    label = TIER_PLANS.get(tier, {}).get("label", tier.title())
+    return jsonify({
+        "success": True,
+        "message": f"{salon.salon_name or ('Salon #' + str(salon_id))} → {label} (until {_fmt_date(expires_ts)}).",
+    })
+
+
+@admin_bp.get("/api/salon/<int:salon_id>")
+@admin_required
+def admin_salon_details(salon_id):
+    details = adminRepo.salon_details(salon_id)
+    if not details:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+    return jsonify({"success": True, **details})
+
+
+@admin_bp.post("/create-account")
+@admin_required
+def admin_create_account():
+    """Manually create a salon + owner account with a custom plan & validity.
+
+    The owner's login credentials are pre-confirmed in Supabase Auth, so the
+    salon can sign in immediately. Plan/cycle choose the defaults; `days`
+    (optional) overrides the validity window with a custom number of days.
+    """
+    data = request.get_json(silent=True) or {}
+    owner_name = str(data.get("owner_name") or "").strip()
+    salon_name = str(data.get("salon_name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    phone = "".join(ch for ch in str(data.get("phone") or "") if ch.isdigit())
+    password = str(data.get("password") or "")
+    plan = (data.get("plan") or "free").strip().lower()
+    cycle = (data.get("cycle") or "").strip().lower()
+    try:
+        days = int(float(str(data.get("days") or 0)))
+    except (TypeError, ValueError):
+        days = 0
+
+    if not all([owner_name, salon_name, email, phone, password]):
+        return jsonify({"success": False, "message": "Owner name, salon name, email, phone and password are all required."}), 400
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return jsonify({"success": False, "message": "Please enter a valid email address."}), 400
+    if len(phone) != 10:
+        return jsonify({"success": False, "message": "Phone number must be exactly 10 digits."}), 400
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "Password must be at least 6 characters."}), 400
+    if plan not in ("free", "pro", "studio"):
+        return jsonify({"success": False, "message": "Plan must be free, pro or studio."}), 400
+    if cycle not in ("", "monthly", "yearly", "trial"):
+        return jsonify({"success": False, "message": "Cycle must be monthly, yearly or trial."}), 400
+    if days and (days < 1 or days > 3650):
+        return jsonify({"success": False, "message": "Validity must be between 1 and 3650 days."}), 400
+
+    if authRepo.check_exists(email, phone):
+        return jsonify({"success": False, "message": "An account with this email or phone already exists."}), 409
+
+    if not cycle:
+        cycle = "trial" if plan == "free" else "monthly"
+
+    now_ts = int(datetime.now().timestamp())
+    try:
+        salon_id = authRepo.create_auth(
+            owner_name, salon_name, phone, email, password,
+            plan=plan, created_on=now_ts,
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Could not create account: {exc}"}), 502
+
+    try:
+        tier = plan if plan in ("pro", "studio") else "free"
+        expires_ts = (now_ts + days * 86400) if days else expires_for(cycle, now_ts)
+        authRepo.update_salon_plan(salon_id, tier, cycle, expires_ts)
+        authRepo.record_subscription(
+            sub_id=f"admin_{str(uuid4())[:12]}",
+            salon_id=salon_id,
+            amount=0,
+            plan=tier,
+            cycle=cycle,
+            receipt=f"created-by:{session.get('admin_user', ADMIN_USER)}",
+            email=email,
+            phone=phone,
+        )
+    except Exception as exc:
+        print("Admin create: plan/subscription logging failed (account created):", exc)
+
+    label = TIER_PLANS.get(tier, {}).get("label", tier.title())
+    return jsonify({
+        "success": True,
+        "salon_id": salon_id,
+        "message": f"{salon_name} created (owner {email}) → {label} · valid until {_fmt_date(expires_ts)}.",
+    })
+
+
+app.register_blueprint(admin_bp)
+
+
 # ================= ERROR HANDLERS =================
 
 @app.errorhandler(RateLimitExceeded)
 def ratelimit_handler(e):
+    # Admin console: bounce back to the login/dashboard with a flash message
+    # so the form UX survives the 3-per-10-seconds login limit.
+    if request.blueprint == "admin" or request.path.startswith("/admin"):
+        flash("Too many attempts — please wait 10 seconds and try again.", "error")
+        return redirect(url_for("admin.admin_home"))
     return jsonify({
         "error": "Too Many Requests",
         "description": f"You have exceeded your request limit: {e.description}"
