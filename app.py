@@ -168,7 +168,8 @@ else:
     static_folder = 'public'
 
 # 'app' must be declared at the module root level
-app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+app = Flask(__name__, template_folder=template_folder, static_folder=static_folder,
+            static_url_path='')
 
 app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
 

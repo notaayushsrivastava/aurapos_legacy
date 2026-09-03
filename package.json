@@ -1,0 +1,14 @@
+﻿{
+  "name": "aurapos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npx @tailwindcss/cli -i ./input.css -o ./public/output.css --minify",
+    "vercel-build": "npx @tailwindcss/cli -i ./input.css -o ./public/output.css --minify"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.2",
+    "tailwindcss": "^4.3.2"
+  }
+}
