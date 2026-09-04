@@ -1,27 +1,4 @@
 {
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": [
-          "public/**",
-          "templates/**"
-        ]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/output.css",
-      "headers": {
-        "Content-Type": "text/css; charset=utf-8"
-      },
-      "dest": "public/output.css"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "app.py"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build"
 }
