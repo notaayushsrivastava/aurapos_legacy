@@ -221,6 +221,10 @@ class Salon:
             "latitude": None, "longitude": None,
         }
         defaults.update({k: v for k, v in row.items() if k in defaults})
+        # Never allow an empty plan — fall back to "free" if the stored
+        # value is missing or falsy so the UI never shows "No Plan".
+        if not defaults.get("plan"):
+            defaults["plan"] = "free"
         return cls(**defaults)
 
     def as_dict(self):
@@ -258,6 +262,15 @@ def get_client():
         if create_client is None:
             raise RuntimeError(
                 "The 'supabase' package is not installed. Run: pip install supabase"
+            )
+        # Warn if we fell back to SUPABASE_KEY (likely the anon key, which
+        # does NOT bypass RLS — this causes the 42501 errors on app_settings).
+        if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY"):
+            _warn(
+                "SUPABASE_SERVICE_ROLE_KEY is not set — falling back to "
+                "SUPABASE_KEY which is likely the anon key and will NOT "
+                "bypass Row Level Security. Set SUPABASE_SERVICE_ROLE_KEY "
+                "to the service_role secret from Dashboard -> Project Settings -> API."
             )
         _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     return _client
@@ -328,6 +341,64 @@ def _sb_delete_auth_user(uid):
         return False
 
 
+# ================= SUPABASE STORAGE HELPERS =================
+
+STORAGE_BUCKET = "salon-logos"
+
+
+def _ensure_storage_bucket():
+    """Make the salon-logos bucket exists (best-effort, idempotent)."""
+    try:
+        buckets = _sb().storage.list_buckets()
+        if not any(b.get("name") == STORAGE_BUCKET for b in (buckets or [])):
+            _sb().storage.create_bucket(STORAGE_BUCKET, {"public": True})
+    except Exception as exc:
+        _warn(f"storage: could not ensure bucket '{STORAGE_BUCKET}': {exc}")
+
+
+def upload_logo_to_storage(salon_id, blob, mime):
+    """Upload a logo to Supabase Storage and return its public URL.
+
+    Returns None on any failure so callers can fall back to the data-URL path.
+    """
+    try:
+        _ensure_storage_bucket()
+        ext = "png"
+        if mime == "image/jpeg":
+            ext = "jpg"
+        elif mime == "image/webp":
+            ext = "webp"
+        elif mime == "image/svg+xml":
+            ext = "svg"
+        object_path = f"{salon_id}/logo.{ext}"
+
+        # Upload (upsert so re-uploads replace the existing file)
+        _sb().storage.from_(STORAGE_BUCKET).upload(
+            object_path,
+            blob,
+            {"content-type": mime, "upsert": True},
+        )
+
+        # Return the public URL
+        return _sb().storage.from_(STORAGE_BUCKET).get_public_url(object_path)
+    except Exception as exc:
+        _warn(f"storage: logo upload for salon {salon_id} failed: {exc}")
+        return None
+
+
+def delete_logo_from_storage(salon_id):
+    """Remove a salon's logo file from Supabase Storage (best-effort)."""
+    try:
+        _ensure_storage_bucket()
+        # List files in the salon's folder and delete them
+        files = _sb().storage.from_(STORAGE_BUCKET).list(f"{salon_id}")
+        if files:
+            paths = [f"{salon_id}/{f['name']}" for f in files]
+            _sb().storage.from_(STORAGE_BUCKET).remove(paths)
+    except Exception as exc:
+        _warn(f"storage: logo delete for salon {salon_id} failed: {exc}")
+
+
 def _sb_verify_credentials(username, password):
     """Verify credentials against Supabase Auth.
 
@@ -368,8 +439,87 @@ class AuthorizationRepository:
         pass
 
     def update_salon_logo(self, salon_id, logo_data):
-        """Store (or clear, with None) the salon's logo as a data URL."""
+        """Store (or clear, with None) the salon's logo.
+
+        If logo_data is a data URL (legacy), it is kept as-is for backward
+        compatibility. If it is a public URL from Supabase Storage, it is
+        stored directly. Passing None clears the logo.
+        """
         _sb().table("salons").update({"logo": logo_data}).eq("id", salon_id).execute()
+
+    def set_logo_from_storage(self, salon_id, public_url):
+        """Set the salon's logo to a Supabase Storage public URL."""
+        _sb().table("salons").update({"logo": public_url}).eq("id", salon_id).execute()
+
+    def clear_logo(self, salon_id):
+        """Clear the salon's logo (DB + storage file)."""
+        _sb().table("salons").update({"logo": None}).eq("id", salon_id).execute()
+        delete_logo_from_storage(salon_id)
+
+    def get_logo_public_url(self, salon_id):
+        """Get the salon's logo URL, uploading to storage if needed.
+
+        If the stored logo is a legacy data URL, it is uploaded to Supabase
+        Storage and replaced with a public URL. This keeps old logos working
+        while new uploads go directly to storage.
+        """
+        row = _data(
+            _sb().table("salons").select("logo").eq("id", salon_id).maybe_single().execute()
+        )
+        if not row or not row.get("logo"):
+            return None
+        logo = row["logo"]
+        # If it's already a public URL (not a data URL), return as-is
+        if logo.startswith("http"):
+            return logo
+        # Legacy data URL — could be migrated on read, but for now return as-is
+        return logo
+
+    # ---------- Payment methods ----------
+
+    def get_payment_methods(self, salon_id):
+        """Get the salon's configured payment methods."""
+        try:
+            row = _data(
+                _sb().table("salon_settings")
+                .select("payment_methods")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            if row and row.get("payment_methods"):
+                return row["payment_methods"]
+        except Exception as exc:
+            _warn(f"get_payment_methods({salon_id}) failed: {exc}")
+        return {"upi": "", "card_terminal": ""}
+
+    def update_payment_methods(self, salon_id, methods):
+        """Update the salon's payment methods configuration."""
+        try:
+            # Try to update existing row first
+            existing = _data(
+                _sb().table("salon_settings")
+                .select("id")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            if existing:
+                _sb().table("salon_settings").update({
+                    "payment_methods": methods,
+                    "updated_at": int(datetime.now().timestamp()),
+                }).eq("salon_id", salon_id).execute()
+            else:
+                _sb().table("salon_settings").insert({
+                    "salon_id": salon_id,
+                    "payment_methods": methods,
+                    "created_at": int(datetime.now().timestamp()),
+                    "updated_at": int(datetime.now().timestamp()),
+                }).execute()
+            return True
+        except Exception as exc:
+            _warn(f"update_payment_methods({salon_id}) failed: {exc}")
+            return False
 
     def create_account(self, auth_id, username, password, auth_level="admin", supabase_uid=None):
         """Insert a team/owner account row (provisions the Supabase Auth user)."""
@@ -726,7 +876,15 @@ class AuthorizationRepository:
         return [dict(r) for r in (rows or [])]
 
     def update_salon_plan(self, salon_id, tier, cycle, expires_on):
-        """Switch a salon to a new subscription tier (used by the upgrade flow)."""
+        """Switch a salon to a new subscription tier (used by the upgrade flow).
+
+        Never writes an empty/None plan — that would leave the salon with
+        no active subscription. If tier is falsy, the update is aborted
+        and False is returned.
+        """
+        if not tier:
+            _warn(f"update_salon_plan({salon_id}) aborted: empty tier")
+            return False
         res = (
             _sb().table("salons")
             .update({"plan": tier, "billing_cycle": cycle, "expires_on": expires_on})
@@ -1696,7 +1854,15 @@ class AdminRepository:
             return default
 
     def set_setting(self, key, value):
-        """Upsert a settings value. Returns True on success."""
+        """Upsert a settings value. Returns True on success.
+
+        Uses the service-role client which bypasses RLS. If the
+        app_settings table has no RLS policy allowing service-role
+        writes, this will fail with error 42501 — the table needs
+        ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY with a
+        permissive policy for the service_role, or the RLS can be
+        disabled entirely for this server-only table.
+        """
         try:
             _sb().table("app_settings").upsert({
                 "key": key,
@@ -1710,52 +1876,68 @@ class AdminRepository:
 
     # ---------- Salon directory ----------
 
+    def _count_rows(self, table, col="account_id"):
+        """Count rows grouped by a column; fails soft (returns {} so a single
+        table-query error doesn't wipe the entire admin salon list."""
+        try:
+            rows = _sb().table(table).select(col).execute().data or []
+        except Exception as exc:
+            _warn(f"list_salons: counting {table} rows failed: {exc}")
+            return {}
+        counts = {}
+        for r in rows:
+            aid = r.get(col)
+            if aid is not None:
+                counts[aid] = counts.get(aid, 0) + 1
+        return counts
+
+    def _fetch_all(self, table, columns, eq_col=None, eq_val=None, limit=None,
+                   order=None, desc=False):
+        """Fetch rows from *table* with optional filter; fails soft (returns []).
+        Keeps one query's failure from cascading to the whole salon listing."""
+        try:
+            query = _sb().table(table).select(columns)
+            if eq_col is not None and eq_val is not None:
+                query = query.eq(eq_col, eq_val)
+            if order is not None:
+                query = query.order(order, desc=desc)
+            if limit is not None:
+                query = query.limit(limit)
+            res = query.execute()
+            return res.data or []
+        except Exception as exc:
+            _warn(f"list_salons: fetching {table} rows failed: {exc}")
+            return []
+
     def list_salons(self):
         """All salons (newest first) decorated with per-salon counts + revenue.
 
         Note: the `salons` table orders by `created_on` (not `created_at`) and
         the `accounts` table links to salons via `auth_id` (not `account_id`).
+        Each per-table query is independent � if one table is inaccessible
+        (RLS error, network blip, etc.) the remaining columns simply show 0
+        or empty rather than wiping the entire listing.
         """
-        salons = (
-            _sb().table("salons")
-            .select("*")
-            .order("created_on", desc=True)
-            .execute()
-        ).data or []
+        # Core: the salons themselves.  If this fails the dashboard has nothing
+        # to show, so we let the exception propagate (caller shows a flash msg).
+        salons = self._fetch_all("salons", "*", order="created_on", desc=True)
 
-        def counts_by_account(table, col="account_id"):
-            rows = _sb().table(table).select(col).execute().data or []
-            counts = {}
-            for r in rows:
-                aid = r.get(col)
-                if aid is not None:
-                    counts[aid] = counts.get(aid, 0) + 1
-            return counts
-
-        accounts = counts_by_account("accounts", col="auth_id")
-        staff = counts_by_account("staff")
-        services = counts_by_account("services")
-        customers = counts_by_account("customers")
-        appointments = counts_by_account("appointments")
+        accounts = self._count_rows("accounts", col="auth_id")
+        staff = self._count_rows("staff")
+        services = self._count_rows("services")
+        customers = self._count_rows("customers")
+        appointments = self._count_rows("appointments")
 
         # Usernames (login emails) per salon so the dashboard can list the
         # accounts sitting under each salon.
-        acc_rows = (
-            _sb().table("accounts")
-            .select("auth_id, username")
-            .execute()
-        ).data or []
+        acc_rows = self._fetch_all("accounts", "auth_id, username")
         accounts_by_salon = {}
         for r in acc_rows:
             aid = r.get("auth_id")
             if aid is not None:
                 accounts_by_salon.setdefault(aid, []).append(r.get("username"))
 
-        bill_rows = (
-            _sb().table("bills")
-            .select("account_id, grand_total")
-            .execute()
-        ).data or []
+        bill_rows = self._fetch_all("bills", "account_id, grand_total")
         bills_count = {}
         revenue = {}
         for r in bill_rows:
@@ -1769,6 +1951,9 @@ class AdminRepository:
         for s in salons:
             d = dict(s)
             sid = s.get("id")
+            # Ensure plan never shows as empty/None � fall back to "free".
+            if not d.get("plan"):
+                d["plan"] = "free"
             d["accounts_count"] = accounts.get(sid, 0)
             d["account_names"] = accounts_by_salon.get(sid, [])
             d["staff_count"] = staff.get(sid, 0)
@@ -1793,70 +1978,38 @@ class AdminRepository:
             return None
 
         def count(table):
-            res = (
-                _sb().table(table)
-                .select("id", count="exact")
-                .eq("account_id", salon_id)
-                .execute()
-            )
-            return res.count or 0
+            try:
+                res = (
+                    _sb().table(table)
+                    .select("id", count="exact")
+                    .eq("account_id", salon_id)
+                    .execute()
+                )
+                return res.count or 0
+            except Exception as exc:
+                _warn(f"salon_details: counting {table} for salon {salon_id} failed: {exc}")
+                return 0
 
-        accounts = (
-            _sb().table("accounts")
-            .select("id, username, auth_level")
-            .eq("auth_id", salon_id)
-            .order("id")
-            .execute()
-        ).data or []
-
-        staff = (
-            _sb().table("staff")
-            .select("id, name, role, phone, email, total_revenue, services_done")
-            .eq("account_id", salon_id)
-            .order("id")
-            .execute()
-        ).data or []
-
-        bills = (
-            _sb().table("bills")
-            .select("id, client_name, grand_total, payment_mode, created_at")
-            .eq("account_id", salon_id)
-            .order("created_at", desc=True)
-            .limit(10)
-            .execute()
-        ).data or []
-
-        bill_totals = (
-            _sb().table("bills")
-            .select("grand_total")
-            .eq("account_id", salon_id)
-            .execute()
-        ).data or []
-
-        subscriptions = (
-            _sb().table("subscriptions")
-            .select("*")
-            .eq("salon_id", salon_id)
-            .order("created_at", desc=True)
-            .execute()
-        ).data or []
-
-        pending_orders = (
-            _sb().table("pendingorders")
-            .select("*")
-            .eq("salon_id", salon_id)
-            .order("created_at", desc=True)
-            .limit(5)
-            .execute()
-        ).data or []
-
-        deletion_requests = (
-            _sb().table("deletion_requests")
-            .select("*")
-            .eq("salon_id", salon_id)
-            .order("requested_at", desc=True)
-            .execute()
-        ).data or []
+        accounts = self._fetch_all("accounts", "id, username, auth_level",
+                                   eq_col="auth_id", eq_val=salon_id, order="id")
+        staff = self._fetch_all("staff",
+                                "id, name, role, phone, email, total_revenue, services_done",
+                                eq_col="account_id", eq_val=salon_id, order="id")
+        bills = self._fetch_all("bills",
+                                "id, client_name, grand_total, payment_mode, created_at",
+                                eq_col="account_id", eq_val=salon_id, order="created_at",
+                                desc=True, limit=10)
+        bill_totals = self._fetch_all("bills", "grand_total",
+                                      eq_col="account_id", eq_val=salon_id)
+        subscriptions = self._fetch_all("subscriptions", "*",
+                                        eq_col="salon_id", eq_val=salon_id,
+                                        order="created_at", desc=True)
+        pending_orders = self._fetch_all("pendingorders", "*",
+                                         eq_col="salon_id", eq_val=salon_id,
+                                         order="created_at", desc=True, limit=5)
+        deletion_requests = self._fetch_all("deletion_requests", "*",
+                                            eq_col="salon_id", eq_val=salon_id,
+                                            order="requested_at", desc=True)
 
         return {
             "salon": dict(salon),

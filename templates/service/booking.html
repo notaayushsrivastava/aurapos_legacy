@@ -12,9 +12,15 @@
     <div data-anim="up" class="p-6 sm:p-8 bg-gradient-to-r from-[#1c0b2e] via-[#0d0d16] to-[#050508] border-b border-neutral-200 dark:border-neutral-800 text-white relative overflow-hidden">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
+          {% if salon and salon.logo %}
+          <div class="w-12 h-12 rounded-2xl bg-white dark:bg-neutral-800 flex items-center justify-center shadow-md overflow-hidden shrink-0">
+            <img src="{{ salon.logo }}" alt="{{ salon.salon_name }}" class="w-full h-full object-cover">
+          </div>
+          {% else %}
           <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-neon-magenta to-neon-cyan flex items-center justify-center text-white font-bold shadow-md">
             <i data-lucide="scissors" class="w-5 h-5"></i>
           </div>
+          {% endif %}
           <div>
             <h1 class="text-xl font-extrabold tracking-tight">{{ salon.salon_name if salon else 'Aura Luxury Salon & Studio' }}</h1>
             <p class="text-xs text-neutral-300 mt-0.5">

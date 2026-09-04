@@ -1322,7 +1322,7 @@ def api_update_profile():
     return jsonify({"success": True, "message": "Salon profile updated."})
 
 
-# Studio-exclusive salon branding: logo is stored as a base64 data URL.
+# Studio-exclusive salon branding: logo is stored in Supabase Storage.
 ALLOWED_LOGO_MIMES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 
 
@@ -1330,7 +1330,11 @@ ALLOWED_LOGO_MIMES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 @role_required("admin")
 @tier_required("studio")
 def api_upload_logo():
-    """Handle salon logo image uploads (Studio tier only)."""
+    """Handle salon logo image uploads (Studio tier only).
+
+    Uploads to Supabase Storage and stores the public URL in the database.
+    Falls back to base64 data URL if storage is unavailable.
+    """
     salon_id = session.get("id", 1)
     file = request.files.get("logo")
     if not file or not file.filename:
@@ -1346,9 +1350,16 @@ def api_upload_logo():
     if len(blob) > MAX_LOGO_SIZE_BYTES:
         return jsonify({"success": False, "message": "Logo is too large — the maximum size is 2 MB."}), 400
 
+    # Try Supabase Storage first
+    public_url = upload_logo_to_storage(salon_id, blob, mime)
+    if public_url:
+        authRepo.set_logo_from_storage(salon_id, public_url)
+        return jsonify({"success": True, "message": "Salon logo updated.", "logo": public_url})
+
+    # Fallback to base64 data URL if storage fails
     data_url = f"data:{mime};base64,{base64.b64encode(blob).decode('ascii')}"
     authRepo.update_salon_logo(salon_id, data_url)
-    return jsonify({"success": True, "message": "Salon logo updated.", "logo": data_url})
+    return jsonify({"success": True, "message": "Salon logo updated (local).", "logo": data_url})
 
 
 @app.delete('/api/settings/logo')
@@ -1356,7 +1367,7 @@ def api_upload_logo():
 @tier_required("studio")
 def api_remove_logo():
     """Clear the salon logo (Studio tier only)."""
-    authRepo.update_salon_logo(session.get("id", 1), None)
+    authRepo.clear_logo(session.get("id", 1))
     return jsonify({"success": True, "message": "Salon logo removed."})
 
 
@@ -1377,6 +1388,29 @@ def api_change_password():
     if ok:
         session["password"] = new
     return jsonify({"success": ok, "message": message}), (200 if ok else 400)
+
+
+@app.get('/api/settings/payment-methods')
+@login_required
+def api_get_payment_methods():
+    salon_id = session.get("id", 1)
+    methods = authRepo.get_payment_methods(salon_id)
+    return jsonify({"success": True, "methods": methods})
+
+
+@app.put('/api/settings/payment-methods')
+@role_required("admin")
+def api_update_payment_methods():
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    methods = data.get("methods", {})
+    # Sanitize: only allow expected keys
+    sanitized = {
+        "upi": str(methods.get("upi", "")).strip()[:100],
+        "card_terminal": str(methods.get("card_terminal", "")).strip()[:100],
+    }
+    authRepo.update_payment_methods(salon_id, sanitized)
+    return jsonify({"success": True, "message": "Payment methods updated.", "methods": sanitized})
 
 
 @app.get('/api/settings/accounts')
@@ -1778,7 +1812,10 @@ def admin_grant_plan():
 @admin_bp.get("/api/salon/<int:salon_id>")
 @admin_required
 def admin_salon_details(salon_id):
-    details = adminRepo.salon_details(salon_id)
+    try:
+        details = adminRepo.salon_details(salon_id)
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Error loading salon #{salon_id}: {exc}"}), 500
     if not details:
         return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
     return jsonify({"success": True, **details})
