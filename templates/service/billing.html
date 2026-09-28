@@ -45,7 +45,7 @@
     <div data-anim="up" data-delay="140" class="lg:col-span-7 min-w-0 space-y-4">
       
       <!-- Search & Category Filters -->
-      <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#0c0c12] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
+      <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#141210] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
         
         <!-- Search Input -->
         <div class="relative flex items-center">
@@ -77,7 +77,7 @@
       <!-- SKELETON LOADER STATE -->
       <div x-show="isLoading" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
         <template x-for="i in 6" :key="i">
-          <div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200 dark:border-neutral-800 animate-pulse space-y-3">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200 dark:border-neutral-800 animate-pulse space-y-3">
             <div class="flex justify-between items-start">
               <div class="space-y-1.5 flex-1 pr-4">
                 <div class="h-3 w-16 bg-neutral-200 dark:bg-neutral-800 rounded"></div>
@@ -96,7 +96,7 @@
       <!-- SERVICE CARDS GRID -->
       <div x-show="!isLoading" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <template x-for="service in filteredServices" :key="service.id">
-          <div class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-violet-500/50 dark:hover:border-violet-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-violet-500/50 dark:hover:border-violet-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
             
             <div>
               <div class="flex items-start justify-between gap-2">
@@ -134,7 +134,7 @@
 
         <!-- No Results Fallback -->
         <template x-if="filteredServices.length === 0">
-          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
             <i data-lucide="search-x" class="w-8 h-8 mx-auto text-neutral-400 mb-2"></i>
             <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No services match your search.</p>
             <p class="text-xs text-neutral-400 mt-1">Try another keyword or add as a custom line item.</p>
@@ -147,7 +147,7 @@
     <!-- ================= RIGHT COLUMN: DYNAMIC BILL SUMMARY ================= -->
     <div data-anim="up" data-delay="220" class="lg:col-span-5 min-w-0 sticky top-20 space-y-4">
       
-      <div class="bg-white dark:bg-[#0c0c12] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-md flex flex-col overflow-hidden">
+      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-md flex flex-col overflow-hidden">
         
         <!-- Header & Customer Metadata -->
         <div class="p-4 sm:p-5 border-b border-neutral-200/80 dark:border-neutral-800 space-y-3">
@@ -192,7 +192,7 @@
 
             <!-- Live Search Results Dropdown -->
             <div x-show="showCustomerResults" x-cloak
-                 class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#0f0f16] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
+                 class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
               <template x-if="customerSearching">
                 <p class="px-3 py-2.5 text-[11px] text-neutral-400">Searching customers…</p>
               </template>
@@ -286,7 +286,7 @@
         </div>
 
         <!-- Calculations & Tax Summary -->
-        <div class="p-4 sm:p-5 bg-neutral-50 dark:bg-[#0f0f15] border-t border-neutral-200/80 dark:border-neutral-800 space-y-2 text-xs">
+        <div class="p-4 sm:p-5 bg-neutral-50 dark:bg-[#181512] border-t border-neutral-200/80 dark:border-neutral-800 space-y-2 text-xs">
           
           <!-- Subtotal -->
           <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
@@ -341,7 +341,7 @@
             
             <button @click="openPaymentModal()" 
                     :disabled="billItems.length === 0"
-                    class="col-span-2 py-3 px-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
+                    class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
               <i data-lucide="check-circle" class="w-4 h-4"></i>
               <span>Collect Payment</span>
             </button>
@@ -374,7 +374,7 @@
        x-transition:leave-start="opacity-100 scale-100"
        x-transition:leave-end="opacity-0 scale-95">
     
-    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
          @click.away="showPaymentModal = false">
       
       <div class="flex items-center justify-between">
@@ -474,7 +474,7 @@
        x-transition:enter-start="opacity-0 scale-95"
        x-transition:enter-end="opacity-100 scale-100">
     
-    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
          @click.away="showCustomItemModal = false">
       
       <div class="flex items-center justify-between">
@@ -507,7 +507,7 @@
 
       <div class="flex gap-2 pt-2">
         <button @click="showCustomItemModal = false" class="flex-1 py-2 rounded-xl border text-xs font-semibold">Cancel</button>
-        <button @click="addCustomItem()" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-xs font-bold">Add to Bill</button>
+        <button @click="addCustomItem()" class="flex-1 py-2 rounded-xl btn-brand text-white text-xs font-bold">Add to Bill</button>
       </div>
 
     </div>
@@ -524,7 +524,7 @@
        x-transition:leave-start="opacity-100 scale-100"
        x-transition:leave-end="opacity-0 scale-95">
 
-    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
          @click.away="showNewCustomerModal = false">
 
       <div class="flex items-center justify-between">
@@ -578,7 +578,7 @@
           Cancel
         </button>
         <button @click="createCustomer()" :disabled="savingCustomer"
-                class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
+                class="flex-1 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
           <i data-lucide="user-plus" class="w-4 h-4"></i>
           <span x-text="savingCustomer ? 'Saving…' : 'Create &amp; Attach'"></span>
         </button>

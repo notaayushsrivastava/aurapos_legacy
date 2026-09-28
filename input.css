@@ -2,127 +2,286 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ══════════════════════════════════════════════════════════════════════════
+   AURA — DESIGN SYSTEM  ·  "EMBER"
+   ─────────────────────────────────────────────────────────────────────────
+   Warm-ink neutrals + a single ember→gold signal accent.
+
+   This replaces the previous neon-magenta / neon-cyan / neon-violet system
+   at the TOKEN layer, so every existing utility in the templates
+   (`text-neon-cyan`, `bg-violet-600`, `border-violet-500/20`, …) rebrands
+   automatically — no call-site edits required.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── INK — warm neutral ramp (overrides Tailwind `neutral`) ─────────── */
+  --color-neutral-50:  #faf9f7;
+  --color-neutral-100: #f4f2ed;
+  --color-neutral-200: #e9e5dd;
+  --color-neutral-300: #d6d1c4;
+  --color-neutral-400: #a9a395;
+  --color-neutral-500: #7d7769;
+  --color-neutral-600: #5b564b;
+  --color-neutral-700: #454037;
+  --color-neutral-800: #2a2721;
+  --color-neutral-900: #191714;
+  --color-neutral-950: #0d0c0a;
+
+  /* ── EMBER — brand ramp (overrides Tailwind `violet`) ───────────────── */
+  --color-violet-50:  #fff7ed;
+  --color-violet-100: #ffedd5;
+  --color-violet-200: #fed7aa;
+  --color-violet-300: #fdba74;
+  --color-violet-400: #fb923c;
+  --color-violet-500: #f97316;
+  --color-violet-600: #c2410c;
+  --color-violet-700: #9a3412;
+  --color-violet-800: #7c2d12;
+  --color-violet-900: #5c1f0c;
+  --color-violet-950: #2c0f06;
+
+  /* ── GOLD — secondary accent (overrides Tailwind `cyan`) ────────────── */
+  --color-cyan-50:  #fffbeb;
+  --color-cyan-100: #fef3c7;
+  --color-cyan-200: #fde68a;
+  --color-cyan-300: #fcd34d;
+  --color-cyan-400: #fbbf24;
+  --color-cyan-500: #f59e0b;
+  --color-cyan-600: #d97706;
+  --color-cyan-700: #b45309;
+  --color-cyan-800: #92400e;
+  --color-cyan-900: #78350f;
+  --color-cyan-950: #2c1305;
+
+  /* ── AMBER bridge (overrides Tailwind `fuchsia`) ────────────────────── */
+  --color-fuchsia-50:  #fffbeb;
+  --color-fuchsia-100: #fef3c7;
+  --color-fuchsia-400: #fbbf24;
+  --color-fuchsia-500: #f59e0b;
+  --color-fuchsia-600: #d97706;
+  --color-fuchsia-950: #3b1d05;
+
+  /* ── Legacy `aura` scale — kept so older markup still resolves ──────── */
+  --color-aura-50:  #faf9f7;
+  --color-aura-100: #f4f2ed;
+  --color-aura-200: #e9e5dd;
+  --color-aura-300: #d6d1c4;
+  --color-aura-400: #a9a395;
+  --color-aura-500: #7d7769;
+  --color-aura-600: #5b564b;
+  --color-aura-700: #454037;
+  --color-aura-800: #2a2721;
+  --color-aura-900: #191714;
+  --color-aura-950: #0d0c0a;
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --ease-ember: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap:  cubic-bezier(0.34, 1.42, 0.64, 1);
+}
+
+/* ── Mode-aware accent tokens ──────────────────────────────────────────────
+   `@theme inline` inlines the `var()` reference into every generated utility
+   instead of copying a literal value. That makes `text-neon-cyan`,
+   `border-neon-magenta`, `bg-neon-violet/10` … resolve through the two blocks
+   below, so the same class name is luminous on ink and legible on paper.   */
+@theme inline {
+  --color-neon-cyan:    var(--brand-accent);
+  --color-neon-magenta: var(--brand-primary);
+  --color-neon-violet:  var(--brand-deep);
+  --color-neon-emerald: var(--brand-ok);
+  --color-neon-amber:   var(--brand-warn);
+}
+
+/* Light — "Paper" */
+:root {
+  color-scheme: light;
+  --brand-primary: #c2410c;
+  --brand-accent:  #b45309;
+  --brand-deep:    #9a3412;
+  --brand-ok:      #047857;
+  --brand-warn:    #b45309;
+}
+
+/* Dark — "Ink" */
+.dark {
+  color-scheme: dark;
+  --brand-primary: #fb923c;
+  --brand-accent:  #fbbf24;
+  --brand-deep:    #fdba74;
+  --brand-ok:      #34d399;
+  --brand-warn:    #fcd34d;
+}
+
+/* ══ BASE ════════════════════════════════════════════════════════════════ */
 @layer base {
-  :root {
-    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
-  }
-  
   html {
     font-family: var(--font-sans);
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One visible, on-brand focus ring for every interactive element.
+     Keyboard users get the ember ring; nothing removes it. */
+  :focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: rgba(251, 146, 60, 0.3);
+    color: #191714;
+  }
+  .dark ::selection {
+    background: rgba(251, 191, 36, 0.28);
+    color: #faf9f7;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(125, 119, 105, 0.32);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(125, 119, 105, 0.55);
+    background-clip: padding-box;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(169, 163, 149, 0.22);
+    background-clip: padding-box;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(169, 163, 149, 0.4);
+    background-clip: padding-box;
+  }
+
+  /* Respect the OS motion preference across every animated surface. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-@theme {
-  /* Aura Palette */
-  --color-aura-50: #f5f7fa;
-  --color-aura-100: #ebeff4;
-  --color-aura-200: #d3dde8;
-  --color-aura-300: #adbfd4;
-  --color-aura-400: #819cbb;
-  --color-aura-500: #607fa4;
-  --color-aura-600: #4a6589;
-  --color-aura-700: #3c5270;
-  --color-aura-800: #34455d;
-  --color-aura-900: #2e3c4e;
-  --color-aura-950: #090a0f;
+/* ══ COMPONENTS ══════════════════════════════════════════════════════════ */
+@layer components {
+  /* Numeric readout — tabular figures so money never jitters. */
+  .font-mono-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
 
-  /* Neon Palette */
-  --color-neon-cyan: #00f5d4;
-  --color-neon-magenta: #f72585;
-  --color-neon-violet: #7b2cbf;
-  --color-neon-emerald: #10b981;
-  --color-neon-amber: #f59e0b;
+  /* Brand gradient — reserved for the logo mark, tier badges and thin rules.
+     Deliberately NOT used behind small white text: its light stops would fail
+     WCAG AA at 12px. Buttons use .btn-brand instead. */
+  .brand-gradient {
+    background-image: linear-gradient(112deg, #f97316 0%, #ea580c 46%, #b45309 100%);
+  }
+
+  /* Primary action — solid ember, legible under white text at every size. */
+  .btn-brand {
+    background-color: #c2410c;
+    color: #ffffff;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 10px 26px -12px rgba(194, 65, 12, 0.72);
+    transition:
+      background-color 0.22s var(--ease-ember),
+      box-shadow 0.22s var(--ease-ember),
+      transform 0.22s var(--ease-ember);
+  }
+  .btn-brand:hover {
+    background-color: #ea580c;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 14px 34px -12px rgba(234, 88, 12, 0.78);
+  }
+  .btn-brand:active { transform: scale(0.985); }
+  .dark .btn-brand { background-color: #d14809; }
+  .dark .btn-brand:hover { background-color: #ea580c; }
+
+  /* Card — the double-bezel shell used for major surfaces. */
+  .card {
+    background-color: #ffffff;
+    border: 1px solid #e9e5dd;
+    border-radius: 1.5rem;
+    box-shadow:
+      0 1px 2px rgba(25, 23, 20, 0.04),
+      0 14px 36px -26px rgba(25, 23, 20, 0.4);
+  }
+  .dark .card {
+    background-color: #141210;
+    border-color: #2a2721;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 20px 48px -30px rgba(0, 0, 0, 0.95);
+  }
+
+  /* Hairline — a 1px divider that survives both modes. */
+  .hairline { border-color: rgba(25, 23, 20, 0.08); }
+  .dark .hairline { border-color: rgba(255, 255, 255, 0.07); }
+
+  /* Glass — sticky chrome ONLY (navbars, popovers).
+     Never on scrolling content: continuous backdrop repaints tank mobile FPS. */
+  .glass-nav {
+    background: rgba(250, 249, 247, 0.82);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  }
+  .dark .glass-nav {
+    background: rgba(13, 12, 10, 0.82);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .dark .glass {
+    background: rgba(20, 18, 16, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Grain — film texture for hero surfaces. Absolute/fixed, never scrolling. */
+  .noise {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+  }
+
+  /* Legacy glow helpers — remapped from neon to ember/gold so existing
+     markup that still references them stays on-brand. */
+  .glow-magenta { box-shadow: 0 0 40px -10px rgba(251, 146, 60, 0.42); }
+  .glow-cyan    { box-shadow: 0 0 40px -10px rgba(251, 191, 36, 0.4); }
+  .glow-violet  { box-shadow: 0 0 40px -10px rgba(194, 65, 12, 0.42); }
+  .glow-text-cyan    { text-shadow: 0 0 20px rgba(251, 191, 36, 0.45); }
+  .glow-text-magenta { text-shadow: 0 0 20px rgba(251, 146, 60, 0.45); }
 }
 
-/* Custom Utilities */
-.font-mono-num {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.4);
-  border-radius: 9999px;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(75, 85, 99, 0.5);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(107, 114, 128, 0.7);
-}
-
-/* Neon Glows for Landing Page */
-.glow-magenta {
-  box-shadow: 0 0 40px -10px rgba(247, 37, 133, 0.45);
-}
-
-.glow-cyan {
-  box-shadow: 0 0 40px -10px rgba(0, 245, 212, 0.45);
-}
-
-.glow-violet {
-  box-shadow: 0 0 40px -10px rgba(123, 44, 191, 0.45);
-}
-
-.glow-text-cyan {
-  text-shadow: 0 0 20px rgba(0, 245, 212, 0.5);
-}
-
-.glow-text-magenta {
-  text-shadow: 0 0 20px rgba(247, 37, 133, 0.5);
-}
-
-/* Glassmorphism */
-.glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.dark .glass {
-  background: rgba(18, 18, 23, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(229, 231, 235, 0.8);
-}
-
-.dark .glass-card {
-  background: rgba(24, 24, 27, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(39, 39, 42, 0.8);
-}
-
-/* Print Receipt Styles */
+/* ══ PRINT — 80mm thermal receipt ════════════════════════════════════════ */
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #printable-receipt, #printable-receipt * {
-    visibility: visible;
-  }
+  body * { visibility: hidden; }
+  #printable-receipt, #printable-receipt * { visibility: visible; }
   #printable-receipt {
     position: absolute;
     left: 0;
@@ -130,11 +289,9 @@
     width: 80mm;
     margin: 0;
     padding: 10px;
-    background: white !important;
-    color: black !important;
+    background: #ffffff !important;
+    color: #000000 !important;
     font-size: 12px;
   }
-  .no-print {
-    display: none !important;
-  }
+  .no-print { display: none !important; }
 }

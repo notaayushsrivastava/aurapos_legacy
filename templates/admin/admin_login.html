@@ -12,11 +12,11 @@
     [x-cloak] { display: none !important; }
   </style>
 </head>
-<body class="bg-neutral-100 dark:bg-[#050508] text-neutral-900 dark:text-neutral-100 min-h-screen grid place-items-center p-4 font-sans antialiased">
+<body class="bg-neutral-100 dark:bg-[#0d0c0a] text-neutral-900 dark:text-neutral-100 min-h-screen grid place-items-center p-4 font-sans antialiased">
 
   <div class="w-full max-w-sm">
     <div class="flex items-center justify-center gap-2.5 mb-6">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-neon-magenta to-neon-cyan grid place-items-center text-white font-black">A</div>
+      <div class="w-9 h-9 rounded-xl brand-gradient grid place-items-center text-white font-black">A</div>
       <span class="text-lg font-extrabold tracking-tight">AuraPOS <span class="text-neutral-400 font-bold">Admin</span></span>
     </div>
 
@@ -33,7 +33,7 @@
 
     {% if login_enabled %}
       <form method="post" action="{{ url_for('admin.admin_login') }}"
-            class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 p-6 space-y-4 shadow-2xl">
+            class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 p-6 space-y-4 shadow-2xl">
         <div>
           <label class="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5">Username</label>
           <input name="username" required autocomplete="username" value="{{ admin_user }}"
@@ -51,7 +51,7 @@
         <p class="text-[10px] text-center text-neutral-400">Limited to 3 attempts per 10 seconds.</p>
       </form>
     {% else %}
-      <div class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 p-6 text-sm text-neutral-500 dark:text-neutral-400 text-center">
+      <div class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 p-6 text-sm text-neutral-500 dark:text-neutral-400 text-center">
         Admin login is disabled. Set <code class="text-violet-500 dark:text-violet-400">ADMIN_PASSWORD</code> in the environment to enable it.
       </div>
     {% endif %}

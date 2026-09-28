@@ -1,9 +1,11 @@
+{%- from "_brand.html" import aura_mark -%}
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'%3E%3C/circle%3E%3Cpath d='M8.12 8.12 12 12'%3E%3C/path%3E%3Cpath d='M20 4 8.12 15.88'%3E%3C/path%3E%3Ccircle cx='6' cy='18' r='3'%3E%3C/circle%3E%3Cpath d='M14.8 14.8 20 20'%3E%3C/path%3E%3C/svg%3E">
+  <meta name="theme-color" content="#0d0c0a">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2410c'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke-width='1.7' opacity='.45' pathLength='100' stroke-dasharray='17 8'/%3E%3Cpath d='M9.4 23.8 16 8.2l6.6 15.6' stroke-width='2.7' stroke-linejoin='round'/%3E%3Cpath d='M12.4 18.6h7.2' stroke-width='2.7'/%3E%3C/g%3E%3C/svg%3E">
   <title>{% block title %}AuraPOS - Salon Billing & Management Software{% endblock %}</title>
   
   <!-- Preconnect Fonts -->
@@ -43,9 +45,9 @@
     .font-mono-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
     
     /* Neon Glows */
-    .glow-cyan { box-shadow: 0 0 35px -5px rgba(0, 245, 212, 0.4); }
-    .glow-magenta { box-shadow: 0 0 35px -5px rgba(247, 37, 133, 0.4); }
-    .glow-violet { box-shadow: 0 0 35px -5px rgba(123, 44, 191, 0.4); }
+    .glow-cyan { box-shadow: 0 0 35px -5px rgba(251, 191, 36, 0.4); }
+    .glow-magenta { box-shadow: 0 0 35px -5px rgba(251, 146, 60, 0.4); }
+    .glow-violet { box-shadow: 0 0 35px -5px rgba(194, 65, 12, 0.4); }
     
     /* Subtle glass */
     .glass-nav {
@@ -67,7 +69,7 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-neutral-50 text-neutral-900 dark:bg-[#050508] dark:text-neutral-100 min-h-screen flex flex-col font-sans transition-colors duration-200 antialiased selection:bg-neon-cyan selection:text-black"
+<body class="bg-neutral-50 text-neutral-900 dark:bg-[#0d0c0a] dark:text-neutral-100 min-h-screen flex flex-col font-sans transition-colors duration-200 antialiased selection:bg-neon-cyan selection:text-black"
       x-data="globalApp()">
 
   <!-- Interactive Flash Messages Toast Container -->
@@ -127,7 +129,7 @@
 
   {% if is_auth_app %}
     <!-- ================= AUTHENTICATED APP LAYOUT ================= -->
-    <div class="flex h-screen overflow-hidden bg-neutral-100 dark:bg-[#050508]" x-data="{ sidebarOpen: false }">
+    <div class="flex h-screen overflow-hidden bg-neutral-100 dark:bg-[#0d0c0a]" x-data="{ sidebarOpen: false }">
       
       <!-- Mobile Sidebar Backdrop -->
       <div x-show="sidebarOpen" 
@@ -143,13 +145,13 @@
 
       <!-- Left Sidebar Navigation -->
       <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
-             class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#0c0c12] border-r border-neutral-200 dark:border-neutral-800/80 flex flex-col transition-transform duration-200 ease-in-out lg:static lg:translate-x-0">
+             class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#141210] border-r border-neutral-200 dark:border-neutral-800/80 flex flex-col transition-transform duration-200 ease-in-out lg:static lg:translate-x-0">
         
         <!-- Brand Header -->
         <div class="h-16 flex items-center justify-between px-5 border-b border-neutral-200 dark:border-neutral-800/80">
           <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 group">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-neon-magenta via-violet-600 to-neon-cyan flex items-center justify-center text-white shadow-md shadow-neon-magenta/25 group-hover:scale-105 transition-transform">
-              <i data-lucide="scissors" class="w-5 h-5"></i>
+            <div class="w-9 h-9 rounded-xl brand-gradient grid place-items-center text-white shadow-md shadow-neon-magenta/25 group-hover:scale-105 transition-transform duration-200">
+              {{ aura_mark('w-5 h-5') }}
             </div>
             <div>
               <span class="text-base font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-1.5">
@@ -171,7 +173,7 @@
         <!-- Quick POS Sale CTA -->
         <div class="p-3 border-b border-neutral-200/60 dark:border-neutral-800/60">
           <a href="{{ url_for('billing') }}" 
-             class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan text-white text-sm font-semibold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98]">
+             class="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl btn-brand text-white text-sm font-semibold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98]">
             <i data-lucide="plus-circle" class="w-4 h-4"></i>
             <span>New Sale (POS)</span>
           </a>
@@ -210,7 +212,7 @@
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group opacity-70 text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-900/60">
             <i data-lucide="lock" class="w-4 h-4 text-neutral-400 dark:text-neutral-500"></i>
             <span>Reports</span>
-            <span class="ml-auto text-[8px] font-black px-1.5 py-0.5 rounded bg-gradient-to-r from-neon-magenta to-violet-600 text-white uppercase tracking-wider">Studio</span>
+            <span class="ml-auto text-[8px] font-black px-1.5 py-0.5 rounded btn-brand text-white uppercase tracking-wider">Studio</span>
           </a>
           {% endif %}
           {% endif %}
@@ -292,9 +294,9 @@
         <!-- Upgrade Promo -->
         <div class="px-3 pb-3">
           <a href="{{ url_for('upgrade') }}"
-             class="block p-3.5 rounded-2xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-violet-950/30 dark:via-[#12081f] dark:to-[#050508] border border-violet-200/60 dark:border-violet-500/20 hover:border-violet-400/70 transition-all">
+             class="block p-3.5 rounded-2xl bg-gradient-to-r from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-violet-950/30 dark:via-[#1c1410] dark:to-[#0d0c0a] border border-violet-200/60 dark:border-violet-500/20 hover:border-violet-400/70 transition-all">
             <div class="flex items-center gap-2">
-              <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-neon-magenta to-violet-600 text-white flex items-center justify-center shadow-sm">
+              <div class="w-7 h-7 rounded-lg brand-gradient text-white flex items-center justify-center shadow-sm">
                 <i data-lucide="crown" class="w-3.5 h-3.5"></i>
               </div>
               <p class="text-xs font-bold text-neutral-900 dark:text-white">
@@ -356,7 +358,7 @@
       <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
         
         <!-- Top App Bar (Mobile & Quick Actions) -->
-        <header class="h-16 bg-white/80 dark:bg-[#0c0c12]/80 backdrop-blur-md border-b border-neutral-200 dark:border-neutral-800/80 px-4 sm:px-6 flex items-center justify-between shrink-0">
+        <header class="h-16 bg-white/80 dark:bg-[#141210]/80 backdrop-blur-md border-b border-neutral-200 dark:border-neutral-800/80 px-4 sm:px-6 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-3">
             <button @click="sidebarOpen = true" class="lg:hidden p-2 rounded-xl text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800">
               <i data-lucide="menu" class="w-5 h-5"></i>
@@ -387,7 +389,7 @@
         </header>
 
         <!-- Content Area with Independent Scroll -->
-        <main class="flex-1 overflow-y-auto bg-neutral-50/50 dark:bg-[#050508]">
+        <main class="flex-1 overflow-y-auto bg-neutral-50/50 dark:bg-[#0d0c0a]">
           {% block content %}{% endblock %}
         </main>
       </div>
@@ -403,8 +405,8 @@
         
         <!-- Logo -->
         <a href="{{ url_for('index') }}" class="flex items-center gap-2.5 group">
-          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-neon-magenta via-violet-600 to-neon-cyan flex items-center justify-center text-white shadow-lg shadow-neon-cyan/20 group-hover:scale-105 transition-transform">
-            <i data-lucide="scissors" class="w-4 h-4"></i>
+          <div class="w-8 h-8 rounded-xl brand-gradient grid place-items-center text-white shadow-lg shadow-neon-cyan/20 group-hover:scale-105 transition-transform duration-200">
+            {{ aura_mark('w-4 h-4') }}
           </div>
           <span class="text-lg font-extrabold tracking-tight text-neutral-900 dark:text-white">
             Aura<span class="text-neon-cyan">POS</span>
@@ -455,11 +457,11 @@
     </main>
 
     <!-- Public Footer -->
-    <footer class="bg-white dark:bg-[#09090e] border-t border-neutral-200 dark:border-neutral-800/80 py-12 px-4 sm:px-6 lg:px-8 text-neutral-600 dark:text-neutral-400 text-sm">
+    <footer class="bg-white dark:bg-[#100e0c] border-t border-neutral-200 dark:border-neutral-800/80 py-12 px-4 sm:px-6 lg:px-8 text-neutral-600 dark:text-neutral-400 text-sm">
       <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-2">
-          <div class="w-6 h-6 rounded-lg bg-gradient-to-tr from-neon-magenta to-neon-cyan flex items-center justify-center text-white">
-            <i data-lucide="scissors" class="w-3 h-3"></i>
+          <div class="w-6 h-6 rounded-lg brand-gradient grid place-items-center text-white">
+            {{ aura_mark('w-3.5 h-3.5') }}
           </div>
           <span class="font-bold text-neutral-900 dark:text-white">AuraPOS</span>
           <span class="text-xs text-neutral-400">— Ultra-minimalist Salon Billing & Ops</span>
@@ -629,7 +631,7 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
          @click.self="$store.ui.answer(false)">
-      <div class="bg-white dark:bg-[#0f0f16] w-full max-w-sm rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+      <div class="bg-white dark:bg-[#181512] w-full max-w-sm rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
            x-show="$store.ui.confirmOpen"
            x-transition:enter="transition ease-out duration-200"
            x-transition:enter-start="opacity-0 scale-95"
@@ -656,7 +658,7 @@
                   x-text="$store.ui.confirmOpts.cancelText"></button>
           <button @click="$store.ui.answer(true)"
                   class="flex-1 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition-all hover:opacity-95"
-                  :class="$store.ui.confirmOpts.danger ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25' : 'bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan shadow-neon-magenta/25'"
+                  :class="$store.ui.confirmOpts.danger ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25' : 'btn-brand shadow-neon-magenta/25'"
                   x-text="$store.ui.confirmOpts.confirmText"></button>
         </div>
 

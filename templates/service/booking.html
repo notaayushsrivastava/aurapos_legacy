@@ -1,15 +1,16 @@
 {% extends "layout.html" %}
+{% from "_brand.html" import aura_mark %}
 
 {% block title %}Book Salon Appointment — Aura Salon{% endblock %}
 
 {% block public_content %}
-<div class="min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-10 bg-neutral-100 dark:bg-[#050508] flex items-center justify-center"
+<div class="min-h-[calc(100vh-4rem)] p-4 sm:p-6 lg:p-10 bg-neutral-100 dark:bg-[#0d0c0a] flex items-center justify-center"
      x-data='clientBookingApp({{ salon.id if salon else 1 }}, {{ services | tojson }}, {{ staff | tojson }}, {{ opening_hours | tojson }})'>
   
-  <div class="w-full max-w-3xl bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+  <div class="w-full max-w-3xl bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
     
     <!-- Header Banner -->
-    <div data-anim="up" class="p-6 sm:p-8 bg-gradient-to-r from-[#1c0b2e] via-[#0d0d16] to-[#050508] border-b border-neutral-200 dark:border-neutral-800 text-white relative overflow-hidden">
+    <div data-anim="up" class="p-6 sm:p-8 bg-gradient-to-r from-[#241a12] via-[#141210] to-[#0d0c0a] border-b border-neutral-200 dark:border-neutral-800 text-white relative overflow-hidden">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           {% if salon and salon.logo %}
@@ -17,8 +18,8 @@
             <img src="{{ salon.logo }}" alt="{{ salon.salon_name }}" class="w-full h-full object-cover">
           </div>
           {% else %}
-          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-neon-magenta to-neon-cyan flex items-center justify-center text-white font-bold shadow-md">
-            <i data-lucide="scissors" class="w-5 h-5"></i>
+          <div class="w-10 h-10 rounded-2xl brand-gradient grid place-items-center text-white shadow-md">
+            {{ aura_mark('w-5 h-5') }}
           </div>
           {% endif %}
           <div>
@@ -99,7 +100,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
           <template x-for="s in filteredServices" :key="s.id">
             <div @click="toggleService(s)" 
-                 :class="isServiceSelected(s.id) ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#0f0f16]'"
+                 :class="isServiceSelected(s.id) ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#181512]'"
                  class="p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between hover:border-violet-400">
               
               <div>
@@ -131,7 +132,7 @@
 
           <button @click="nextStep()" 
                   :disabled="selectedServices.length === 0"
-                  class="px-6 py-3 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center gap-1.5">
+                  class="px-6 py-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center gap-1.5">
             <span>Continue to Stylist &amp; Time</span>
             <i data-lucide="arrow-right" class="w-4 h-4"></i>
           </button>
@@ -196,7 +197,7 @@
           </button>
           <button @click="step = 3" 
                   :disabled="!selectedSlot"
-                  class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1">
+                  class="px-6 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1">
             <span>Next: Client Details</span>
             <i data-lucide="arrow-right" class="w-4 h-4"></i>
           </button>
@@ -276,7 +277,7 @@
        x-transition:enter-start="opacity-0 scale-95"
        x-transition:enter-end="opacity-100 scale-100">
     
-    <div class="bg-white dark:bg-[#0f0f16] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 text-center space-y-4">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 text-center space-y-4">
       
       <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center justify-center">
         <i data-lucide="check" class="w-7 h-7"></i>

@@ -8,7 +8,7 @@
   
   <!-- Active Subscription Status Banner (owner only) -->
   {% if session.get('auth_level', 'admin') == 'admin' %}
-  <div data-anim="up" class="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-violet-100 via-fuchsia-50 to-cyan-50 border border-violet-200 dark:from-violet-950/40 dark:via-[#12081f] dark:to-[#050508] dark:border-violet-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div data-anim="up" class="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-violet-100 via-fuchsia-50 to-cyan-50 border border-violet-200 dark:from-violet-950/40 dark:via-[#1c1410] dark:to-[#0d0c0a] dark:border-violet-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="flex items-center gap-3.5">
       <div class="w-10 h-10 rounded-2xl bg-violet-100 dark:bg-violet-600/20 border border-violet-300 dark:border-violet-500/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center shrink-0">
         <i data-lucide="crown" class="w-5 h-5"></i>
@@ -30,11 +30,11 @@
 
     <div class="flex items-center gap-2">
       {% if is_studio %}
-      <a href="{{ url_for('settings') }}" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
+      <a href="{{ url_for('settings') }}" class="px-3.5 py-2 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
         Manage Subscription
       </a>
       {% else %}
-      <a href="{{ url_for('upgrade') }}" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
+      <a href="{{ url_for('upgrade') }}" class="px-3.5 py-2 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold transition-colors shadow-sm">
         <i data-lucide="crown" class="w-3.5 h-3.5 inline"></i> Upgrade Plan
       </a>
       {% endif %}
@@ -47,7 +47,7 @@
     
     <!-- KPI 1: Daily Revenue (hidden for Billing Desk) -->
     {% if can_view_revenue %}
-    <div data-anim="up" class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+    <div data-anim="up" class="p-5 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
       <div class="flex items-center justify-between">
         <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Today's Total Sales</span>
         <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -68,7 +68,7 @@
     {% endif %}
 
     <!-- KPI 2: Appointments -->
-    <div data-anim="up" data-delay="80" class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+    <div data-anim="up" data-delay="80" class="p-5 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
       <div class="flex items-center justify-between">
         <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Total Bookings Today</span>
         <div class="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
@@ -84,7 +84,7 @@
 
     <!-- KPI 3: Avg Ticket Size (hidden for Billing Desk) -->
     {% if can_view_revenue %}
-    <div data-anim="up" data-delay="160" class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+    <div data-anim="up" data-delay="160" class="p-5 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
       <div class="flex items-center justify-between">
         <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Average Ticket Size</span>
         <div class="w-8 h-8 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
@@ -105,7 +105,7 @@
     {% endif %}
 
     <!-- KPI 4: Staff on Floor -->
-    <div data-anim="up" data-delay="240" class="p-5 rounded-3xl bg-white dark:bg-[#0c0c12] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
+    <div data-anim="up" data-delay="240" class="p-5 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group">
       <div class="flex items-center justify-between">
         <span class="text-xs font-semibold text-neutral-500 dark:text-neutral-400">Active Stylists</span>
         <div class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -125,7 +125,7 @@
   <div data-anim="up" data-delay="300" class="grid grid-cols-2 md:grid-cols-4 gap-4">
     
     <a href="{{ url_for('billing') }}" 
-       class="p-4 rounded-2xl bg-gradient-to-r from-neon-magenta via-violet-600 to-neon-cyan hover:opacity-95 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-neon-magenta/25 transition-all hover:scale-[1.02]">
+       class="p-4 rounded-2xl btn-brand hover:opacity-95 text-white font-bold text-xs flex items-center justify-between shadow-md shadow-neon-magenta/25 transition-all hover:scale-[1.02]">
       <div class="flex items-center gap-2.5">
         <i data-lucide="plus-circle" class="w-5 h-5"></i>
         <span>New POS Sale</span>
@@ -134,7 +134,7 @@
     </a>
 
     <a href="{{ url_for('appointments') }}" 
-       class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+       class="p-4 rounded-2xl bg-white dark:bg-[#141210] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
       <div class="flex items-center gap-2.5">
         <i data-lucide="calendar-plus" class="w-5 h-5 text-violet-500"></i>
         <span>Book Client</span>
@@ -144,7 +144,7 @@
 
     {% if session.get('auth_level', 'admin') != 'cashier' %}
     <a href="{{ url_for('services') }}" 
-       class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+       class="p-4 rounded-2xl bg-white dark:bg-[#141210] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
       <div class="flex items-center gap-2.5">
         <i data-lucide="sparkles" class="w-5 h-5 text-cyan-500"></i>
         <span>Service Menu</span>
@@ -154,7 +154,7 @@
     {% endif %}
 
     <button @click="copyBookingLink()" 
-            class="p-4 rounded-2xl bg-white dark:bg-[#0c0c12] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
+            class="p-4 rounded-2xl bg-white dark:bg-[#141210] hover:bg-neutral-50 dark:hover:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 font-bold text-xs text-neutral-800 dark:text-neutral-200 flex items-center justify-between shadow-sm transition-all hover:scale-[1.02]">
       <div class="flex items-center gap-2.5">
         <i data-lucide="share-2" class="w-5 h-5 text-emerald-500"></i>
         <span x-text="copiedLink ? 'Link Copied!' : 'Copy Booking Link'"></span>
@@ -168,7 +168,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
     
     <!-- Today's Appointments Live Timeline (8 Cols) -->
-    <div class="lg:col-span-7 min-w-0 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="lg:col-span-7 min-w-0 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
         <div>
           <h3 class="text-base font-bold text-neutral-900 dark:text-white">Today's Appointment Schedule</h3>
@@ -214,7 +214,7 @@
     </div>
 
     <!-- Staff Performance Leaderboard (5 Cols) -->
-    <div data-anim="up" class="lg:col-span-5 min-w-0 bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+    <div data-anim="up" class="lg:col-span-5 min-w-0 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
         <div>
           <h3 class="text-base font-bold text-neutral-900 dark:text-white">Stylist Leaderboard</h3>
@@ -252,7 +252,7 @@
 
   <!-- Recent Transactions Table (hidden for Billing Desk) -->
   {% if can_view_revenue %}
-  <div data-anim="up" class="bg-white dark:bg-[#0c0c12] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+  <div data-anim="up" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
     <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
       <div>
         <h3 class="text-base font-bold text-neutral-900 dark:text-white">Recent POS Invoices</h3>
