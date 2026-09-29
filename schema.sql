@@ -175,7 +175,10 @@ CREATE INDEX IF NOT EXISTS idx_pendingorders_salon_id ON public.pendingorders(sa
 CREATE INDEX IF NOT EXISTS idx_deletion_requests_salon ON public.deletion_requests(salon_id, status);
 
 -- =========================================================
--- Disable RLS on server-only tables or grant full access
+-- Settings tables are server-only.
+-- Keep RLS enabled so anon/authenticated Supabase clients cannot
+-- read or modify these tables. The Flask backend uses the service-role
+-- client, which bypasses RLS for trusted server-side operations.
 -- =========================================================
-ALTER TABLE public.app_settings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.salon_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.salon_settings ENABLE ROW LEVEL SECURITY;
