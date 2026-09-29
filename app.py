@@ -43,29 +43,6 @@ ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
 DEFAULT_ADMIN_PASSWORD = "aurapos-admin"
 
 
-def parse_timeout_seconds(val):
-    """Convert session timeout string (30m, 1h, 12h, 24h, 7d, never) to seconds."""
-    if not val or val == "never":
-        return None
-    val = str(val).strip().lower()
-    if val.endswith("m"):
-        try:
-            return int(val[:-1]) * 60
-        except ValueError:
-            pass
-    elif val.endswith("h"):
-        try:
-            return int(val[:-1]) * 3600
-        except ValueError:
-            pass
-    elif val.endswith("d"):
-        try:
-            return int(val[:-1]) * 86400
-        except ValueError:
-            pass
-    return 7 * 86400
-
-
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -74,27 +51,6 @@ def login_required(f):
                 return jsonify({"success": False, "message": "Authentication required.", "auth_required": True}), 401
             flash("Please sign in to access your salon terminal.", "warning")
             return redirect(url_for("login"))
-
-        # Check session expiration against salon's security timeout setting
-        salon_id = session.get("id", 1)
-        timeout_str = authRepo.get_session_timeout(salon_id) if hasattr(authRepo, "get_session_timeout") else "7d"
-        timeout_sec = parse_timeout_seconds(timeout_str)
-
-        now = int(datetime.now().timestamp())
-        last_activity = session.get("last_activity", session.get("login_time", now))
-
-        if timeout_sec is not None and (now - last_activity) > timeout_sec:
-            session.clear()
-            if request.path.startswith("/api/"):
-                return jsonify({
-                    "success": False,
-                    "message": "Terminal session has expired due to inactivity. Please sign in again.",
-                    "session_expired": True,
-                }), 401
-            flash("Your terminal session has expired due to inactivity. Please sign in again.", "warning")
-            return redirect(url_for("login"))
-
-        session["last_activity"] = now
         return f(*args, **kwargs)
     return decorated_function
 
@@ -589,14 +545,10 @@ def login():
         logged_in_acc = authRepo.login(username, password)
 
         if logged_in_acc:
-            now_ts = int(datetime.now().timestamp())
             session["id"] = logged_in_acc.auth_id
             session["auth_level"] = logged_in_acc.auth_level
             session["password"] = logged_in_acc.password
             session["username"] = logged_in_acc.username
-            session["session_token"] = str(uuid4())
-            session["login_time"] = now_ts
-            session["last_activity"] = now_ts
             flash(f"Welcome back, {logged_in_acc.username}!", "success")
             return redirect(url_for('dashboard'))
 
@@ -621,14 +573,10 @@ def directlogin():
     logged_in_acc = authRepo.login(username, password)
     
     if logged_in_acc:
-        now_ts = int(datetime.now().timestamp())
         session["id"] = logged_in_acc.auth_id
         session["auth_level"] = logged_in_acc.auth_level
         session["password"] = logged_in_acc.password
         session["username"] = logged_in_acc.username
-        session["session_token"] = str(uuid4())
-        session["login_time"] = now_ts
-        session["last_activity"] = now_ts
         return redirect(url_for('dashboard'))
 
     return render_template('page_not_found.html')
@@ -1530,7 +1478,6 @@ def settings():
             salon_data.pop(key, None)
         subscriptions = []
         deletion_request = None
-    session_timeout = authRepo.get_session_timeout(salon_id) if hasattr(authRepo, "get_session_timeout") else "7d"
     return render_template(
         'service/settings.html',
         salon=salon_data,
@@ -1539,7 +1486,6 @@ def settings():
         subscriptions=subscriptions,
         deletion_request=deletion_request,
         max_team_seats=get_seat_limit(salon.plan if salon else ""),
-        session_timeout=session_timeout,
     )
 
 
@@ -1703,59 +1649,7 @@ def api_update_payment_methods():
     return jsonify({"success": True, "message": "Payment methods updated.", "methods": sanitized})
 
 
-@app.get('/api/settings/security')
-@login_required
-def api_get_security_settings():
-    salon_id = session.get("id", 1)
-    timeout_str = authRepo.get_session_timeout(salon_id) if hasattr(authRepo, "get_session_timeout") else "7d"
-    token = session.get("session_token", "")
-    token_display = f"aura_sec_{token[:8]}..." if token else "aura_sec_default"
-    client_ip = request.headers.get("x-forwarded-for", request.remote_addr)
-    if client_ip and "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    return jsonify({
-        "success": True,
-        "session_timeout": timeout_str,
-        "token_display": token_display,
-        "ip": client_ip or "127.0.0.1",
-        "current_session": {
-            "token": token_display,
-            "login_time": session.get("login_time", int(datetime.now().timestamp())),
-            "last_activity": session.get("last_activity", int(datetime.now().timestamp())),
-            "ip": client_ip or "127.0.0.1",
-            "user_agent": request.headers.get("user-agent", "Browser Terminal")[:80],
-            "username": session.get("username", ""),
-            "auth_level": session.get("auth_level", "admin"),
-        }
-    })
-
-
-@app.route('/api/settings/security', methods=['POST', 'PUT', 'PATCH'])
-@role_required("admin")
-def api_update_security_settings():
-    salon_id = session.get("id", 1)
-    data = request.get_json() or {}
-    timeout_str = data.get("session_timeout", "7d")
-    if hasattr(authRepo, "update_session_timeout"):
-        authRepo.update_session_timeout(salon_id, timeout_str)
-    return jsonify({
-        "success": True,
-        "message": "Security and session expiration settings updated.",
-        "session_timeout": timeout_str
-    })
-
-
-@app.post('/api/settings/security/revoke')
-@role_required("admin")
-def api_revoke_sessions():
-    now_ts = int(datetime.now().timestamp())
-    session["session_token"] = str(uuid4())
-    session["login_time"] = now_ts
-    session["last_activity"] = now_ts
-    return jsonify({"success": True, "message": "Active session token rotated. All other sessions invalidated."})
-
-
-@app.get('/api/settings/accounts')
+@app.get('/api/settings/accounts')@app.get('/api/settings/accounts')
 @role_required("admin", "manager")
 def api_get_accounts():
     salon_id = session.get("id", 1)
