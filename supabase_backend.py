@@ -305,107 +305,7 @@ def _sb():
     return get_client()
 
 
-def _sb_find_auth_user(email):
-    """Find an existing, non-deleted Supabase Auth user by email.
-
-    This is used only to repair an orphaned Auth identity left behind when a
-    previous salon creation attempt failed after Auth provisioning.
-    """
-    target = (email or "").strip().lower()
-    if not target:
-        return None
-    try:
-        res = _sb().auth.admin.list_users(page=1, per_page=1000)
-        users = getattr(res, "users", None)
-        if users is None:
-            data = getattr(res, "data", None)
-            if isinstance(data, dict):
-                users = data.get("users", [])
-            else:
-                users = []
-        for user in users or []:
-            user_email = str(getattr(user, "email", None) or "").strip().lower()
-            if user_email == target and not getattr(user, "deleted_at", None):
-                return user
-    except Exception as exc:
-        _warn(f"Supabase Auth: could not look up existing user {email}: {exc}")
-    return None
-
-
-def _sb_create_auth_user(email, password, metadata=None):
-    """Create a Supabase Auth user and return its UUID.
-
-    If Auth already contains the email but AuraPOS has no local salon/account
-    for it, reuse that orphaned identity and synchronize its password/metadata.
-    This repairs interrupted provisioning without creating a second identity.
-    """
-    email = (email or "").strip().lower()
-    metadata = metadata or {}
-    try:
-        res = _sb().auth.admin.create_user({
-            "email": email,
-            "password": password or "",
-            "email_confirm": True,
-            "user_metadata": metadata,
-        })
-        uid = getattr(res.user, "id", None)
-        if not uid:
-            raise RuntimeError("Supabase Auth returned no user id.")
-        return uid
-    except Exception as exc:
-        message = str(exc).lower()
-        already_exists = (
-            "already been registered" in message
-            or "already registered" in message
-            or "email_exists" in message
-        )
-        if already_exists:
-            existing = _sb_find_auth_user(email)
-            uid = getattr(existing, "id", None) if existing is not None else None
-            if uid:
-                try:
-                    _sb().auth.admin.update_user_by_id(uid, {
-                        "password": password or "",
-                        "email_confirm": True,
-                        "user_metadata": metadata,
-                    })
-                    _warn(f"Supabase Auth: reusing orphaned user {email} ({uid})")
-                    return uid
-                except Exception as update_exc:
-                    _warn(f"Supabase Auth: could not repair existing user {email}: {update_exc}")
-                    raise RuntimeError(
-                        f"Supabase Auth user already exists for {email}, but it could not be repaired: {update_exc}"
-                    ) from update_exc
-
-        _warn(f"Supabase Auth: could not create user {email}: {exc}")
-        raise RuntimeError(f"Supabase Auth user provisioning failed for {email}: {exc}") from exc
-
-
-def _sb_update_auth_user(uid, props):
-    """Update a Supabase Auth user (email/password). Best-effort."""
-    if not uid:
-        return False
-    try:
-        _sb().auth.admin.update_user_by_id(uid, props)
-        return True
-    except Exception as exc:
-        _warn(f"Supabase Auth: could not update user {uid}: {exc}")
-        return False
-
-
-def _sb_delete_auth_user(uid):
-    """Delete a Supabase Auth user. Best-effort."""
-    if not uid:
-        return False
-    try:
-        _sb().auth.admin.delete_user(uid)
-        return True
-    except Exception as exc:
-        _warn(f"Supabase Auth: could not delete user {uid}: {exc}")
-        return False
-
-
-# ================= SUPABASE STORAGE HELPERS =================
+# ================= SUPABASE STORAGE HELPERS =================# ================= SUPABASE STORAGE HELPERS =================
 
 STORAGE_BUCKET = "salon-logos"
 
@@ -491,11 +391,9 @@ def _sb_verify_credentials(username, password):
 class AuthorizationRepository:
     """Salons, team accounts, subscriptions, pending orders & deletion requests.
 
-    Authentication is delegated to Supabase Auth: owner/team logins are
-    verified with `auth.sign_in_with_password`, account creation provisions a
-    Supabase Auth user, and password changes go through the admin API. A synced
-    copy of the password lives on the `accounts` row to power the existing
-    credential-recovery email and /directlogin flows.
+    Authentication uses the application's own `accounts` table and Flask
+    server-side sessions. Supabase is used only as the persistent database
+    and storage backend; it does not provision or authenticate salon users.
     """
 
     def __init__(self):
@@ -585,37 +483,25 @@ class AuthorizationRepository:
             _warn(f"update_payment_methods({salon_id}) failed: {exc}")
             return False
 
-    def create_account(self, auth_id, username, password, auth_level="admin", supabase_uid=None):
-        """Insert a team/owner account row with a required Supabase Auth identity."""
+    def create_account(self, auth_id, username, password, auth_level="admin"):
+        """Create a local AuraPOS account in the database."""
         username = (username or "").strip().lower()
-        if supabase_uid is None:
-            supabase_uid = _sb_create_auth_user(
-                username, password, {"salon_id": auth_id, "role": auth_level}
-            )
+        if not username or not password:
+            raise ValueError("Username and password are required.")
         _sb().table("accounts").insert({
             "auth_id": auth_id,
             "username": username,
             "password": password,
             "auth_level": auth_level or "admin",
-            "supabase_uid": supabase_uid,
         }).execute()
 
     def create_auth(self, name, salon_name, phone, email, password, plan="pro",
                     created_on=None, auth_level="admin"):
-        """Register a brand-new salon + its primary owner account.
-
-        Provisions the owner's Supabase Auth user first, then stores the salon
-        row (with the resolved tier/cycle/expiry) and the owner account row.
-        Returns the new salon id.
-        """
+        """Create a salon and its primary local account."""
         if created_on is None:
             created_on = int(datetime.now().timestamp())
         tier, cycle, _pricing = resolve_plan(plan)
         expires_ts = expires_for(cycle, created_on)
-
-        auth_uid = _sb_create_auth_user(
-            email, password, {"name": name, "salon_name": salon_name, "plan": tier}
-        )
         booking_slug = generate_booking_slug()
         res = (
             _sb().table("salons")
@@ -628,17 +514,16 @@ class AuthorizationRepository:
                 "plan": tier,
                 "billing_cycle": cycle,
                 "expires_on": expires_ts,
-                "auth_uid": auth_uid,
                 "booking_slug": booking_slug,
             })
             .execute()
         )
         auth_id = res.data[0]["id"]
-        self.create_account(auth_id, email, password, auth_level, supabase_uid=auth_uid)
+        self.create_account(auth_id, email, password, auth_level)
         return auth_id
 
     def login(self, username, password):
-        """Verify credentials (Supabase Auth first, synced password fallback)."""
+        """Verify credentials against the local accounts table."""
         username = (username or "").strip().lower()
         if not username or password is None:
             return None
@@ -651,17 +536,9 @@ class AuthorizationRepository:
         )
         if not row:
             return None
-
-        verified = _sb_verify_credentials(username, password)
-        if verified is True:
-            return Account.from_row(row)
-        if verified is False:
+        if str(row.get("password") or "") != str(password):
             return None
-        # Supabase Auth unreachable / legacy account without an auth user:
-        # fall back to the synced password (SQLite-parity behaviour).
-        if str(row.get("password") or "") == str(password):
-            return Account.from_row(row)
-        return None
+        return Account.from_row(row)
 
     def get_salon(self, salon_id):
         row = _data(
@@ -837,32 +714,21 @@ class AuthorizationRepository:
     # ---------- Settings: password management ----------
 
     def change_password(self, salon_id, username, current_password, new_password):
-        """Change the password of a specific account after verifying the current one."""
+        """Change a local account password after verifying the current password."""
         username = (username or "").strip().lower()
         row = self._get_account_row(salon_id, username)
-        if not row:
-            return False, "Account not found."
-
-        # Supabase Auth decides when the auth user exists; synced copy otherwise.
-        if row.get("supabase_uid"):
-            verified = _sb_verify_credentials(username, current_password)
-            if verified is False:
-                return False, "Current password is incorrect."
-        elif str(row.get("password") or "") != str(current_password):
+        if not row or str(row.get("password") or "") != str(current_password):
             return False, "Current password is incorrect."
-
         _sb().table("accounts").update({"password": new_password}).eq("id", row["id"]).execute()
-        _sb_update_auth_user(row.get("supabase_uid"), {"password": new_password})
         return True, "Password updated successfully."
 
     def set_password(self, salon_id, username, new_password):
-        """Reset a password without verification (used by owner for team accounts)."""
+        """Reset a local account password without current-password verification."""
         username = (username or "").strip().lower()
         row = self._get_account_row(salon_id, username)
         if not row:
             return False, "Account not found."
         _sb().table("accounts").update({"password": new_password}).eq("id", row["id"]).execute()
-        _sb_update_auth_user(row.get("supabase_uid"), {"password": new_password})
         return True, "Password updated successfully."
 
     def _get_account_row(self, salon_id, username):
@@ -946,6 +812,7 @@ class AuthorizationRepository:
             return {"success": False, "message": "Invalid access level."}
         if not username:
             return {"success": False, "message": "Email is required."}
+
         row = _data(
             _sb().table("accounts")
             .select("*")
@@ -971,26 +838,7 @@ class AuthorizationRepository:
         payload = {"username": username, "auth_level": auth_level}
         if password:
             payload["password"] = password
-        # The account must have a real Supabase Auth identity before its
-        # credentials are changed. Otherwise the DB row and Auth can diverge.
-        if not row.get("supabase_uid"):
-            return {
-                "success": False,
-                "message": "This account is missing its Supabase Auth identity. Repair the account before changing its credentials.",
-            }
-
-        # Update Auth first. Only persist the local account email/password
-        # after the authoritative Auth update succeeds.
-        props = {"email": username}
-        if password:
-            props["password"] = password
-        if not _sb_update_auth_user(row.get("supabase_uid"), props):
-            return {
-                "success": False,
-                "message": "Supabase Auth rejected the account update. No local credentials were changed.",
-            }
-
-        _sb().table("accounts").update(payload).eq("id", row_id).execute()
+        _sb().table("accounts").update(payload).eq("id", row_id).eq("auth_id", salon_id).execute()
         return {"success": True, "message": "Team account updated."}
 
     def delete_account(self, salon_id, row_id):
@@ -1017,7 +865,6 @@ class AuthorizationRepository:
                 "message": "A salon must keep at least one account.",
             }
         _sb().table("accounts").delete().eq("id", row_id).eq("auth_id", salon_id).execute()
-        _sb_delete_auth_user(row.get("supabase_uid"))
         return {"success": True, "message": f"Team account {row['username']} removed."}
 
     # ---------- Subscriptions ----------
