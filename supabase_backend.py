@@ -551,43 +551,6 @@ class AuthorizationRepository:
         except (ValueError, TypeError):
             return None
 
-    def get_session_timeout(self, salon_id):
-        try:
-            row = _data(
-                _sb().table("salon_settings").select("session_timeout").eq("salon_id", salon_id).maybe_single().execute()
-            )
-            if row and row.get("session_timeout"):
-                return str(row["session_timeout"]).strip().lower()
-        except Exception as e:
-            _warn(f"get_session_timeout({salon_id}) failed: {e}")
-        return "7d"
-
-    def update_session_timeout(self, salon_id, timeout):
-        timeout_clean = str(timeout).strip().lower()
-        if timeout_clean not in ("30m", "1h", "12h", "24h", "7d", "never"):
-            timeout_clean = "7d"
-        now = int(datetime.now().timestamp())
-        try:
-            existing = _data(
-                _sb().table("salon_settings").select("id").eq("salon_id", salon_id).maybe_single().execute()
-            )
-            if existing:
-                _sb().table("salon_settings").update({
-                    "session_timeout": timeout_clean,
-                    "updated_at": now
-                }).eq("salon_id", salon_id).execute()
-            else:
-                _sb().table("salon_settings").insert({
-                    "salon_id": salon_id,
-                    "session_timeout": timeout_clean,
-                    "created_at": now,
-                    "updated_at": now
-                }).execute()
-            return True
-        except Exception as e:
-            _warn(f"update_session_timeout({salon_id}) failed: {e}")
-            return False
-
     def forgot_password(self, identifier):
         """Find an account by its username/email or by the salon's phone number.
 
