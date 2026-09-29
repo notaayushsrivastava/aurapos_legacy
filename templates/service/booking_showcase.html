@@ -32,11 +32,11 @@
         </div>
         <div>
           <p class="text-xs font-bold text-white">{{ user_salon.salon_name }} Live Booking Link</p>
-          <p class="text-[11px] font-mono text-neutral-300">https://aurapos.com/b/<span class="text-neon-cyan font-bold">{{ user_salon.booking_slug }}</span></p>
+          <p class="text-[11px] font-mono text-neutral-300">{{ request.host_url.rstrip('/') }}/b/<span class="text-neon-cyan font-bold">{{ user_salon.booking_slug }}</span></p>
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <button @click="navigator.clipboard.writeText('https://aurapos.com/b/{{ user_salon.booking_slug }}'); copied = true; setTimeout(() => copied = false, 2500)"
+        <button @click="navigator.clipboard.writeText('{{ request.host_url.rstrip('/') }}/b/{{ user_salon.booking_slug }}'); copied = true; setTimeout(() => copied = false, 2500)"
                 class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
           <i data-lucide="copy" class="w-3.5 h-3.5" x-show="!copied"></i>
           <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400" x-show="copied" x-cloak></i>
@@ -77,7 +77,7 @@
           <span class="w-3 h-3 rounded-full bg-[#27c93f]"></span>
           <div class="ml-3 hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-neutral-300 font-mono text-[11px]">
             <i data-lucide="lock" class="w-3 h-3 text-emerald-400"></i>
-            <span>aurapos.com/b/<span class="text-neon-cyan font-bold">luxe9</span></span>
+            <span>aurapos3.vercel.app/b/<span class="text-neon-cyan font-bold">luxe9</span></span>
           </div>
         </div>
         <div class="flex items-center gap-2">

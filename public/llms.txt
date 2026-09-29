@@ -16,11 +16,11 @@ AuraPOS is a high-speed salon operating system engineered for studios, salons, a
 - **Studio**: ₹149/month (or ₹1,490/year), unlimited seats, custom salon logo on receipts, salon address, advanced reports, and data export/import.
 
 ## Key URLs
-- Home: https://aurapos.com/
-- Booking Showcase: https://aurapos.com/booking
-- Client Vanity Booking Portal: https://aurapos.com/b/<slug>
-- Register: https://aurapos.com/register
-- Sign In: https://aurapos.com/login
-- Contact Concierge: https://aurapos.com/contact
-- Privacy Policy: https://aurapos.com/privacy
-- Terms of Service: https://aurapos.com/terms
+- Home: https://aurapos3.vercel.app/
+- Booking Showcase: https://aurapos3.vercel.app/booking
+- Client Vanity Booking Portal: https://aurapos3.vercel.app/b/<slug>
+- Register: https://aurapos3.vercel.app/register
+- Sign In: https://aurapos3.vercel.app/login
+- Contact Concierge: https://aurapos3.vercel.app/contact
+- Privacy Policy: https://aurapos3.vercel.app/privacy
+- Terms of Service: https://aurapos3.vercel.app/terms

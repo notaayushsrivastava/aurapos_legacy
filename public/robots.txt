@@ -17,4 +17,4 @@ Disallow: /reports
 Disallow: /settings
 Disallow: /api/
 
-Sitemap: https://aurapos.com/sitemap.xml
+Sitemap: https://aurapos3.vercel.app/sitemap.xml

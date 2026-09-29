@@ -483,6 +483,35 @@ def llms_txt():
     return send_from_directory(app.static_folder, 'llms.txt', mimetype='text/plain')
 
 
+@app.route('/sitemap.xml')
+@limiter.exempt
+def sitemap_xml():
+    """Dynamically generate sitemap.xml with domain-aware loc elements."""
+    base_url = request.url_root.rstrip('/')
+    today = date.today().isoformat()
+    pages = [
+        {"loc": f"{base_url}/", "changefreq": "daily", "priority": "1.0"},
+        {"loc": f"{base_url}/pricing", "changefreq": "weekly", "priority": "0.9"},
+        {"loc": f"{base_url}/booking", "changefreq": "weekly", "priority": "0.9"},
+        {"loc": f"{base_url}/register", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": f"{base_url}/login", "changefreq": "monthly", "priority": "0.7"},
+        {"loc": f"{base_url}/contact", "changefreq": "monthly", "priority": "0.6"},
+        {"loc": f"{base_url}/privacy", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/terms", "changefreq": "monthly", "priority": "0.5"},
+    ]
+    xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for p in pages:
+        xml_parts.append(f'  <url><loc>{p["loc"]}</loc><lastmod>{today}</lastmod><changefreq>{p["changefreq"]}</changefreq><priority>{p["priority"]}</priority></url>')
+    xml_parts.append('</urlset>')
+    return Response('\n'.join(xml_parts), mimetype='application/xml')
+
+
+@app.route('/sitemap')
+def sitemap_redirect():
+    return redirect(url_for('sitemap_xml'))
+
+
 @app.route('/contact', methods=["GET", "POST"])
 def contact():
     if request.method == "GET":

@@ -922,10 +922,10 @@
     <div class="text-center pt-3 text-[10px] border-t border-dashed border-black">
       {% if is_free %}
       <p class="font-bold text-[11px] tracking-wider uppercase">⚡ AURAPOS WATERMARK ⚡</p>
-      <p class="text-[9px]">Free Tier receipt • Visit aurapos.com to upgrade</p>
+      <p class="text-[9px]">Free Tier receipt • Visit aurapos3.vercel.app to upgrade</p>
       {% else %}
       <p>Thank you for visiting {{ salon.salon_name if salon else 'our salon' }}!</p>
-      <p>Book online at aurapos.com/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}</p>
+      <p>Book online at aurapos3.vercel.app/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}</p>
       {% endif %}
     </div>
   </div>

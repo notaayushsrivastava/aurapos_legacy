@@ -14,6 +14,7 @@ class TestAllFeatures(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"User-agent: *", res.data)
         self.assertIn(b"Disallow: /admin", res.data)
+        self.assertIn(b"aurapos3.vercel.app", res.data)
 
         # Test llms.txt
         res = self.client.get('/llms.txt')
@@ -25,6 +26,21 @@ class TestAllFeatures(unittest.TestCase):
         res = self.client.get('/assets/og-share-logo.png')
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.content_type.startswith('image/png'))
+
+        # Test sitemap.xml
+        res = self.client.get('/sitemap.xml')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.content_type.startswith('application/xml'))
+        self.assertIn(b"<urlset", res.data)
+        self.assertIn(b"<loc>", res.data)
+        self.assertIn(b"/pricing", res.data)
+        self.assertIn(b"/booking", res.data)
+        self.assertIn(b"/register", res.data)
+
+        # Test sitemap redirect
+        res = self.client.get('/sitemap')
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get('Location'), '/sitemap.xml')
 
     def test_booking_showcase_and_vanity(self):
         # /booking should showcase demo booking portal
