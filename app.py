@@ -172,12 +172,13 @@ MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB cap for salon logo uploads
 
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
     static_folder = os.path.join(sys._MEIPASS, 'public')
 else:
-    template_folder = 'templates'
-    static_folder = 'public'
+    template_folder = os.path.join(BASE_DIR, 'templates')
+    static_folder = os.path.join(BASE_DIR, 'public')
 
 # Configure structured logging
 import logging
