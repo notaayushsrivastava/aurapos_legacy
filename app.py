@@ -1936,6 +1936,21 @@ def admin_grant_plan():
     if not authRepo.update_salon_plan(salon_id, tier, resolved_cycle, expires_ts):
         return jsonify({"success": False, "message": "Plan update failed — salon row not found."}), 502
 
+    # Verify the persisted subscription state before reporting success. This
+    # prevents a transient Supabase/PostgREST failure from looking like a
+    # successful admin plan change while the salon remains on its old tier.
+    persisted = authRepo.get_salon(salon_id)
+    if (
+        not persisted
+        or persisted.plan != tier
+        or persisted.billing_cycle != resolved_cycle
+        or int(persisted.expires_on or 0) != int(expires_ts)
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Plan update could not be verified in the database. The account was not reported as updated.",
+        }), 502
+
     try:
         authRepo.record_subscription(
             sub_id=f"admin_{str(uuid4())[:12]}",
@@ -2013,32 +2028,59 @@ def admin_create_account():
         cycle = "trial" if plan == "free" else "monthly"
 
     now_ts = int(datetime.now().timestamp())
+    tier = plan if plan in ("pro", "studio") else "free"
+    plan_id = "free" if tier == "free" else (f"{tier}_{cycle}" if cycle == "yearly" else tier)
+    resolved_tier, resolved_cycle, _pricing = resolve_plan(plan_id)
+    expires_ts = (now_ts + days * 86400) if days else expires_for(resolved_cycle, now_ts)
+
     try:
+        # Resolve the exact admin-selected plan up front. This avoids creating
+        # a default/free salon and then relying on a second write to upgrade it.
         salon_id = authRepo.create_auth(
             owner_name, salon_name, phone, email, password,
-            plan=plan, created_on=now_ts,
+            plan=plan_id, created_on=now_ts,
         )
     except Exception as exc:
         return jsonify({"success": False, "message": f"Could not create account: {exc}"}), 502
 
+    # Custom validity is the only case requiring a second plan write.
+    if days:
+        if not authRepo.update_salon_plan(salon_id, resolved_tier, resolved_cycle, expires_ts):
+            return jsonify({
+                "success": False,
+                "message": "Account was created, but its custom plan validity could not be saved.",
+            }), 502
+
+    # Never report an account as created until the selected subscription state
+    # is confirmed by a fresh database read.
+    persisted = authRepo.get_salon(salon_id)
+    if (
+        not persisted
+        or persisted.plan != resolved_tier
+        or persisted.billing_cycle != resolved_cycle
+        or int(persisted.expires_on or 0) != int(expires_ts)
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Account was created, but its subscription state could not be verified.",
+        }), 502
+
     try:
-        tier = plan if plan in ("pro", "studio") else "free"
-        expires_ts = (now_ts + days * 86400) if days else expires_for(cycle, now_ts)
-        authRepo.update_salon_plan(salon_id, tier, cycle, expires_ts)
         authRepo.record_subscription(
             sub_id=f"admin_{str(uuid4())[:12]}",
             salon_id=salon_id,
             amount=0,
-            plan=tier,
-            cycle=cycle,
+            plan=resolved_tier,
+            cycle=resolved_cycle,
             receipt=f"created-by:{session.get('admin_user', ADMIN_USER)}",
             email=email,
             phone=phone,
         )
     except Exception as exc:
-        print("Admin create: plan/subscription logging failed (account created):", exc)
+        # The account and plan are already valid; only the audit history failed.
+        print("Admin create: subscription logging failed (plan already applied):", exc)
 
-    label = TIER_PLANS.get(tier, {}).get("label", tier.title())
+    label = TIER_PLANS.get(resolved_tier, {}).get("label", resolved_tier.title())
     return jsonify({
         "success": True,
         "salon_id": salon_id,
