@@ -1647,7 +1647,7 @@ def api_update_payment_methods():
     return jsonify({"success": True, "message": "Payment methods updated.", "methods": sanitized})
 
 
-@app.get('/api/settings/accounts')@app.get('/api/settings/accounts')
+@app.get('/api/settings/accounts')
 @role_required("admin", "manager")
 def api_get_accounts():
     salon_id = session.get("id", 1)
