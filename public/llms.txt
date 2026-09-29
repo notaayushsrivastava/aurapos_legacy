@@ -1,0 +1,26 @@
+# AuraPOS
+> Next-Generation Kinetic Salon Billing & Studio Management OS
+
+AuraPOS is a high-speed salon operating system engineered for studios, salons, and luxury spas. It features 0.3-second POS thermal checkouts, multi-stylist commission calculation, GST invoicing, client self-service booking portals with vanity URLs (`/b/<slug>`), and comprehensive business analytics.
+
+## Core Capabilities
+- **Kinetic POS & Thermal Billing**: Instant hotkey-driven search, multi-staff split assignments, split payment methods (Cash, UPI, Card), and customized thermal printing (80mm & 58mm).
+- **Client Self-Booking Portal**: Unique salon vanity links (`/b/<slug>`) with 24/7 client booking, real-time availability, and zero commission fees.
+- **Automated Stylist Commissions**: Dynamic revenue attribution and commission calculations.
+- **GST & Tax Compliance**: 18% CGST/SGST automated calculation, tax breakdowns, and one-click monthly CSV export.
+- **Security & Session Control**: Role-based access control (Admin, Manager, Stylist), session token authentication with configurable timeouts (30 mins to never), and autosaving configuration.
+
+## Pricing Tiers
+- **Free Trial**: 14-day full access, single seat, AuraPOS watermark on receipts.
+- **Pro**: ₹69/month (or ₹690/year), multi-seat, unbranded receipts with salon phone.
+- **Studio**: ₹149/month (or ₹1,490/year), unlimited seats, custom salon logo on receipts, salon address, advanced reports, and data export/import.
+
+## Key URLs
+- Home: https://aurapos.com/
+- Booking Showcase: https://aurapos.com/booking
+- Client Vanity Booking Portal: https://aurapos.com/b/<slug>
+- Register: https://aurapos.com/register
+- Sign In: https://aurapos.com/login
+- Contact Concierge: https://aurapos.com/contact
+- Privacy Policy: https://aurapos.com/privacy
+- Terms of Service: https://aurapos.com/terms

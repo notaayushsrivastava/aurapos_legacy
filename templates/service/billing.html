@@ -4,6 +4,10 @@
 {% block page_title %}Point of Sale (POS) Billing{% endblock %}
 
 {% block content %}
+{% set current_tier = (salon.subscription_tier or 'free') | lower %}
+{% set is_studio = 'studio' in current_tier %}
+{% set is_pro = 'pro' in current_tier and not is_studio %}
+{% set is_free = not is_studio and not is_pro %}
 <div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="posBillingApp()">
   
   <!-- Top Action Bar & Shortcuts Banner -->
@@ -337,22 +341,31 @@
           </div>
 
           <!-- Action Buttons -->
-          <div class="pt-4 grid grid-cols-3 gap-2">
-            
-            <button @click="openPaymentModal()" 
-                    :disabled="billItems.length === 0"
-                    class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
-              <i data-lucide="check-circle" class="w-4 h-4"></i>
-              <span>Collect Payment</span>
-            </button>
+          <div class="pt-4 space-y-2">
+            <div class="grid grid-cols-3 gap-2">
+              <button @click="openPaymentModal()" 
+                      :disabled="billItems.length === 0"
+                      class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                <span>Collect Payment</span>
+              </button>
 
-            <button @click="printReceipt()" 
-                    :disabled="billItems.length === 0"
-                    class="py-3 px-2 rounded-xl bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 disabled:opacity-50 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-all flex items-center justify-center gap-1">
-              <i data-lucide="printer" class="w-4 h-4"></i>
-              <span>Print</span>
-            </button>
+              <button @click="printReceipt()" 
+                      :disabled="billItems.length === 0 && !lastSavedBill"
+                      class="py-3 px-2 rounded-xl bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 disabled:opacity-50 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+                <span>Print</span>
+              </button>
+            </div>
 
+            <!-- Quick Print Last Bill button if available -->
+            <template x-if="lastSavedBill">
+              <button @click="printLastBill()" 
+                      class="w-full py-2 px-3 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 text-violet-700 dark:text-neon-cyan border border-violet-200 dark:border-violet-800/60 text-xs font-semibold flex items-center justify-center gap-2 transition-all">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                <span>Print Last Bill (<span class="font-mono-num font-bold" x-text="lastSavedBill.bill_id"></span>)</span>
+              </button>
+            </template>
           </div>
 
         </div>
@@ -366,6 +379,10 @@
   <!-- ================= PAYMENT COLLECTION MODAL ================= -->
   <div x-show="showPaymentModal" 
        x-cloak
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="payment-modal-title"
+       @keydown.escape.window="showPaymentModal = false"
        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0 scale-95"
@@ -374,15 +391,15 @@
        x-transition:leave-start="opacity-100 scale-100"
        x-transition:leave-end="opacity-0 scale-95">
     
-    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto"
          @click.away="showPaymentModal = false">
       
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-lg font-bold text-neutral-900 dark:text-white">Collect Payment</h3>
+          <h3 id="payment-modal-title" class="text-lg font-bold text-neutral-900 dark:text-white">Collect Payment</h3>
           <p class="text-xs text-neutral-500 dark:text-neutral-400">Order #AP-{{ session.get('id', '8910') }}</p>
         </div>
-        <button @click="showPaymentModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+        <button @click="showPaymentModal = false" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -395,75 +412,323 @@
         </div>
       </div>
 
-      <!-- Payment method details -->
-      <template x-if="selectedPaymentMode === 'UPI'">
-        <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-center space-y-3">
-          <div class="w-36 h-36 mx-auto bg-white p-2 rounded-xl border flex items-center justify-center shadow-inner">
-            <div class="w-full h-full bg-gradient-to-br from-violet-50 to-cyan-50 dark:from-violet-950/40 dark:to-cyan-950/40 flex flex-col items-center justify-center p-2 rounded">
-              <i data-lucide="smartphone" class="w-12 h-12 text-violet-500 dark:text-neon-cyan mb-1"></i>
-              <span class="text-[10px] font-bold text-neutral-600 dark:text-neutral-300">UPI Payment</span>
+      <!-- Payment Mode Switcher: Single vs Split Payment -->
+      <div class="grid grid-cols-2 gap-2 p-1 bg-neutral-100 dark:bg-neutral-900 rounded-xl text-xs font-semibold">
+        <button type="button"
+                @click="isSplitMode = false"
+                :class="!isSplitMode ? 'bg-white dark:bg-[#201c18] text-neutral-900 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'"
+                class="py-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5">
+          <i data-lucide="wallet" class="w-3.5 h-3.5"></i>
+          <span>Single Tender</span>
+        </button>
+        <button type="button"
+                @click="enableSplitMode()"
+                :class="isSplitMode ? 'bg-white dark:bg-[#201c18] text-violet-600 dark:text-neon-cyan shadow-sm font-bold' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'"
+                class="py-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5">
+          <i data-lucide="git-fork" class="w-3.5 h-3.5"></i>
+          <span>Split Payment (2+)</span>
+        </button>
+      </div>
+
+      <!-- SINGLE PAYMENT MODE -->
+      <template x-if="!isSplitMode">
+        <div class="space-y-4">
+          <!-- Method pills -->
+          <div class="grid grid-cols-3 gap-2">
+            <template x-for="mode in paymentModes" :key="mode">
+              <button type="button"
+                      @click="selectedPaymentMode = mode"
+                      :class="selectedPaymentMode === mode ? 'border-violet-600 bg-violet-50 text-violet-700 dark:border-neon-cyan dark:bg-violet-950/40 dark:text-neon-cyan font-bold shadow-sm' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60 text-neutral-600 dark:text-neutral-400'"
+                      class="py-2 px-3 rounded-xl border text-xs text-center transition-all cursor-pointer"
+                      x-text="mode">
+              </button>
+            </template>
+          </div>
+
+          <!-- Method Details -->
+          <template x-if="selectedPaymentMode === 'UPI'">
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white">Direct UPI Payment</p>
+                    <p class="text-[10px] text-neutral-400">Accept via GPay, PhonePe, Paytm, BHIM</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Instant Settlement
+                </span>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80 flex items-center justify-between gap-3"
+                   x-data="{ copied: false }">
+                <div class="min-w-0">
+                  <p class="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Salon VPA / UPI ID</p>
+                  <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white truncate"
+                     x-text="paymentMethods.upi || 'salon@aurapos.upi'"></p>
+                </div>
+                <button type="button"
+                        @click="navigator.clipboard.writeText(paymentMethods.upi || 'salon@aurapos.upi'); copied = true; setTimeout(() => copied = false, 2000)"
+                        class="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer">
+                  <i data-lucide="copy" class="w-3.5 h-3.5" x-show="!copied"></i>
+                  <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500" x-show="copied" x-cloak></i>
+                  <span x-text="copied ? 'Copied' : 'Copy'"></span>
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
+                <span>Amount to collect:</span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="grandTotal"></span></span>
+              </div>
             </div>
-          </div>
-          <p class="text-xs text-neutral-500 font-medium">Scan QR or pay to UPI ID below</p>
-          <div class="p-3 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-            <p class="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Salon UPI ID</p>
-            <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white" x-text="paymentMethods.upi || 'Not configured'"></p>
-          </div>
+          </template>
+
+          <template x-if="selectedPaymentMode === 'Cash'">
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Cash Received (₹)</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num pointer-events-none">₹</span>
+                  <input type="number"
+                         x-model.number="cashReceived"
+                         :placeholder="grandTotal"
+                         class="w-full pl-7 pr-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 flex justify-between text-xs font-semibold">
+                <span class="text-neutral-500">Change Due to Client</span>
+                <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="Math.max(0, cashReceived - grandTotal)"></span></span>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="selectedPaymentMode === 'Card'">
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white">Card POS Terminal</p>
+                    <p class="text-[10px] text-neutral-400">Tap, insert or swipe on physical terminal</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> EDC Machine
+                </span>
+              </div>
+              <div class="p-3.5 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80">
+                <p class="text-[10px] uppercase font-bold tracking-wider text-neutral-400 mb-0.5">Terminal ID / Model</p>
+                <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white" x-text="paymentMethods.card_terminal || 'EDC-POS-01 (Primary)'"></p>
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
+                <span>Charge client:</span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="grandTotal"></span></span>
+              </div>
+            </div>
+          </template>
         </div>
       </template>
 
-      <template x-if="selectedPaymentMode === 'Cash'">
-        <div class="space-y-3">
-          <div>
-            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Cash Received (₹)</label>
-            <input type="number"
-                   x-model.number="cashReceived"
-                   :placeholder="grandTotal"
-                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
-          </div>
-          <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 flex justify-between text-xs font-semibold">
-            <span class="text-neutral-500">Change Due to Client</span>
-            <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="Math.max(0, cashReceived - grandTotal)"></span></span>
-          </div>
-        </div>
-      </template>
-
-      <template x-if="selectedPaymentMode === 'Card'">
-        <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-center space-y-3">
-          <div class="w-36 h-36 mx-auto bg-white p-2 rounded-xl border flex items-center justify-center shadow-inner">
-            <div class="w-full h-full bg-gradient-to-br from-violet-50 to-cyan-50 dark:from-violet-950/40 dark:to-cyan-950/40 flex flex-col items-center justify-center p-2 rounded">
-              <i data-lucide="credit-card" class="w-12 h-12 text-violet-500 dark:text-neon-cyan mb-1"></i>
-              <span class="text-[10px] font-bold text-neutral-600 dark:text-neutral-300">Card Payment</span>
+      <!-- SPLIT PAYMENT MODE -->
+      <template x-if="isSplitMode">
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between text-xs">
+            <div>
+              <span class="font-bold text-neutral-800 dark:text-neutral-200">Payment Tenders</span>
+              <span class="text-[10px] text-neutral-400 block sm:inline sm:ml-1 font-medium">(2 or more payment methods)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" 
+                      @click="splitEqually()"
+                      class="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-[11px] font-semibold transition-all cursor-pointer">
+                Split 50/50
+              </button>
+              <button type="button" 
+                      @click="addSplitRow()" 
+                      class="px-2.5 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/60 dark:hover:bg-violet-900/60 text-violet-600 dark:text-neon-cyan text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add Tender</span>
+              </button>
             </div>
           </div>
-          <p class="text-xs text-neutral-500 font-medium">Tap, insert or swipe card on terminal</p>
-          <div class="p-3 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-            <p class="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Card Terminal</p>
-            <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white" x-text="paymentMethods.card_terminal || 'Not configured'"></p>
+
+          <!-- Tender Rows Container -->
+          <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1 -mr-1">
+            <template x-for="(row, idx) in splitRows" :key="idx">
+              <div class="p-3 rounded-2xl bg-neutral-50/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 transition-all">
+                
+                <!-- Method selector -->
+                <div class="w-full sm:w-44 shrink-0">
+                  <div class="relative">
+                    <select x-model="row.method" 
+                            class="custom-select w-full pl-3 pr-8 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/80 text-xs font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-sm cursor-pointer">
+                      <template x-for="m in availableSplitMethods" :key="m">
+                        <option :value="m" x-text="m" class="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"></option>
+                      </template>
+                    </select>
+                    <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400">
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Amount input -->
+                <div class="relative flex-1">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-neutral-400 font-mono-num pointer-events-none select-none">₹</span>
+                  <input type="number" 
+                         min="0"
+                         x-model.number="row.amount" 
+                         placeholder="0"
+                         class="w-full pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/80 text-xs font-mono-num font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-sm">
+                </div>
+
+                <!-- Remove button -->
+                <div class="flex items-center justify-end sm:justify-center shrink-0">
+                  <button type="button" 
+                          @click="removeSplitRow(idx)"
+                          :disabled="splitRows.length <= 2"
+                          title="Remove tender method"
+                          class="p-2 rounded-xl text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-neutral-400 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Split Summary & Status Alert Card -->
+          <div class="space-y-2 pt-1 border-t border-neutral-200 dark:border-neutral-800">
+            <div class="flex items-center justify-between text-xs font-semibold px-1">
+              <span class="text-neutral-500 dark:text-neutral-400">Allocation Progress</span>
+              <div class="font-mono-num text-xs">
+                <span :class="splitRemaining === 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : (splitRemaining < 0 ? 'text-rose-600 font-bold' : 'text-neutral-900 dark:text-white font-bold')"
+                      x-text="'₹' + splitTotal"></span>
+                <span class="text-neutral-400 font-normal"> / ₹<span x-text="grandTotal"></span></span>
+              </div>
+            </div>
+
+            <!-- Balanced state -->
+            <template x-if="splitRemaining === 0">
+              <div class="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between shadow-sm">
+                <span class="flex items-center gap-2">
+                  <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="check" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+                  </div>
+                  <span>Balanced &amp; Ready to Confirm</span>
+                </span>
+                <span class="font-mono-num font-extrabold text-sm">₹<span x-text="splitTotal"></span></span>
+              </div>
+            </template>
+
+            <!-- Remaining state -->
+            <template x-if="splitRemaining > 0">
+              <div class="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-xs font-medium flex items-center justify-between gap-2 shadow-sm">
+                <div class="flex items-center gap-2 min-w-0">
+                  <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 shrink-0"></i>
+                  <span class="truncate">Remaining to allocate: <strong class="font-mono-num font-bold text-amber-700 dark:text-amber-300">₹<span x-text="splitRemaining"></span></strong></span>
+                </div>
+                <button type="button" 
+                        @click="fillSplitRemaining()" 
+                        class="px-2.5 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300/80 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-950 dark:text-white text-[11px] font-bold uppercase tracking-wider shrink-0 transition-all active:scale-95 shadow-xs">
+                  Auto-Fill
+                </button>
+              </div>
+            </template>
+
+            <!-- Over-allocated state -->
+            <template x-if="splitRemaining < 0">
+              <div class="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 text-xs font-medium flex items-center gap-2 shadow-sm">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-rose-500 shrink-0"></i>
+                <span>Tenders exceed invoice by <strong class="font-mono-num font-bold">₹<span x-text="Math.abs(splitRemaining)"></span></strong>. Please reduce amounts.</span>
+              </div>
+            </template>
           </div>
         </div>
       </template>
 
       <!-- Customer WhatsApp Invoice Checkbox -->
-      <div class="flex items-center gap-2.5 text-xs text-neutral-600 dark:text-neutral-300">
+      <div class="flex items-center gap-2.5 text-xs text-neutral-600 dark:text-neutral-300 pt-1">
         <input type="checkbox" id="send-wa" checked class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
         <label for="send-wa">Send invoice copy instantly via WhatsApp / SMS</label>
       </div>
 
       <!-- Action -->
-      <div class="flex gap-3">
+      <div class="flex gap-3 pt-2">
         <button @click="showPaymentModal = false" class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
           Cancel
         </button>
-        <button @click="finalizePayment()" :disabled="processingPayment"
-                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait">
+        <button @click="finalizePayment()" 
+                :disabled="processingPayment || (isSplitMode && splitRemaining !== 0) || (!isSplitMode && selectedPaymentMode === 'Cash' && cashReceived < grandTotal)"
+                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
           <i data-lucide="check" class="w-4 h-4" :class="processingPayment ? 'animate-pulse' : ''"></i>
-          <span x-text="processingPayment ? 'Saving Invoice…' : 'Confirm &amp; Complete'"></span>
+          <span x-text="processingPayment ? 'Saving Invoice…' : 'Confirm & Complete'"></span>
         </button>
       </div>
 
     </div>
 
+  </div>
+
+  <!-- ================= BILL SAVED SUCCESS & PRINT POPUP ================= -->
+  <div x-show="showBillSavedModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 text-center space-y-5"
+         @click.away="showBillSavedModal = false">
+      
+      <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto">
+        <i data-lucide="check-check" class="w-7 h-7"></i>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-bold text-neutral-900 dark:text-white">Bill Saved Successfully!</h3>
+        <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Invoice generated and recorded in system.</p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-left space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Invoice Number:</span>
+          <span class="font-mono-num font-bold text-neutral-900 dark:text-white" x-text="lastSavedBill ? lastSavedBill.bill_id : ''"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Customer:</span>
+          <span class="font-semibold text-neutral-900 dark:text-white" x-text="lastSavedBill ? (lastSavedBill.client_name || 'Walk-in') : ''"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Payment Tender:</span>
+          <span class="font-semibold text-violet-600 dark:text-neon-cyan" x-text="lastSavedBill ? lastSavedBill.payment_mode : ''"></span>
+        </div>
+        <div class="flex justify-between pt-2 border-t border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+          <span>Total Paid:</span>
+          <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="lastSavedBill ? lastSavedBill.grand_total : ''"></span></span>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-1">
+        <button @click="showBillSavedModal = false" 
+                class="flex-1 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          Start New Bill
+        </button>
+        <button @click="printLastBill()" 
+                class="flex-1 py-3 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center justify-center gap-1.5 transition-all">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Print Bill</span>
+        </button>
+      </div>
+
+    </div>
   </div>
 
   <!-- ================= CUSTOM LINE ITEM MODAL ================= -->
@@ -592,23 +857,52 @@
     <div class="text-center pb-2 border-b border-black">
       {% if is_studio and salon and salon.logo %}
       <div class="flex justify-center mb-2">
-        <img src="{{ salon.logo }}" alt="Logo" class="h-12 object-contain">
+        <img src="{{ salon.logo }}" alt="Logo" class="h-12 max-w-[160px] object-contain">
       </div>
       {% endif %}
-      <h2 class="font-bold text-base uppercase tracking-wider">{{ salon.salon_name if salon else 'Aura Salon' }}</h2>
-      {% if salon and salon.address %}<p class="text-[10px]">{{ salon.address }}</p>{% endif %}
-      {% if salon and salon.phone %}<p class="text-[10px]">Phone: {{ salon.phone }}</p>{% endif %}
-      <p class="text-[10px]">Date: <span x-text="new Date().toLocaleDateString()"></span> <span x-text="new Date().toLocaleTimeString()"></span></p>
+
+      <h2 class="font-bold text-base uppercase tracking-wider">{{ salon.salon_name if (salon and salon.salon_name) else 'Aura Salon' }}</h2>
+
+      {% if is_studio and salon and salon.address %}
+      <p class="text-[10px]">{{ salon.address }}</p>
+      {% endif %}
+
+      {% if (is_studio or is_pro) and salon and salon.phone %}
+      <p class="text-[10px]">Phone: {{ salon.phone }}</p>
+      {% endif %}
+
+      <p class="text-[10px]">Date: <span x-text="printDate"></span></p>
+      <p class="text-[10px]">Invoice: #<span x-text="printInvoiceId"></span></p>
     </div>
 
+    {% if is_free %}
+    <!-- Free Tier AuraPOS Watermark -->
+    <div class="py-1 text-center border-b border-dashed border-black">
+      <p class="text-[9px] font-bold tracking-widest uppercase">--- POWERED BY AURAPOS ---</p>
+    </div>
+    {% endif %}
+
     <div class="py-2 text-[11px] border-b border-dashed border-black">
-      <p>Customer: <span x-text="customer.name || 'Walk-in Client'"></span></p>
-      <p>Phone: <span x-text="customer.phone || 'N/A'"></span></p>
-      <p>Payment: <span x-text="selectedPaymentMode"></span></p>
+      <p>Customer: <span x-text="printCustomer.name || 'Walk-in Client'"></span></p>
+      <p>Phone: <span x-text="printCustomer.phone || 'N/A'"></span></p>
+      <div class="flex justify-between">
+        <span>Payment:</span>
+        <span class="font-bold" x-text="printPaymentSummary"></span>
+      </div>
+      <template x-if="printSplits && printSplits.length > 0">
+        <div class="pl-2 pt-0.5 space-y-0.5 text-[10px]">
+          <template x-for="sp in printSplits" :key="sp.method">
+            <div class="flex justify-between">
+              <span>• <span x-text="sp.method"></span>:</span>
+              <span>₹<span x-text="sp.amount"></span></span>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
 
     <div class="py-2 text-[11px] space-y-1 border-b border-black">
-      <template x-for="item in billItems" :key="item.cartId">
+      <template x-for="item in printItems" :key="item.cartId || item.name">
         <div class="flex justify-between">
           <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
           <span>₹<span x-text="item.price * item.qty"></span></span>
@@ -617,17 +911,22 @@
     </div>
 
     <div class="py-2 text-[11px] space-y-0.5">
-      <div class="flex justify-between"><span>Subtotal:</span><span>₹<span x-text="subtotal"></span></span></div>
-      <div class="flex justify-between"><span>Discount:</span><span>₹<span x-text="discountAmount"></span></span></div>
-      <div class="flex justify-between"><span>GST (18%):</span><span>₹<span x-text="taxAmount"></span></span></div>
+      <div class="flex justify-between"><span>Subtotal:</span><span>₹<span x-text="printSubtotal"></span></span></div>
+      <div class="flex justify-between"><span>Discount:</span><span>₹<span x-text="printDiscount"></span></span></div>
+      <div class="flex justify-between"><span>GST (18%):</span><span>₹<span x-text="printTax"></span></span></div>
       <div class="flex justify-between font-bold text-sm pt-1 border-t border-black">
-        <span>TOTAL DUE:</span><span>₹<span x-text="grandTotal"></span></span>
+        <span>TOTAL DUE:</span><span>₹<span x-text="printGrandTotal"></span></span>
       </div>
     </div>
 
     <div class="text-center pt-3 text-[10px] border-t border-dashed border-black">
-      <p>Thank you for visiting Aura Salon!</p>
-      <p>Book online at aurapos.com/booking</p>
+      {% if is_free %}
+      <p class="font-bold text-[11px] tracking-wider uppercase">⚡ AURAPOS WATERMARK ⚡</p>
+      <p class="text-[9px]">Free Tier receipt • Visit aurapos.com to upgrade</p>
+      {% else %}
+      <p>Thank you for visiting {{ salon.salon_name if salon else 'our salon' }}!</p>
+      <p>Book online at aurapos.com/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}</p>
+      {% endif %}
     </div>
   </div>
 
@@ -649,6 +948,16 @@
       showCustomItemModal: false,
       processingPayment: false,
       lastBillId: null,
+      showBillSavedModal: false,
+      lastSavedBill: null,
+
+      // Split payment mode state
+      isSplitMode: false,
+      splitRows: [
+        { method: 'UPI', amount: 0 },
+        { method: 'Cash', amount: 0 }
+      ],
+      availableSplitMethods: ['UPI', 'Cash', 'Card', 'Bank Transfer', 'Cheque', 'Gift Card'],
 
       customer: {
         name: '',
@@ -723,7 +1032,7 @@
 
       // ---------- Customer lookup ----------
       onCustomerInput() {
-        this.customer = { id: null, name: '', phone: '' }; // typing clears previous selection
+        this.customer = { id: null, name: '', phone: '' };
         this.showCustomerResults = true;
         clearTimeout(this.customerSearchTimer);
         const q = this.customerQuery.trim();
@@ -758,7 +1067,6 @@
       // ---------- New customer dialog ----------
       openNewCustomerModal() {
         this.newCustomer = { name: '', phone: '', email: '', notes: '' };
-        // Pre-fill from whatever the cashier already typed
         const q = this.customerQuery.trim();
         if (q) {
           const digits = q.replace(/\D/g, '');
@@ -792,7 +1100,6 @@
             this.selectCustomer(data.customer);
             this.showNewCustomerModal = false;
           } else if (res.status === 409 && data.existing) {
-            // Phone already registered — attach that customer instead
             this.selectCustomer(data.existing);
             this.showNewCustomerModal = false;
           } else {
@@ -928,6 +1235,56 @@
         return this.taxableAmount + this.taxAmount;
       },
 
+      // Split Payment Calculations & Helpers
+      get splitTotal() {
+        return this.splitRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      },
+
+      get splitRemaining() {
+        return this.grandTotal - this.splitTotal;
+      },
+
+      enableSplitMode() {
+        this.isSplitMode = true;
+        const half = Math.floor(this.grandTotal / 2);
+        this.splitRows = [
+          { method: 'UPI', amount: half },
+          { method: 'Cash', amount: this.grandTotal - half }
+        ];
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      addSplitRow() {
+        const unused = this.availableSplitMethods.find(m => !this.splitRows.some(r => r.method === m)) || 'Card';
+        this.splitRows.push({ method: unused, amount: Math.max(0, this.splitRemaining) });
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      removeSplitRow(index) {
+        if (this.splitRows.length <= 2) {
+          window.uiToast('At least 2 payment methods are required for split tender.', 'warning');
+          return;
+        }
+        this.splitRows.splice(index, 1);
+      },
+
+      fillSplitRemaining() {
+        if (this.splitRows.length > 0 && this.splitRemaining > 0) {
+          const last = this.splitRows[this.splitRows.length - 1];
+          last.amount = (Number(last.amount) || 0) + this.splitRemaining;
+        }
+      },
+
+      splitEqually() {
+        if (this.splitRows.length === 0) return;
+        const count = this.splitRows.length;
+        const base = Math.floor(this.grandTotal / count);
+        let rem = this.grandTotal - (base * count);
+        this.splitRows.forEach((r, idx) => {
+          r.amount = base + (idx === count - 1 ? rem : 0);
+        });
+      },
+
       toggleSkeleton() {
         this.isLoading = true;
         setTimeout(() => {
@@ -937,7 +1294,13 @@
 
       openPaymentModal() {
         this.cashReceived = this.grandTotal;
+        const half = Math.floor(this.grandTotal / 2);
+        this.splitRows = [
+          { method: 'UPI', amount: half },
+          { method: 'Cash', amount: this.grandTotal - half }
+        ];
         this.showPaymentModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
 
       async finalizePayment() {
@@ -945,13 +1308,36 @@
           window.uiToast('Add at least one service before collecting payment.', 'warning');
           return;
         }
-        if (this.selectedPaymentMode === 'Cash' && (this.cashReceived < this.grandTotal)) {
+        if (!this.isSplitMode && this.selectedPaymentMode === 'Cash' && (this.cashReceived < this.grandTotal)) {
           window.uiToast('Cash received is less than the total due.', 'error');
           return;
         }
+        if (this.isSplitMode) {
+          if (this.splitRows.length < 2) {
+            window.uiToast('Split payment requires at least 2 payment methods.', 'error');
+            return;
+          }
+          if (this.splitRemaining !== 0) {
+            window.uiToast(`Split amount does not match total due (₹${this.splitRemaining} difference).`, 'error');
+            return;
+          }
+          if (this.splitRows.some(r => !r.amount || Number(r.amount) <= 0)) {
+            window.uiToast('Each split payment method must have an amount greater than 0.', 'error');
+            return;
+          }
+        }
+
         if (this.processingPayment) return;
         this.processingPayment = true;
+
         try {
+          let modeString = this.selectedPaymentMode;
+          let splitsData = null;
+          if (this.isSplitMode) {
+            splitsData = this.splitRows.map(r => ({ method: r.method, amount: Number(r.amount) }));
+            modeString = `Split (${splitsData.map(s => s.method + ': ₹' + s.amount).join(', ')})`;
+          }
+
           const payload = {
             client_name: (this.customer && this.customer.name) || 'Walk-in',
             client_phone: (this.customer && this.customer.phone) || '',
@@ -959,7 +1345,8 @@
             discount: this.discountAmount,
             tax: this.taxAmount,
             grand_total: this.grandTotal,
-            payment_mode: this.selectedPaymentMode,
+            payment_mode: modeString,
+            splits: splitsData,
             items: this.billItems.map(i => ({
               name: i.name,
               price: i.price,
@@ -967,6 +1354,7 @@
               staff: i.staff || 'Unassigned'
             }))
           };
+
           const res = await fetch('/api/bills', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -974,15 +1362,33 @@
           });
           const data = await res.json();
           if (res.ok && data.success) {
+            const savedBill = {
+              bill_id: data.bill_id,
+              client_name: payload.client_name,
+              client_phone: payload.client_phone,
+              items: JSON.parse(JSON.stringify(this.billItems)),
+              subtotal: this.subtotal,
+              discount: this.discountAmount,
+              tax: this.taxAmount,
+              grand_total: this.grandTotal,
+              payment_mode: modeString,
+              splits: splitsData,
+              date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
+            };
+            this.lastSavedBill = savedBill;
             this.lastBillId = data.bill_id;
             this.showPaymentModal = false;
-            window.uiToast(`Payment of ₹${this.grandTotal} recorded via ${this.selectedPaymentMode}. Invoice #${data.bill_id} saved!`, 'success');
+            this.showBillSavedModal = true;
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+
+            // Reset current cart & customer
             this.billItems = [];
             this.customer = { name: '', phone: '' };
             this.customerQuery = '';
             this.discountValue = 0;
+            window.uiToast(`Bill #${data.bill_id} recorded!`, 'success');
           } else {
-            window.uiToast((data && data.message) || 'Could not record the payment. Please try again.', 'error');
+            window.uiToast((data && data.message) || 'Could not record payment. Please try again.', 'error');
           }
         } catch (e) {
           window.uiToast('Network error — bill was not saved. Please retry.', 'error');
@@ -990,8 +1396,64 @@
         this.processingPayment = false;
       },
 
+      printLastBill() {
+        if (!this.lastSavedBill && this.billItems.length === 0) {
+          window.uiToast('No bill available to print.', 'warning');
+          return;
+        }
+        this.$nextTick(() => {
+          window.print();
+        });
+      },
+
       printReceipt() {
         window.print();
+      },
+
+      // Receipt printing computed helpers
+      get printItems() {
+        if (this.billItems && this.billItems.length > 0) return this.billItems;
+        if (this.lastSavedBill && this.lastSavedBill.items) return this.lastSavedBill.items;
+        return [];
+      },
+      get printSubtotal() {
+        if (this.billItems && this.billItems.length > 0) return this.subtotal;
+        return this.lastSavedBill ? this.lastSavedBill.subtotal : 0;
+      },
+      get printDiscount() {
+        if (this.billItems && this.billItems.length > 0) return this.discountAmount;
+        return this.lastSavedBill ? this.lastSavedBill.discount : 0;
+      },
+      get printTax() {
+        if (this.billItems && this.billItems.length > 0) return this.taxAmount;
+        return this.lastSavedBill ? this.lastSavedBill.tax : 0;
+      },
+      get printGrandTotal() {
+        if (this.billItems && this.billItems.length > 0) return this.grandTotal;
+        return this.lastSavedBill ? this.lastSavedBill.grand_total : 0;
+      },
+      get printCustomer() {
+        if (this.billItems && this.billItems.length > 0) return this.customer;
+        return this.lastSavedBill ? { name: this.lastSavedBill.client_name, phone: this.lastSavedBill.client_phone } : { name: 'Walk-in', phone: 'N/A' };
+      },
+      get printPaymentSummary() {
+        if (this.billItems && this.billItems.length > 0) {
+          if (this.isSplitMode) return 'Split Tender';
+          return this.selectedPaymentMode;
+        }
+        return this.lastSavedBill ? this.lastSavedBill.payment_mode : this.selectedPaymentMode;
+      },
+      get printSplits() {
+        if (this.billItems && this.billItems.length > 0 && this.isSplitMode) {
+          return this.splitRows;
+        }
+        return (this.lastSavedBill && this.lastSavedBill.splits) ? this.lastSavedBill.splits : null;
+      },
+      get printInvoiceId() {
+        return (this.lastSavedBill && this.lastSavedBill.bill_id) ? this.lastSavedBill.bill_id : (this.lastBillId || 'CURRENT');
+      },
+      get printDate() {
+        return (this.lastSavedBill && this.lastSavedBill.date) ? this.lastSavedBill.date : (new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString());
       }
     };
   }

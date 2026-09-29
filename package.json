@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@tailwindcss/cli": "^4.3.2",
+    "supabase": "^2.118.0",
     "tailwindcss": "^4.3.2"
   }
 }

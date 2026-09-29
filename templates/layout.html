@@ -8,7 +8,28 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2410c'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke-width='1.7' opacity='.45' pathLength='100' stroke-dasharray='17 8'/%3E%3Cpath d='M10 23.2 16 7.2l6 16' stroke-width='2.7' stroke-linejoin='round'/%3E%3Cpath d='M12.3 17h7.4' stroke-width='2.7'/%3E%3C/g%3E%3C/svg%3E">
   <title>{% block title %}AuraPOS - Salon Billing & Management Software{% endblock %}</title>
   
-  <!-- Preconnect Fonts -->
+  <!-- SEO & Social Meta Tags -->
+  <meta name="description" content="{% block meta_description %}AuraPOS - High-performance salon POS, kinetic billing, multi-tender split payments, client management, and branded online booking portals.{% endblock %}">
+  <meta name="keywords" content="salon pos, salon management software, spa billing, kinetic billing, salon booking portal, beauty salon software, hair salon pos">
+  <meta name="author" content="AuraPOS">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="{{ request.base_url }}">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta property="og:title" content="{% block og_title %}AuraPOS - Salon Billing & Management Software{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Lightning-fast kinetic billing, appointment scheduling, multi-tender split payments, and client records built for high-performance modern salons.{% endblock %}">
+  <meta property="og:image" content="{{ request.url_root.rstrip('/') if request else '' }}/assets/og-share-logo.png">
+  <meta property="og:site_name" content="AuraPOS">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="{{ request.url }}">
+  <meta name="twitter:title" content="{% block twitter_title %}AuraPOS - Salon Billing & Management Software{% endblock %}">
+  <meta name="twitter:description" content="{% block twitter_description %}Lightning-fast kinetic billing, appointment scheduling, multi-tender split payments, and client records built for modern salons.{% endblock %}">
+  <meta name="twitter:image" content="{{ request.url_root.rstrip('/') if request else '' }}/assets/og-share-logo.png">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -48,6 +69,17 @@
     .glow-cyan { box-shadow: 0 0 35px -5px rgba(251, 191, 36, 0.4); }
     .glow-magenta { box-shadow: 0 0 35px -5px rgba(251, 146, 60, 0.4); }
     .glow-violet { box-shadow: 0 0 35px -5px rgba(194, 65, 12, 0.4); }
+
+    /* Cross-browser Custom Select without native OS chevron */
+    select.custom-select {
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      appearance: none !important;
+      background-image: none !important;
+    }
+    select.custom-select::-ms-expand {
+      display: none !important;
+    }
     
     /* Subtle glass */
     .glass-nav {
@@ -722,6 +754,48 @@
           </button>
         </div>
       </template>
+    </div>
+
+    <!-- Cookie Consent Banner -->
+    <div x-data="{
+           consentGiven: localStorage.getItem('aurapos_cookie_consent'),
+           acceptAll() {
+             localStorage.setItem('aurapos_cookie_consent', 'accepted');
+             this.consentGiven = 'accepted';
+           },
+           rejectOptional() {
+             localStorage.setItem('aurapos_cookie_consent', 'essential_only');
+             this.consentGiven = 'essential_only';
+           }
+         }"
+         x-show="!consentGiven"
+         x-cloak
+         x-transition:enter="transition ease-out duration-500 transform"
+         x-transition:enter-start="opacity-0 translate-y-8 scale-95"
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+         x-transition:leave="transition ease-in duration-300 transform"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 translate-y-8 scale-95"
+         class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[100] p-5 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl shadow-2xl">
+      <div class="flex items-start gap-3.5">
+        <div class="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-primary mt-0.5">
+          <i data-lucide="cookie" class="w-5 h-5"></i>
+        </div>
+        <div class="flex-1 text-xs">
+          <h4 class="font-bold text-neutral-900 dark:text-neutral-100 text-sm mb-1">Privacy & Cookie Choices</h4>
+          <p class="text-neutral-600 dark:text-neutral-400 leading-relaxed mb-3">
+            We use essential local tokens to safeguard salon billing sessions, prevent unauthorized terminal access, and maintain split-payment state.
+          </p>
+          <div class="flex items-center gap-2">
+            <button @click="acceptAll()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-primary hover:bg-primary-hover shadow-md shadow-primary/20 transition-all">
+              Accept All
+            </button>
+            <button @click="rejectOptional()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+              Essential Only
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>

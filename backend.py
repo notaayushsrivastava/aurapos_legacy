@@ -215,11 +215,35 @@ def ensure_schema_upgrades():
         cur.execute("ALTER TABLE salons ADD COLUMN latitude REAL")
     if salons_columns and "longitude" not in salons_columns:
         cur.execute("ALTER TABLE salons ADD COLUMN longitude REAL")
+    if salons_columns and "booking_slug" not in salons_columns:
+        cur.execute("ALTER TABLE salons ADD COLUMN booking_slug TEXT")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS salon_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salon_id INTEGER UNIQUE,
+            payment_methods TEXT DEFAULT '{}',
+            session_timeout TEXT DEFAULT '7d',
+            created_at INTEGER,
+            updated_at INTEGER,
+            FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE
+        )
+    """)
+    settings_columns = {r["name"] for r in cur.execute("PRAGMA table_info(salon_settings)").fetchall()}
+    if settings_columns and "session_timeout" not in settings_columns:
+        cur.execute("ALTER TABLE salon_settings ADD COLUMN session_timeout TEXT DEFAULT '7d'")
     subs_columns = {r["name"] for r in cur.execute("PRAGMA table_info(subscriptions)").fetchall()}
     if subs_columns and "billing_cycle" not in subs_columns:
         cur.execute("ALTER TABLE subscriptions ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT 'monthly'")
     conn.commit()
     conn.close()
+
+
+import secrets
+
+def generate_booking_slug(length=5):
+    """Generate a clean 5-character lowercase alphanumeric slug for vanity booking links."""
+    chars = "23456789abcdefghjkmnpqrstuvwxyz"
+    return "".join(secrets.choice(chars) for _ in range(length))
 
 
 @dataclass
@@ -248,6 +272,7 @@ class Salon:
     # Salon location (map pin) — a Pro-tier feature, coordinates optional.
     latitude: float | None = None
     longitude: float | None = None
+    booking_slug: str | None = None
 
     @classmethod
     def from_row(cls, row):
@@ -268,6 +293,7 @@ class Salon:
             opening_hours=((row["opening_hours"] if "opening_hours" in row.keys() else "") or "{}"),
             latitude=(row["latitude"] if "latitude" in row.keys() else None),
             longitude=(row["longitude"] if "longitude" in row.keys() else None),
+            booking_slug=(row["booking_slug"] if "booking_slug" in row.keys() else None),
         )
 
 
@@ -402,15 +428,16 @@ class AuthorizationRepository:
             created_on = int(datetime.now().timestamp())
         tier, cycle, _ = resolve_plan(plan)
         expires_on = expires_for(cycle, created_on)
+        booking_slug = generate_booking_slug()
         
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO salons(name, salon_name, phone, email, plan, billing_cycle, created_on, expires_on)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO salons(name, salon_name, phone, email, plan, billing_cycle, created_on, expires_on, booking_slug)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, salon_name, str(phone), email, tier, cycle, created_on, expires_on),
+            (name, salon_name, str(phone), email, tier, cycle, created_on, expires_on, booking_slug),
         )
         auth_id = cur.lastrowid
         conn.commit()
@@ -433,8 +460,87 @@ class AuthorizationRepository:
         conn = get_db()
         cur = conn.cursor()
         row = cur.execute("SELECT * FROM salons WHERE id = ?", (salon_id,)).fetchone()
+        if not row:
+            conn.close()
+            return None
+        salon = Salon.from_row(row)
+        if not salon.booking_slug:
+            slug = generate_booking_slug()
+            try:
+                cur.execute("UPDATE salons SET booking_slug = ? WHERE id = ?", (slug, salon_id))
+                conn.commit()
+                salon.booking_slug = slug
+            except Exception:
+                pass
         conn.close()
-        return Salon.from_row(row)
+        return salon
+
+    def get_salon_by_slug(self, slug):
+        if not slug:
+            return None
+        slug_clean = str(slug).strip().lower()
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM salons WHERE LOWER(booking_slug) = ? LIMIT 1", (slug_clean,)).fetchone()
+        if not row:
+            try:
+                row = cur.execute("SELECT * FROM salons WHERE id = ?", (int(slug),)).fetchone()
+            except (ValueError, TypeError):
+                row = None
+        conn.close()
+        return Salon.from_row(row) if row else None
+
+    def get_payment_methods(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT payment_methods FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        conn.close()
+        if row and row["payment_methods"]:
+            try:
+                val = row["payment_methods"]
+                return json.loads(val) if isinstance(val, str) else val
+            except Exception:
+                pass
+        return {"upi": "", "card_terminal": ""}
+
+    def update_payment_methods(self, salon_id, methods):
+        conn = get_db()
+        cur = conn.cursor()
+        methods_json = json.dumps(methods) if isinstance(methods, dict) else str(methods)
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET payment_methods = ?, updated_at = ? WHERE salon_id = ?", (methods_json, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, payment_methods, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, methods_json, now, now))
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_session_timeout(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT session_timeout FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        conn.close()
+        if row and row["session_timeout"]:
+            return str(row["session_timeout"]).strip().lower()
+        return "7d"
+
+    def update_session_timeout(self, salon_id, timeout):
+        conn = get_db()
+        cur = conn.cursor()
+        timeout_clean = str(timeout).strip().lower()
+        if timeout_clean not in ("30m", "1h", "12h", "24h", "7d", "never"):
+            timeout_clean = "7d"
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET session_timeout = ?, updated_at = ? WHERE salon_id = ?", (timeout_clean, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, session_timeout, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, timeout_clean, now, now))
+        conn.commit()
+        conn.close()
+        return True
 
     def forgot_password(self, identifier):
         conn = get_db()

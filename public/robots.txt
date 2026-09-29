@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Allow: /booking
+Allow: /b/
+Allow: /contact
+Allow: /terms
+Allow: /privacy
+Allow: /register
+Allow: /login
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /billing
+Disallow: /services
+Disallow: /staff
+Disallow: /appointments
+Disallow: /reports
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://aurapos.com/sitemap.xml

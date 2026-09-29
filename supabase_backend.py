@@ -176,6 +176,14 @@ class Account:
         return asdict(self)
 
 
+import secrets
+
+def generate_booking_slug(length=5):
+    """Generate a clean 5-character lowercase alphanumeric slug for vanity booking links."""
+    chars = "23456789abcdefghjkmnpqrstuvwxyz"
+    return "".join(secrets.choice(chars) for _ in range(length))
+
+
 @dataclass
 class Salon:
     id: int
@@ -192,6 +200,7 @@ class Salon:
     opening_hours: str = "{}"
     latitude: float = None
     longitude: float = None
+    booking_slug: str = None
 
     @classmethod
     def from_row(cls, row):
@@ -203,7 +212,7 @@ class Salon:
             "id": None, "name": "", "phone": "", "salon_name": "", "email": "",
             "created_on": 0, "plan": "free", "expires_on": None, "logo": None,
             "billing_cycle": "monthly", "address": "", "opening_hours": "{}",
-            "latitude": None, "longitude": None,
+            "latitude": None, "longitude": None, "booking_slug": None,
         }
         defaults.update({k: v for k, v in row.items() if k in defaults})
         # Never allow an empty plan — fall back to "free" if the stored
@@ -537,6 +546,7 @@ class AuthorizationRepository:
         auth_uid = _sb_create_auth_user(
             email, password, {"name": name, "salon_name": salon_name, "plan": tier}
         )
+        booking_slug = generate_booking_slug()
         res = (
             _sb().table("salons")
             .insert({
@@ -549,6 +559,7 @@ class AuthorizationRepository:
                 "billing_cycle": cycle,
                 "expires_on": expires_ts,
                 "auth_uid": auth_uid,
+                "booking_slug": booking_slug,
             })
             .execute()
         )
@@ -586,7 +597,72 @@ class AuthorizationRepository:
         row = _data(
             _sb().table("salons").select("*").eq("id", salon_id).maybe_single().execute()
         )
-        return Salon.from_row(row) if row else None
+        if not row:
+            return None
+        salon = Salon.from_row(row)
+        if not salon.booking_slug:
+            slug = generate_booking_slug()
+            try:
+                _sb().table("salons").update({"booking_slug": slug}).eq("id", salon_id).execute()
+                salon.booking_slug = slug
+            except Exception as e:
+                _warn(f"Failed to auto-assign booking_slug to salon #{salon_id}: {e}")
+        return salon
+
+    def get_salon_by_slug(self, slug):
+        if not slug:
+            return None
+        slug_clean = str(slug).strip().lower()
+        try:
+            row = _data(
+                _sb().table("salons").select("*").ilike("booking_slug", slug_clean).maybe_single().execute()
+            )
+            if row:
+                return Salon.from_row(row)
+        except Exception as e:
+            _warn(f"get_salon_by_slug({slug}) failed: {e}")
+        try:
+            val_id = int(slug)
+            return self.get_salon(val_id)
+        except (ValueError, TypeError):
+            return None
+
+    def get_session_timeout(self, salon_id):
+        try:
+            row = _data(
+                _sb().table("salon_settings").select("session_timeout").eq("salon_id", salon_id).maybe_single().execute()
+            )
+            if row and row.get("session_timeout"):
+                return str(row["session_timeout"]).strip().lower()
+        except Exception as e:
+            _warn(f"get_session_timeout({salon_id}) failed: {e}")
+        return "7d"
+
+    def update_session_timeout(self, salon_id, timeout):
+        timeout_clean = str(timeout).strip().lower()
+        if timeout_clean not in ("30m", "1h", "12h", "24h", "7d", "never"):
+            timeout_clean = "7d"
+        now = int(datetime.now().timestamp())
+        try:
+            existing = _data(
+                _sb().table("salon_settings").select("id").eq("salon_id", salon_id).maybe_single().execute()
+            )
+            if existing:
+                _sb().table("salon_settings").update({
+                    "session_timeout": timeout_clean,
+                    "updated_at": now
+                }).eq("salon_id", salon_id).execute()
+            else:
+                _sb().table("salon_settings").insert({
+                    "salon_id": salon_id,
+                    "session_timeout": timeout_clean,
+                    "created_at": now,
+                    "updated_at": now
+                }).execute()
+            return True
+        except Exception as e:
+            _warn(f"update_session_timeout({salon_id}) failed: {e}")
+            return False
 
     def forgot_password(self, identifier):
         """Find an account by its username/email or by the salon's phone number.
