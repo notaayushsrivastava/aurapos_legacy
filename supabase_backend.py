@@ -305,25 +305,78 @@ def _sb():
     return get_client()
 
 
+def _sb_find_auth_user(email):
+    """Find an existing, non-deleted Supabase Auth user by email.
+
+    This is used only to repair an orphaned Auth identity left behind when a
+    previous salon creation attempt failed after Auth provisioning.
+    """
+    target = (email or "").strip().lower()
+    if not target:
+        return None
+    try:
+        res = _sb().auth.admin.list_users(page=1, per_page=1000)
+        users = getattr(res, "users", None)
+        if users is None:
+            data = getattr(res, "data", None)
+            if isinstance(data, dict):
+                users = data.get("users", [])
+            else:
+                users = []
+        for user in users or []:
+            user_email = str(getattr(user, "email", None) or "").strip().lower()
+            if user_email == target and not getattr(user, "deleted_at", None):
+                return user
+    except Exception as exc:
+        _warn(f"Supabase Auth: could not look up existing user {email}: {exc}")
+    return None
+
+
 def _sb_create_auth_user(email, password, metadata=None):
     """Create a Supabase Auth user and return its UUID.
 
-    Auth provisioning is required for every new owner/team account. Never
-    create a database account with a missing Supabase identity because that
-    produces a split-brain account that can later lose its identity mapping.
+    If Auth already contains the email but AuraPOS has no local salon/account
+    for it, reuse that orphaned identity and synchronize its password/metadata.
+    This repairs interrupted provisioning without creating a second identity.
     """
+    email = (email or "").strip().lower()
+    metadata = metadata or {}
     try:
         res = _sb().auth.admin.create_user({
-            "email": (email or "").strip(),
+            "email": email,
             "password": password or "",
             "email_confirm": True,
-            "user_metadata": metadata or {},
+            "user_metadata": metadata,
         })
         uid = getattr(res.user, "id", None)
         if not uid:
             raise RuntimeError("Supabase Auth returned no user id.")
         return uid
     except Exception as exc:
+        message = str(exc).lower()
+        already_exists = (
+            "already been registered" in message
+            or "already registered" in message
+            or "email_exists" in message
+        )
+        if already_exists:
+            existing = _sb_find_auth_user(email)
+            uid = getattr(existing, "id", None) if existing is not None else None
+            if uid:
+                try:
+                    _sb().auth.admin.update_user_by_id(uid, {
+                        "password": password or "",
+                        "email_confirm": True,
+                        "user_metadata": metadata,
+                    })
+                    _warn(f"Supabase Auth: reusing orphaned user {email} ({uid})")
+                    return uid
+                except Exception as update_exc:
+                    _warn(f"Supabase Auth: could not repair existing user {email}: {update_exc}")
+                    raise RuntimeError(
+                        f"Supabase Auth user already exists for {email}, but it could not be repaired: {update_exc}"
+                    ) from update_exc
+
         _warn(f"Supabase Auth: could not create user {email}: {exc}")
         raise RuntimeError(f"Supabase Auth user provisioning failed for {email}: {exc}") from exc
 
@@ -723,18 +776,31 @@ class AuthorizationRepository:
         return None
 
     def check_exists(self, email, phone):
-        """True when a salon already exists with this email or phone."""
-        email = (email or "").strip()
+        """True when an AuraPOS salon or account already exists."""
+        email = (email or "").strip().lower()
         phone = (phone or "").strip()
-        query = _sb().table("salons").select("id").limit(1)
+
+        salon_query = _sb().table("salons").select("id").limit(1)
         if email and phone:
-            query = query.or_(f"email.eq.{email},phone.eq.{phone}")
+            salon_query = salon_query.or_(f"email.eq.{email},phone.eq.{phone}")
         elif email:
-            query = query.eq("email", email)
+            salon_query = salon_query.eq("email", email)
         else:
-            query = query.eq("phone", phone)
-        res = query.execute()
-        return bool(res.data)
+            salon_query = salon_query.eq("phone", phone)
+        if salon_query.execute().data:
+            return True
+
+        if email:
+            account_query = (
+                _sb().table("accounts")
+                .select("id")
+                .eq("username", email)
+                .limit(1)
+            )
+            if account_query.execute().data:
+                return True
+
+        return False
 
     # ---------- Settings: salon profile ----------
 
