@@ -285,10 +285,11 @@ def _sb():
 
 
 def _sb_create_auth_user(email, password, metadata=None):
-    """Create a Supabase Auth user (email pre-confirmed) — returns the auth uid.
+    """Create a Supabase Auth user and return its UUID.
 
-    Best-effort: returns None if Supabase Auth is unavailable so the data row
-    still gets written (the synced password fallback keeps login working).
+    Auth provisioning is required for every new owner/team account. Never
+    create a database account with a missing Supabase identity because that
+    produces a split-brain account that can later lose its identity mapping.
     """
     try:
         res = _sb().auth.admin.create_user({
@@ -297,10 +298,13 @@ def _sb_create_auth_user(email, password, metadata=None):
             "email_confirm": True,
             "user_metadata": metadata or {},
         })
-        return getattr(res.user, "id", None)
+        uid = getattr(res.user, "id", None)
+        if not uid:
+            raise RuntimeError("Supabase Auth returned no user id.")
+        return uid
     except Exception as exc:
         _warn(f"Supabase Auth: could not create user {email}: {exc}")
-        return None
+        raise RuntimeError(f"Supabase Auth user provisioning failed for {email}: {exc}") from exc
 
 
 def _sb_update_auth_user(uid, props):
@@ -508,7 +512,7 @@ class AuthorizationRepository:
             return False
 
     def create_account(self, auth_id, username, password, auth_level="admin", supabase_uid=None):
-        """Insert a team/owner account row (provisions the Supabase Auth user)."""
+        """Insert a team/owner account row with a required Supabase Auth identity."""
         username = (username or "").strip().lower()
         if supabase_uid is None:
             supabase_uid = _sb_create_auth_user(
@@ -880,13 +884,26 @@ class AuthorizationRepository:
         payload = {"username": username, "auth_level": auth_level}
         if password:
             payload["password"] = password
-        _sb().table("accounts").update(payload).eq("id", row_id).execute()
+        # The account must have a real Supabase Auth identity before its
+        # credentials are changed. Otherwise the DB row and Auth can diverge.
+        if not row.get("supabase_uid"):
+            return {
+                "success": False,
+                "message": "This account is missing its Supabase Auth identity. Repair the account before changing its credentials.",
+            }
 
-        # Keep the Supabase Auth user in sync (email and, when given, password).
+        # Update Auth first. Only persist the local account email/password
+        # after the authoritative Auth update succeeds.
         props = {"email": username}
         if password:
             props["password"] = password
-        _sb_update_auth_user(row.get("supabase_uid"), props)
+        if not _sb_update_auth_user(row.get("supabase_uid"), props):
+            return {
+                "success": False,
+                "message": "Supabase Auth rejected the account update. No local credentials were changed.",
+            }
+
+        _sb().table("accounts").update(payload).eq("id", row_id).execute()
         return {"success": True, "message": "Team account updated."}
 
     def delete_account(self, salon_id, row_id):
