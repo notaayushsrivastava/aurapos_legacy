@@ -282,7 +282,10 @@
             name: 'AuraPOS Plan Upgrade',
             description: 'Upgrade to ' + info.label,
             order_id: order.id,
-            theme: { color: '#c2410c' },
+            theme: {
+              color: '#c2410c',
+              backdrop_color: 'transparent'
+            },
             handler: async (response) => {
               try {
                 const verifyRes = await fetch('{{ url_for("verify_upgrade") }}', {
@@ -302,7 +305,13 @@
                 this.isSubmitting = false;
               }
             },
-            modal: { ondismiss: () => { this.isSubmitting = false; } }
+            modal: {
+              backdropclose: true,
+              escape: true,
+              handleback: true,
+              animation: true,
+              ondismiss: () => { this.isSubmitting = false; }
+            }
           };
           const rzp = new Razorpay(options);
           rzp.open();

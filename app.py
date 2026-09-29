@@ -1,10 +1,24 @@
+import os
+import sys
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import (
     Flask, jsonify, request, render_template, flash, redirect, url_for, session, Response,
     Blueprint,
 )
 import razorpay
 from uuid import uuid4
-from supabase_backend import *
+
+if os.environ.get("USE_POSTGRES") or os.environ.get("USE_POSTGRESQL") or (os.environ.get("DATABASE_URL") and not os.environ.get("SUPABASE_URL")):
+    from backend import *
+else:
+    from supabase_backend import *
+
 from flask_mail import Mail, Message
 from functools import wraps
 from datetime import timedelta, datetime, date
@@ -16,8 +30,6 @@ import io
 import json
 import base64
 import hmac
-import sys
-import os
 import re
 
 ACCEPTING_PUBLIC = os.environ.get("ACCEPTING_PUBLIC", "").strip().lower() in ("1", "true", "yes", "on")
@@ -167,11 +179,22 @@ else:
     template_folder = 'templates'
     static_folder = 'public'
 
+# Configure structured logging
+import logging
+log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+logging.basicConfig(
+    level=log_level,
+    format='[%(asctime)s] [%(levelname)s] in %(module)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger("aurapos")
+
 # 'app' must be declared at the module root level
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder,
             static_url_path='')
 
-app.config["SECRET_KEY"] = "oqhwd9qyweijsdiuweqifbu"
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "oqhwd9qyweijsdiuweqifbu")
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB maximum upload limit
 
 # Repositories
 authRepo = AuthorizationRepository()
@@ -200,26 +223,97 @@ def public_signup_state():
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["20 per second"],
+    default_limits=["300 per minute", "3000 per hour"],
     storage_uri=os.environ.get("REDIS_URL", "memory://"),
 )
 
 # Flask-Mail configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'salonbillingsoftware@gmail.com'
-app.config['MAIL_PASSWORD'] = 'ifqrgmhhvnaiqhto'
-app.config['MAIL_DEFAULT_SENDER'] = 'salonbillingsoftware@gmail.com'
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() in ('true', '1', 'yes')
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'false').lower() in ('true', '1', 'yes')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'salonbillingsoftware@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'ifqrgmhhvnaiqhto')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'salonbillingsoftware@gmail.com')
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 mailer = Mail(app)
 
+rzp_key_id = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_SxU2RG4SoMaOcI")
+rzp_key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "nYTCHgr6NQy1b5X0VDEXcELO")
 rzp_client = razorpay.Client(
-    auth=("rzp_test_SxU2RG4SoMaOcI", "nYTCHgr6NQy1b5X0VDEXcELO")
+    auth=(rzp_key_id, rzp_key_secret)
 )
+
+
+@app.after_request
+def apply_security_and_cache_headers(response):
+    """Apply defense-in-depth security headers and optimal caching policies."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Static assets caching
+    path = request.path
+    if path == "/output.css" or path.startswith("/public/") or path.endswith((".css", ".js", ".svg", ".png", ".jpg", ".webp", ".ico", ".woff2")):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+
+    return response
+
+
+# ================= HEALTH & UPTIME MONITORING =================
+
+@app.route('/healthz')
+@app.route('/api/health')
+@limiter.exempt
+def health_check():
+    """Uptime monitoring & health check probe for Vercel, UptimeRobot, and load balancers."""
+    db_ok = True
+    try:
+        # Perform quick non-blocking DB probe
+        adminRepo.get_setting("health_probe_ping", None)
+    except Exception as e:
+        logger.warning(f"Health check DB probe error: {e}")
+        db_ok = False
+
+    status_code = 200 if db_ok else 503
+    return jsonify({
+        "status": "healthy" if db_ok else "degraded",
+        "database": "connected" if db_ok else "unreachable",
+        "timestamp": int(datetime.now().timestamp()),
+        "version": "2.5.0",
+        "environment": "serverless" if os.environ.get("VERCEL") else "standard"
+    }), status_code
+
+
+def compress_image_blob(blob, mime, max_dim=800, quality=85):
+    """Compress image buffer using Pillow if available, falling back to original blob."""
+    if mime == "image/svg+xml":
+        return blob, mime
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(blob))
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        if mime in ("image/jpeg", "image/jpg"):
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            img.save(out, format="JPEG", quality=quality, optimize=True)
+            return out.getvalue(), "image/jpeg"
+        elif mime == "image/webp":
+            img.save(out, format="WEBP", quality=quality)
+            return out.getvalue(), "image/webp"
+        else:
+            img.save(out, format="PNG", optimize=True)
+            return out.getvalue(), "image/png"
+    except Exception as e:
+        logger.debug(f"Image compression fallback: {e}")
+        return blob, mime
 
 
 @app.context_processor
@@ -359,6 +453,7 @@ def upgrade():
 # ================= AUTHENTICATION ROUTES =================
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("15 per minute")
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -387,6 +482,7 @@ def logout():
 
 
 @app.route('/directlogin')
+@limiter.limit("10 per minute")
 def directlogin():
     username = request.args.get("username")
     password = request.args.get("password")
@@ -404,6 +500,7 @@ def directlogin():
 
 
 @app.route("/forgotpassword", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def forgotpassword():
     if request.method == "GET":
         return render_template('service/forgotpwd.html')
@@ -428,7 +525,7 @@ def forgotpassword():
                 )
             )
         except Exception as e:
-            print("Mail error (safe fallback):", e)
+            logger.warning(f"Mail error (safe fallback): {e}")
 
     return jsonify({
         "success": True,
@@ -438,8 +535,8 @@ def forgotpassword():
 
 # ================= RAZORPAY SUBSCRIPTION =================
 
-@limiter.exempt
 @app.post("/create-subscription")
+@limiter.limit("20 per minute")
 def create_subscription():
     data = request.get_json() or {}
     email = data.get("email", "").strip()
@@ -471,7 +568,7 @@ def create_subscription():
             "payment_capture": 1
         })
     except Exception as e:
-        print(f"RAZORPAY ERROR : {e}")
+        logger.warning(f"Razorpay order creation fallback: {e}")
         order = {
             "id": f"order_{str(uuid4())[:14]}",
             "amount": amount,
@@ -493,8 +590,8 @@ def create_subscription():
     return jsonify(order)
 
 
-@limiter.exempt
 @app.post("/verify-subscription")
+@limiter.limit("20 per minute")
 def verify_subscription():
     payload = request.get_json() or {}
     data = payload.get("payment", {})
@@ -563,8 +660,8 @@ def verify_subscription():
 
 # ================= FREE 14-DAY TRIAL =================
 
-@limiter.exempt
 @app.post("/register-trial")
+@limiter.limit("10 per minute")
 def register_trial():
     """Create a brand-new salon on the 14-day free trial (single seat)."""
     data = request.get_json() or {}
@@ -601,9 +698,9 @@ def register_trial():
 
 # ================= PLAN UPGRADES (existing salons) =================
 
-@limiter.exempt
 @app.post("/create-upgrade")
 @login_required
+@limiter.limit("20 per minute")
 def create_upgrade():
     """Create a Razorpay order when an existing salon upgrades to a higher tier."""
     salon_id = session.get("id", 1)
@@ -637,7 +734,7 @@ def create_upgrade():
             "payment_capture": 1,
         })
     except Exception as e:
-        print(f"RAZORPAY ERROR : {e}")
+        logger.warning(f"Razorpay upgrade order creation fallback: {e}")
         order = {
             "id": f"order_{str(uuid4())[:14]}",
             "amount": int(pricing["amount"]),
@@ -660,9 +757,9 @@ def create_upgrade():
     return jsonify(order)
 
 
-@limiter.exempt
 @app.post("/verify-upgrade")
 @login_required
+@limiter.limit("20 per minute")
 def verify_upgrade():
     """Finalise an upgrade: verify the payment, switch the salon's plan and log the receipt."""
     salon_id = session.get("id", 1)
@@ -681,6 +778,17 @@ def verify_upgrade():
     if not public_signup_state() and pricing["tier"] in ("pro", "studio"):
         return jsonify({"success": False, "message": BETA_PUBLIC_MESSAGE}), 403
 
+    # Duplicate payment check
+    pay_id = data.get("razorpay_payment_id")
+    if pay_id:
+        existing_sub = authRepo.get_subscription(pay_id)
+        if existing_sub:
+            return jsonify({
+                "success": True,
+                "redirect": url_for("dashboard"),
+                "message": "Payment already processed."
+            })
+
     # Best-effort signature check (mirrors the register flow's test-mode bypass).
     if data.get("razorpay_signature"):
         try:
@@ -696,9 +804,9 @@ def verify_upgrade():
     try:
         order = authRepo.get_pendingorder(data.get("razorpay_order_id", ""))
         if not order or order.get("salon_id") != salon_id:
-            print(f"UPGRADE WARNING: pending order not found for salon {salon_id}")
+            logger.warning(f"UPGRADE WARNING: pending order not found for salon {salon_id}")
     except Exception as e:
-        print("Upgrade order lookup warning:", e)
+        logger.warning(f"Upgrade order lookup warning: {e}")
 
     tier, cycle = pricing["tier"], pricing["cycle"]
     now_ts = int(datetime.now().timestamp())
@@ -1026,29 +1134,61 @@ def api_create_customer():
 
 @app.post('/api/bills')
 @login_required
+@limiter.limit("60 per minute")
 def api_create_bill():
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
+
+    try:
+        subtotal = max(0, int(float(data.get("subtotal", 0) or 0)))
+        discount = max(0, int(float(data.get("discount", 0) or 0)))
+        tax = max(0, int(float(data.get("tax", 0) or 0)))
+        grand_total = max(0, int(float(data.get("grand_total", 0) or 0)))
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "Invalid numeric figures in invoice."}), 400
+
+    # Spending / Transaction Cap Safeguard (₹5,00,000 max single bill)
+    if grand_total > 500000:
+        return jsonify({"success": False, "message": "Bill amount exceeds maximum transaction cap of ₹5,00,000."}), 400
+
+    if discount > subtotal:
+        return jsonify({"success": False, "message": "Discount amount cannot exceed subtotal."}), 400
+
+    client_phone = str(data.get("client_phone", "") or "").strip()
+    client_name = str(data.get("client_name", "Walk-in") or "Walk-in").strip()
+    payment_mode = str(data.get("payment_mode", "UPI") or "UPI").strip()
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        items = []
+
+    # Prevent duplicate submissions (debouncing duplicate clicks within 4s window)
+    dup_id = billRepo.find_recent_duplicate(salon_id, client_phone, grand_total, window_seconds=4)
+    if dup_id:
+        return jsonify({"success": True, "bill_id": dup_id, "duplicate_prevented": True})
+
     bill_id = f"AP-{str(uuid4())[:6].upper()}"
     
     billRepo.create_bill(
         bill_id=bill_id,
         account_id=salon_id,
-        client_name=data.get("client_name", "Walk-in"),
-        client_phone=data.get("client_phone", ""),
-        subtotal=data.get("subtotal", 0),
-        discount=data.get("discount", 0),
-        tax=data.get("tax", 0),
-        grand_total=data.get("grand_total", 0),
-        payment_mode=data.get("payment_mode", "UPI"),
-        items_json=json.dumps(data.get("items", []))
+        client_name=client_name,
+        client_phone=client_phone,
+        subtotal=subtotal,
+        discount=discount,
+        tax=tax,
+        grand_total=grand_total,
+        payment_mode=payment_mode,
+        items_json=json.dumps(items)
     )
 
     # Record stylist sales for leaderboard
-    for item in data.get("items", []):
-        staff_name = item.get("staff")
-        if staff_name:
-            staffRepo.record_sale(staff_name, salon_id, item.get("price", 0) * item.get("qty", 1))
+    for item in items:
+        if isinstance(item, dict):
+            staff_name = item.get("staff")
+            if staff_name:
+                price = int(float(item.get("price", 0) or 0))
+                qty = int(float(item.get("qty", 1) or 1))
+                staffRepo.record_sale(staff_name, salon_id, price * qty)
 
     return jsonify({"success": True, "bill_id": bill_id})
 
@@ -1057,7 +1197,9 @@ def api_create_bill():
 @login_required
 def api_get_bills():
     salon_id = session.get("id", 1)
-    return jsonify(billRepo.get_recent_bills(salon_id))
+    limit = min(max(1, request.args.get("limit", 10, type=int)), 100)
+    offset = max(0, request.args.get("offset", 0, type=int))
+    return jsonify(billRepo.get_recent_bills(salon_id, limit=limit, offset=offset))
 
 
 @app.get('/api/appointments')
@@ -1349,6 +1491,9 @@ def api_upload_logo():
         return jsonify({"success": False, "message": "The selected file is empty."}), 400
     if len(blob) > MAX_LOGO_SIZE_BYTES:
         return jsonify({"success": False, "message": "Logo is too large — the maximum size is 2 MB."}), 400
+
+    # Automatically downscale & compress logo image to save bandwidth and storage
+    blob, mime = compress_image_blob(blob, mime, max_dim=600, quality=85)
 
     # Try Supabase Storage first
     public_url = upload_logo_to_storage(salon_id, blob, mime)
@@ -1901,24 +2046,76 @@ def admin_create_account():
 app.register_blueprint(admin_bp)
 
 
-# ================= ERROR HANDLERS =================
+# ================= PRODUCTION ERROR HANDLERS =================
 
 @app.errorhandler(RateLimitExceeded)
 def ratelimit_handler(e):
-    # Admin console: bounce back to the login/dashboard with a flash message
-    # so the form UX survives the 3-per-10-seconds login limit.
+    logger.warning(f"Rate limit exceeded: {request.remote_addr} on {request.path}")
     if request.blueprint == "admin" or request.path.startswith("/admin"):
         flash("Too many attempts — please wait 10 seconds and try again.", "error")
         return redirect(url_for("admin.admin_home"))
-    return jsonify({
-        "error": "Too Many Requests",
-        "description": f"You have exceeded your request limit: {e.description}"
-    }), 429
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({
+            "error": "Too Many Requests",
+            "message": f"Rate limit exceeded: {e.description}. Please slow down.",
+            "status": 429
+        }), 429
+    flash("Too many requests — please wait a moment before trying again.", "warning")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    logger.warning(f"File upload size limit exceeded: {request.remote_addr} on {request.path}")
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({
+            "error": "Payload Too Large",
+            "message": "File size exceeds the allowed 5 MB upload limit.",
+            "status": 413
+        }), 413
+    flash("Uploaded file is too large (maximum size is 5 MB).", "error")
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 @app.errorhandler(404)
-def page_not_found(*args):
+def page_not_found(e):
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({
+            "error": "Not Found",
+            "message": "The requested API endpoint was not found.",
+            "status": 404
+        }), 404
     return render_template('page_not_found.html'), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    import traceback
+    tb = traceback.format_exc()
+    logger.error(f"Internal Server Error (500) on {request.path}:\n{tb}")
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": "An unexpected server error occurred. Our engineering team has been notified.",
+            "status": 500
+        }), 500
+    return render_template('page_not_found.html'), 500
+
+
+@app.errorhandler(Exception)
+def unhandled_exception(e):
+    if isinstance(e, RateLimitExceeded):
+        return ratelimit_handler(e)
+    import traceback
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled Exception on {request.path}: {e}\n{tb}")
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e) if app.debug else "An unexpected error occurred.",
+            "status": 500
+        }), 500
+    return render_template('page_not_found.html'), 500
 
 
 if __name__ == '__main__':

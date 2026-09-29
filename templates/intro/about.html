@@ -76,7 +76,7 @@
     .js-anim .r-row,.js-anim .r-sum>*,.js-anim .r-head>*{opacity:0}
     .js-anim .r-line,.js-anim #r-total-line{transform:scaleX(0);transform-origin:left}
     .js-anim #r-stamp{opacity:0}
-    .js-anim #hero-badge,.js-anim #hero-subtext,.js-anim #hero-actions,.js-anim #hero-stats{opacity:0}
+    .js-anim #hero-badge,.js-anim .hero-h,.js-anim #hero-sub,.js-anim #hero-ctas,.js-anim #hero-meta,.js-anim #hero-preview-frame{opacity:0}
     section[id]{scroll-margin-top:64px}
 
     /* about.html hero kinetics */
@@ -107,7 +107,7 @@
   <div class="fixed top-0 inset-x-0 z-[60] pointer-events-none"><div id="topbar-progress" class="h-[2px] w-0 gradient-bg transition-none"></div></div>
 
   <!-- ===== CHAPTER RAIL ===== -->
-  <nav class="rail-wrap hidden md:flex flex-col items-center gap-5" aria-label="Chapters">
+  <nav class="rail-wrap hidden xl:flex flex-col items-center gap-5" aria-label="Chapters">
     <div class="relative flex flex-col items-center gap-5">
       <div class="rail-line"></div>
       <div id="rail-fill" class="gradient-bg"></div>
@@ -123,82 +123,105 @@
   </nav>
 
   <!-- ===== HUD READOUT ===== -->
-  <div class="fixed bottom-5 left-5 z-[60] hidden sm:flex items-baseline gap-2 font-mono-num text-[11px] tracking-[0.3em] text-neutral-500">
+  <div class="fixed bottom-5 left-5 z-[60] hidden md:flex items-center gap-2 font-mono-num text-[11px] tracking-[0.25em] text-neutral-400 bg-[#12100e]/90 border border-white/10 px-3.5 py-1.5 rounded-full backdrop-blur-md shadow-xl pointer-events-none">
     <span class="text-neutral-300">REEL</span><span class="text-neon-cyan">▸</span>
-    <span id="readout" class="text-neutral-100">000</span><span class="text-neutral-600">%</span>
+    <span id="readout" class="text-neutral-100 font-bold">000</span><span class="text-neutral-600">%</span>
   </div>
+
   <!-- ===== HERO / OVERTURE ===== -->
-  <section id="ch-hero" data-chapter class="relative min-h-[calc(100vh-4rem)] overflow-hidden">
-    <!-- Glowing Background Atmosphere Orbs (about.html) -->
-    <div id="hero-orbs" class="absolute inset-0 pointer-events-none" aria-hidden="true">
-      <div class="glow-orb w-96 h-96 bg-neon-cyan top-10 -left-20 animate-pulse" style="animation-duration:7s"></div>
-      <div class="glow-orb w-[500px] h-[500px] bg-neon-magenta top-40 right-[-100px] animate-pulse" style="animation-duration:9s"></div>
-      <div class="glow-orb w-80 h-80 bg-neon-violet bottom-20 left-1/3 animate-pulse" style="animation-duration:11s"></div>
+  <section id="ch-hero" data-chapter class="relative overflow-hidden pt-12 sm:pt-16 pb-20 sm:pb-28">
+    
+    <!-- Ambient backlight glows -->
+    <div class="absolute inset-0 pointer-events-none z-0 overflow-hidden flex flex-col items-center justify-start" aria-hidden="true">
+      <div class="absolute top-10 w-[85vw] max-w-4xl h-[380px] bg-gradient-to-r from-orange-500/15 via-amber-500/20 to-rose-500/15 blur-[120px] rounded-full pointer-events-none"></div>
     </div>
 
-    <!-- Layered Kinetic Stagger Grid (about.html) -->
-    <div id="stagger-grid-layer" class="hero-canvas absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden opacity-40" aria-hidden="true">
-      <div id="anime-grid" class="grid grid-cols-12 sm:grid-cols-16 gap-3 sm:gap-4 w-[140vw] sm:w-[120vw] h-[120vh] transform -rotate-12 scale-110"></div>
-    </div>
+    <!-- Content Stack -->
+    <div id="hero-content" class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center">
+      
+      <!-- Release Badge -->
+      <div id="hero-badge" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-xs font-semibold text-neutral-300 backdrop-blur-md mb-6 shadow-xl hover:border-neutral-700 transition-all cursor-default group">
+        <span class="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+        <span>AuraPOS 3.0 Release</span>
+        <span class="text-neutral-500">•</span>
+        <span class="text-orange-400 group-hover:underline">Next-Gen Salon OS</span>
+      </div>
 
-    <!-- content -->
-    <div id="hero-content" class="relative z-10 w-full">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 pb-24 sm:pb-32 flex flex-col items-center text-center">
-        <div id="hero-badge" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-xs font-semibold text-neutral-300 backdrop-blur-md mb-8 shadow-xl hover:border-neutral-700 transition-all cursor-default group">
-          <span class="w-2 h-2 rounded-full bg-neon-cyan animate-ping"></span>
-          <span>AuraPOS 3.0 Release</span>
-          <span class="text-neutral-500">•</span>
-          <span class="text-neon-cyan group-hover:underline">Next-Gen Salon OS</span>
+      <!-- Headline -->
+      <h1 class="hero-h text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight max-w-5xl leading-[1.08] text-white select-none">
+        Kinetic Billing &amp; Salon Ops<br class="hidden sm:inline">
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-orange-500">Engineered for Studios</span>
+      </h1>
+
+      <!-- Subtitle -->
+      <p id="hero-sub" class="text-sm sm:text-base md:text-lg text-neutral-300 max-w-2xl font-normal mt-5 mb-8 leading-relaxed">
+        Ultra-fast POS, multi-staff commission calculation, automated GST invoicing, and frictionless online client scheduling — in one high-contrast, minimalist system.
+      </p>
+
+      <!-- Action CTAs -->
+      <div id="hero-ctas" class="flex flex-col sm:flex-row items-center gap-3.5 sm:gap-4 w-full sm:w-auto">
+        <a href="{{ url_for('register') }}"
+           class="w-full sm:w-auto px-7 py-3.5 sm:px-8 sm:py-4 rounded-2xl btn-brand text-white font-bold text-sm sm:text-base shadow-xl shadow-orange-500/25 hover:shadow-orange-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group">
+          <span>Start Free 14-Day Trial</span>
+          <i data-lucide="arrow-right" class="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform"></i>
+        </a>
+
+        <a href="#ch-sandbox"
+           class="w-full sm:w-auto px-7 py-3.5 sm:px-8 sm:py-4 rounded-2xl bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 font-semibold text-sm sm:text-base backdrop-blur-md transition-all flex items-center justify-center gap-2 shadow-lg hover:border-neutral-700">
+          <i data-lucide="play-circle" class="w-4 h-4 sm:w-5 sm:h-5 text-orange-400"></i>
+          <span>Explore Live Simulator</span>
+        </a>
+      </div>
+
+      <!-- Micro Stats Row -->
+      <div id="hero-meta" class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 mt-10 sm:mt-12 pt-8 sm:pt-10 border-t border-neutral-800/80 max-w-3xl w-full">
+        <div class="p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60">
+          <div class="text-xl sm:text-2xl font-extrabold font-mono-num text-white">0.3s</div>
+          <div class="text-[11px] text-neutral-400 font-medium mt-0.5">Average Invoice Checkout</div>
         </div>
-
-        <h1 id="kinetic-headline" class="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight max-w-5xl leading-[1.08] mb-6 select-none">
-          Kinetic Billing &amp; Salon Ops Engineered for Studios
-        </h1>
-
-        <p id="hero-subtext" class="text-lg sm:text-xl text-neutral-400 max-w-2xl font-normal mb-10 leading-relaxed">
-          Ultra-fast POS, multi-staff commission calculation, automated GST invoicing, and frictionless online client scheduling — in one high-contrast, minimalist system.
-        </p>
-
-        <!-- CTAs & Trust Badges -->
-        <div id="hero-actions" class="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 w-full sm:w-auto">
-          <a href="{{ url_for('register') }}"
-             class="w-full sm:w-auto px-8 py-4 rounded-2xl btn-brand text-white font-bold text-base shadow-xl shadow-neon-magenta/25 hover:shadow-neon-cyan/40 hover:scale-[1.03] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group">
-            <span>Start Free 14-Day Trial</span>
-            <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
-          </a>
-
-          <a href="#ch-sandbox"
-             class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 font-semibold text-base backdrop-blur-md transition-all flex items-center justify-center gap-2">
-            <i data-lucide="play-circle" class="w-5 h-5 text-neon-cyan"></i>
-            <span>Explore Live Simulator</span>
-          </a>
+        <div class="p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60">
+          <div class="text-xl sm:text-2xl font-extrabold font-mono-num text-orange-400">₹69/mo</div>
+          <div class="text-[11px] text-neutral-400 font-medium mt-0.5">Affordable Flat Pricing</div>
         </div>
-
-        <!-- Micro Stats -->
-        <div id="hero-stats" class="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-12 mt-16 pt-12 border-t border-neutral-800/80 max-w-4xl w-full">
-          <div>
-            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-white">0.3s</div>
-            <div class="text-xs text-neutral-500 font-medium mt-1">Average Invoice Checkout</div>
-          </div>
-          <div>
-            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-neon-cyan">₹69/mo</div>
-            <div class="text-xs text-neutral-500 font-medium mt-1">Affordable Flat Pricing</div>
-          </div>
-          <div>
-            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-neon-magenta">100%</div>
-            <div class="text-xs text-neutral-500 font-medium mt-1">GST &amp; Tax Compliance</div>
-          </div>
-          <div>
-            <div class="text-2xl sm:text-3xl font-extrabold font-mono-num text-violet-400">24/7</div>
-            <div class="text-xs text-neutral-500 font-medium mt-1">Client Self-Service Booking</div>
-          </div>
+        <div class="p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60">
+          <div class="text-xl sm:text-2xl font-extrabold font-mono-num text-amber-400">100%</div>
+          <div class="text-[11px] text-neutral-400 font-medium mt-0.5">GST &amp; Tax Compliance</div>
+        </div>
+        <div class="p-3 rounded-xl bg-neutral-900/40 border border-neutral-800/60">
+          <div class="text-xl sm:text-2xl font-extrabold font-mono-num text-cyan-400">24/7</div>
+          <div class="text-[11px] text-neutral-400 font-medium mt-0.5">Client Self-Booking</div>
         </div>
       </div>
+
+      <!-- 3D Angled Dashboard Terminal Showcase -->
+      <div id="hero-preview-frame" class="w-full max-w-5xl mt-12 sm:mt-16 rounded-2xl sm:rounded-3xl border border-white/10 bg-[#141210] shadow-[0_25px_80px_rgba(0,0,0,0.9)] overflow-hidden transition-all duration-700 hover:border-orange-500/30 group">
+        <!-- Mockup Browser Header Bar -->
+        <div class="h-10 px-4 bg-neutral-900/95 border-b border-white/5 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+          </div>
+          <div class="px-3 py-0.5 rounded-md bg-neutral-950/80 border border-white/5 text-[10px] font-mono-num text-neutral-400 truncate max-w-[200px] sm:max-w-none">
+            aurapos.in/dashboard — Aura Studio Elite Live Terminal
+          </div>
+          <div class="flex items-center gap-1.5 text-[10px] font-mono-num text-emerald-400 font-semibold">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="hidden sm:inline">LIVE OPS</span>
+          </div>
+        </div>
+
+        <!-- Dashboard Image Preview -->
+        <div class="relative w-full overflow-hidden">
+          <img src="/assets/dashboard-preview.png" alt="AuraPOS Dashboard Live Preview" class="w-full h-auto object-cover object-top filter brightness-95 group-hover:brightness-100 transition-all duration-500" />
+        </div>
+      </div>
+
     </div>
   </section>
 
   <!-- ===== SCROLL HINT (fixed) ===== -->
-  <div id="scroll-hint" class="fixed bottom-14 inset-x-0 z-[55] flex items-center justify-center transition-all duration-500 pointer-events-none">
+  <div id="scroll-hint" class="fixed bottom-6 inset-x-0 z-[55] hidden xl:flex items-center justify-center transition-all duration-500 pointer-events-none">
     <div class="mouse"><span id="wheel"></span></div>
   </div>
   <!-- ===== CH.01 — THE REGISTER (scroll-scrubbed receipt) ===== -->
@@ -401,6 +424,59 @@
         </div>
 
       </div>
+
+      <!-- POS Terminal Full Application Showcase -->
+      <div class="mt-12 sm:mt-16 rounded-3xl bg-gradient-to-b from-[#181512] to-[#12100e] border border-white/10 p-4 sm:p-7 shadow-2xl relative overflow-hidden group" data-anim="up" data-delay="100">
+        <div class="absolute top-0 right-1/4 w-96 h-96 bg-neon-cyan/10 blur-[100px] pointer-events-none"></div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-white/5">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+            </div>
+            <span class="text-xs font-mono-num text-neutral-400">aurapos.in/billing — Production Billing Terminal</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono-num tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              HOTKEY READY (ENTER / F2)
+            </span>
+          </div>
+        </div>
+
+        <!-- Billing Screen Mockup Image -->
+        <div class="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] group-hover:border-neon-cyan/40 transition-all duration-500">
+          <img src="/assets/billing-preview.png" alt="AuraPOS Split-Second Billing Terminal Interface" class="w-full h-auto object-cover object-top filter brightness-95 group-hover:brightness-100 transition-all duration-500" />
+        </div>
+
+        <!-- Capability Callout Pills -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+          <div class="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 flex items-start gap-3">
+            <i data-lucide="search" class="w-5 h-5 text-neon-cyan shrink-0 mt-0.5"></i>
+            <div>
+              <p class="text-xs font-bold text-white">Instant Catalog Filtering</p>
+              <p class="text-[11px] text-neutral-400 mt-0.5">Zero lag search over hundreds of services and retail packages.</p>
+            </div>
+          </div>
+          <div class="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 flex items-start gap-3">
+            <i data-lucide="users" class="w-5 h-5 text-neon-violet shrink-0 mt-0.5"></i>
+            <div>
+              <p class="text-xs font-bold text-white">Multi-Stylist Split Billing</p>
+              <p class="text-[11px] text-neutral-400 mt-0.5">Assign distinct stylists per line item for automatic commission payout tracking.</p>
+            </div>
+          </div>
+          <div class="p-3.5 rounded-xl bg-neutral-900/60 border border-neutral-800 flex items-start gap-3">
+            <i data-lucide="printer" class="w-5 h-5 text-neon-magenta shrink-0 mt-0.5"></i>
+            <div>
+              <p class="text-xs font-bold text-white">Thermal &amp; Digital Invoicing</p>
+              <p class="text-[11px] text-neutral-400 mt-0.5">1-click 80mm receipt printing and client SMS / WhatsApp dispatch.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -682,6 +758,104 @@
         </p>
       </div>
 
+      <!-- Studio Differentiator Showcase: Why Studio? -->
+      <div class="mb-16 rounded-3xl bg-gradient-to-b from-[#1c1815] via-[#151210] to-[#0e0c0b] border border-neon-magenta/30 p-6 sm:p-10 shadow-2xl relative overflow-hidden" data-anim="up" data-delay="100">
+        <div class="absolute -top-24 -right-24 w-96 h-96 bg-neon-magenta/15 blur-[120px] pointer-events-none"></div>
+        <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-neon-violet/15 blur-[120px] pointer-events-none"></div>
+
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-8 pb-8 border-b border-white/10 relative z-10">
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta text-xs font-mono-num uppercase tracking-wider mb-3">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+              <span>The Studio Differentiator</span>
+            </div>
+            <h3 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Why Salons Upgrade to <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-rose-400 to-neon-magenta">Studio</span>
+            </h3>
+            <p class="text-sm sm:text-base text-neutral-400 mt-2 max-w-2xl leading-relaxed">
+              Beyond lightning POS checkout, Studio gives owners executive intelligence: automated stylist commission tracking, category &amp; payment mix doughnut analytics, and custom salon logo branding.
+            </p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+            <a href="{{ url_for('register') }}?plan=studio" class="px-6 py-3 rounded-xl btn-brand text-white font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-[1.02] transition-all text-center flex items-center justify-center gap-2">
+              <span>Upgrade to Studio</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Studio Reports Preview Application Mockup Frame -->
+        <div class="relative rounded-2xl overflow-hidden border border-neon-magenta/30 shadow-[0_25px_60px_rgba(0,0,0,0.9)] group">
+          <!-- Mockup Header Bar -->
+          <div class="h-9 px-4 bg-neutral-900/95 border-b border-white/10 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+            </div>
+            <div class="px-3 py-0.5 rounded bg-neutral-950/80 border border-white/5 text-[10px] font-mono-num text-neutral-400">
+              aurapos.in/reports — Studio Executive Analytics &amp; Revenue Intelligence
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] font-mono-num text-neon-magenta font-semibold">
+              <span class="w-1.5 h-1.5 rounded-full bg-neon-magenta animate-ping"></span>
+              STUDIO EXCLUSIVE
+            </div>
+          </div>
+
+          <!-- Reports Preview Image -->
+          <img src="/assets/reports-preview.png" alt="AuraPOS Studio Advanced Reports & Analytics Preview" class="w-full h-auto object-cover object-top filter brightness-95 group-hover:brightness-100 transition-all duration-500" />
+        </div>
+
+        <!-- Studio Feature Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+          <div class="p-4 rounded-2xl bg-neutral-900/70 border border-neutral-800 flex flex-col justify-between">
+            <div>
+              <div class="w-8 h-8 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center mb-3">
+                <i data-lucide="trending-up" class="w-4 h-4"></i>
+              </div>
+              <p class="text-sm font-bold text-white">Revenue Trajectory</p>
+              <p class="text-xs text-neutral-400 mt-1">Live daily totals, 30-day run-rate tracking, and automated high-margin service metrics.</p>
+            </div>
+            <span class="mt-4 text-[10px] font-mono-num text-orange-400 font-bold uppercase">Included in Studio</span>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-neutral-900/70 border border-neutral-800 flex flex-col justify-between">
+            <div>
+              <div class="w-8 h-8 rounded-lg bg-neon-violet/10 border border-neon-violet/20 text-neon-violet flex items-center justify-center mb-3">
+                <i data-lucide="scissors" class="w-4 h-4"></i>
+              </div>
+              <p class="text-sm font-bold text-white">Automated 15% Commissions</p>
+              <p class="text-xs text-neutral-400 mt-1">Zero manual Excel tallying. Track stylist commission earnings per ticket with 1-click export.</p>
+            </div>
+            <span class="mt-4 text-[10px] font-mono-num text-neon-violet font-bold uppercase">Included in Studio</span>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-neutral-900/70 border border-neutral-800 flex flex-col justify-between">
+            <div>
+              <div class="w-8 h-8 rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan flex items-center justify-center mb-3">
+                <i data-lucide="pie-chart" class="w-4 h-4"></i>
+              </div>
+              <p class="text-sm font-bold text-white">Category &amp; Payment Mix</p>
+              <p class="text-xs text-neutral-400 mt-1">Interactive doughnut charts for UPI vs Card vs Cash settlement and service volume.</p>
+            </div>
+            <span class="mt-4 text-[10px] font-mono-num text-neon-cyan font-bold uppercase">Included in Studio</span>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-neutral-900/70 border border-neutral-800 flex flex-col justify-between">
+            <div>
+              <div class="w-8 h-8 rounded-lg bg-neon-magenta/10 border border-neon-magenta/20 text-neon-magenta flex items-center justify-center mb-3">
+                <i data-lucide="award" class="w-4 h-4"></i>
+              </div>
+              <p class="text-sm font-bold text-white">Custom Logo &amp; Seats</p>
+              <p class="text-xs text-neutral-400 mt-1">Unlimited team seats, custom salon logo on thermal/SMS invoices, and full CSV exports.</p>
+            </div>
+            <span class="mt-4 text-[10px] font-mono-num text-neon-magenta font-bold uppercase">Included in Studio</span>
+          </div>
+        </div>
+
+      </div>
+
       <!-- Pricing Comparison Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
 
@@ -865,36 +1039,12 @@
       var heroTl = anime.timeline({ easing: 'easeOutExpo' });
       heroTl
         .add({ targets: '#hero-badge', opacity: [0, 1], translateY: [-20, 0], duration: 600 })
-        .add({
-          targets: '.hero-h .char',
-          opacity: [0, 1], translateY: [100, 0],
-          rotateZ: function () { return anime.random(-7, 7); },
-          duration: 950, delay: anime.stagger(20)
-        }, '-=350')
-        .add({ targets: '#hero-underline', opacity: [0, 1], scaleX: [0, 1], duration: 800, easing: 'easeInOutQuart' }, '-=650')
-        .add({ targets: '#hero-sub', opacity: [0, 1], translateY: [22, 0], duration: 700 }, '-=500')
-        .add({ targets: '#hero-ctas > *', opacity: [0, 1], translateY: [18, 0], delay: anime.stagger(110), duration: 600 }, '-=450')
-        .add({ targets: '#hero-meta span', opacity: [0, 1], translateY: [14, 0], delay: anime.stagger(90), duration: 550 }, '-=420')
-        .add({
-          targets: '#dot-grid .grid-dot',
-          scale: [0, 1],
-          opacity: [0, function () { return anime.random(12, 55) / 100; }],
-          duration: 800,
-          delay: anime.stagger(14, { grid: [cols, rows], from: 'center' })
-        }, '-=900')
+        .add({ targets: '.hero-h', opacity: [0, 1], translateY: [40, 0], duration: 800 }, '-=350')
+        .add({ targets: '#hero-sub', opacity: [0, 1], translateY: [20, 0], duration: 650 }, '-=500')
+        .add({ targets: '#hero-ctas', opacity: [0, 1], translateY: [16, 0], duration: 550 }, '-=450')
+        .add({ targets: '#hero-meta', opacity: [0, 1], translateY: [14, 0], duration: 500 }, '-=400')
+        .add({ targets: '#hero-preview-frame', opacity: [0, 1], translateY: [30, 0], duration: 800, easing: 'easeOutCubic' }, '-=350')
         .add({ targets: '#scroll-hint', opacity: [0, 1], duration: 500 }, '-=200');
-
-      heroTl.finished.then(function () {
-        anime({
-          targets: '#dot-grid .grid-dot',
-          opacity: function () { return anime.random(8, 42) / 100; },
-          duration: 2800,
-          delay: anime.stagger(35, { grid: [cols, rows], from: 'center' }),
-          direction: 'alternate', loop: true, easing: 'easeInOutSine'
-        });
-      });
-
-      anime({ targets: '#wheel', translateY: [0, 9], duration: 900, direction: 'alternate', loop: true, easing: 'easeInOutSine' });
 
       window.__aura.heroTl = heroTl;
     } else {
@@ -958,11 +1108,6 @@
       if (hint) hint.classList.toggle('hint-gone', scrollY > 70);
 
       if (!reduce) {
-        var hp = clamp(scrollY / (innerHeight * 0.85), 0, 1);
-        if (heroContent) {
-          heroContent.style.opacity = String(1 - hp);
-          heroContent.style.transform = 'translateY(' + (scrollY * 0.22) + 'px) scale(' + (1 - hp * 0.05) + ')';
-        }
         if (orbs) orbs.style.transform = 'translateY(' + (scrollY * -0.18) + 'px)';
         gx += (mx - gx) * 0.09; gy += (my - gy) * 0.09;
         if (glow) glow.style.transform = 'translate3d(' + gx + 'px,' + gy + 'px,0)';

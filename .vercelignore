@@ -1,8 +1,12 @@
-# Local dev-only artifacts — never deploy
+.git
+.gitignore
 .env
-backend.py
-venv/
-__pycache__/
+.env.local
+venv
+__pycache__
 *.pyc
-smoke_test_supabase.py
-mobile/*
+*.sqlite
+*.db
+tests
+.pytest_cache
+*.log

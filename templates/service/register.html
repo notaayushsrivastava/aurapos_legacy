@@ -402,7 +402,8 @@
               contact: this.formData.phone
             },
             theme: {
-              color: "#c2410c"
+              color: "#c2410c",
+              backdrop_color: "transparent"
             },
             handler: async (response) => {
               // 3. Send verification payload to /verify-subscription
@@ -430,6 +431,10 @@
               }
             },
             modal: {
+              backdropclose: true,
+              escape: true,
+              handleback: true,
+              animation: true,
               ondismiss: () => {
                 this.isSubmitting = false;
               }

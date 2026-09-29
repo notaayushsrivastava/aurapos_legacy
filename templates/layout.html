@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0d0c0a">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2410c'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke-width='1.7' opacity='.45' pathLength='100' stroke-dasharray='17 8'/%3E%3Cpath d='M9.4 23.8 16 8.2l6.6 15.6' stroke-width='2.7' stroke-linejoin='round'/%3E%3Cpath d='M12.4 18.6h7.2' stroke-width='2.7'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2410c'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke-width='1.7' opacity='.45' pathLength='100' stroke-dasharray='17 8'/%3E%3Cpath d='M10 23.2 16 7.2l6 16' stroke-width='2.7' stroke-linejoin='round'/%3E%3Cpath d='M12.3 17h7.4' stroke-width='2.7'/%3E%3C/g%3E%3C/svg%3E">
   <title>{% block title %}AuraPOS - Salon Billing & Management Software{% endblock %}</title>
   
   <!-- Preconnect Fonts -->
@@ -64,6 +64,32 @@
     /* Kinetic reveal gating — initAuraMotion() adds .js-anim only when motion is allowed,
        so content stays visible if anime.js fails to load or reduced motion is set */
     html.js-anim [data-anim] { opacity: 0; }
+
+    /* Razorpay Modal & Backdrop Customization */
+    .razorpay-container {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 2147483647 !important;
+      background: rgba(13, 12, 10, 0.8) !important;
+      backdrop-filter: blur(8px) !important;
+      -webkit-backdrop-filter: blur(8px) !important;
+    }
+    .razorpay-container > iframe,
+    iframe.razorpay-checkout-frame {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    .razorpay-backdrop {
+      background: rgba(13, 12, 10, 0.8) !important;
+    }
   </style>
 
   {% block head %}{% endblock %}
@@ -336,11 +362,11 @@
               </div>
               {% else %}
               <div class="w-8 h-8 rounded-lg bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center font-bold text-xs text-neutral-700 dark:text-neutral-300">
-                {{ current_salon.salon_name[0]|upper }}
+                {{ (current_salon.salon_name[0]|upper) if current_salon and current_salon.salon_name else (session.get('username', 'U')[0]|upper) }}
               </div>
               {% endif %}
               <div class="truncate">
-                <p class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 truncate">{{ current_salon.salon_name if current_salon else session.get('username', 'Owner') }}</p>
+                <p class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 truncate">{{ current_salon.salon_name if current_salon and current_salon.salon_name else session.get('username', 'Owner') }}</p>
                 <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Active Subscription</p>
               </div>
             </div>

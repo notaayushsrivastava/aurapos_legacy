@@ -4,7 +4,11 @@
 {% block page_title %}Team & Staff Roster{% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data='staffApp({{ staff | tojson }})'>
+<script id="staff-data-json" type="application/json">
+  {{ staff | tojson | safe }}
+</script>
+
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="staffApp()">
 
   <!-- Header Row -->
   <div data-anim="up" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -229,6 +233,17 @@
 {% block scripts %}
 <script>
   function staffApp(initialMembers) {
+    if (!initialMembers) {
+      try {
+        const jsonEl = document.getElementById('staff-data-json');
+        if (jsonEl && jsonEl.textContent) {
+          initialMembers = JSON.parse(jsonEl.textContent);
+        }
+      } catch (e) {
+        console.error("Failed to parse staff data:", e);
+      }
+    }
+
     return {
       members: initialMembers || [],
       showModal: false,
@@ -283,7 +298,7 @@
         if (f.phone && !/^\d{10}$/.test(f.phone)) { this.formError = 'Phone number must be exactly 10 digits.'; return; }
         this.saving = true;
         this.formError = '';
-        const payload = { name: f.name, role: f.role, phone: f.phone, gender: f.gender, email: f.email };
+        const payload = { name: f.name.trim(), role: f.role, phone: f.phone, gender: f.gender, email: f.email.trim() };
         try {
           const editing = !!this.editingId;
           const url = editing ? '/api/staff/' + this.editingId : '/api/staff';
@@ -297,10 +312,10 @@
             if (editing) {
               const idx = this.members.findIndex(m => m.id === this.editingId);
               if (idx > -1) this.members[idx] = { ...this.members[idx], ...payload };
-              window.uiToast('Member profile updated.', 'success');
+              if (window.uiToast) window.uiToast('Member profile updated.', 'success');
             } else {
               this.members.unshift({ id: data.id, ...payload, total_revenue: 0, services_done: 0 });
-              window.uiToast('Member added to the team.', 'success');
+              if (window.uiToast) window.uiToast('Member added to the team.', 'success');
             }
             this.showModal = false;
           } else {
@@ -314,25 +329,32 @@
       },
 
       async removeMember(m) {
-        const ok = await window.uiConfirm({
-          title: 'Remove ' + m.name + '?',
-          message: 'They will be dropped from the roster. Past billing history is preserved.',
-          confirmText: 'Remove Member',
-          cancelText: 'Keep on Team',
-          danger: true
-        });
+        let ok = false;
+        if (window.uiConfirm) {
+          ok = await window.uiConfirm({
+            title: 'Remove ' + m.name + '?',
+            message: 'They will be dropped from the roster. Past billing history is preserved.',
+            confirmText: 'Remove Member',
+            cancelText: 'Keep on Team',
+            danger: true
+          });
+        } else {
+          ok = confirm('Remove ' + m.name + '? They will be dropped from the roster.');
+        }
         if (!ok) return;
         try {
           const res = await fetch('/api/staff/' + m.id, { method: 'DELETE' });
           const data = await res.json();
           if (res.ok && data.success) {
             this.members = this.members.filter(x => x.id !== m.id);
-            window.uiToast(data.message || 'Member removed.', 'success');
+            if (window.uiToast) window.uiToast(data.message || 'Member removed.', 'success');
           } else {
-            window.uiToast((data && data.message) || 'Could not remove member.', 'error');
+            if (window.uiToast) window.uiToast((data && data.message) || 'Could not remove member.', 'error');
+            else alert((data && data.message) || 'Could not remove member.');
           }
         } catch (e) {
-          window.uiToast('Network error — could not remove member.', 'error');
+          if (window.uiToast) window.uiToast('Network error — could not remove member.', 'error');
+          else alert('Network error — could not remove member.');
         }
       }
     };

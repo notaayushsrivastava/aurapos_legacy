@@ -396,7 +396,7 @@
   </div>
 
   <script>
-    const ADMIN_BASE = {{ url_for('admin.admin_home') | tojson }};
+    const ADMIN_BASE = ({{ url_for('admin.admin_home') | tojson }} || '').replace(/\/+$/, '');
 
     function adminApp() {
       return {
@@ -427,6 +427,7 @@
           this.busy = true;
           try {
             const res = await fetch(ADMIN_BASE + '/public-toggle', { method: 'POST' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
             if (data.success) {
               this.publicOpen = data.accepting_public;
@@ -443,33 +444,42 @@
           this.grant = { plan: 'pro', cycle: 'monthly' };
           try {
             const res = await fetch(ADMIN_BASE + '/api/salon/' + id);
+            if (!res.ok) {
+              let msg = `Error ${res.status}: Could not load salon #${id}.`;
+              try {
+                const j = await res.json();
+                if (j.message) msg = j.message;
+              } catch(e) {}
+              this.toast(msg, false);
+              this.selected = null;
+              this.loadingDetails = false;
+              return;
+            }
             const data = await res.json();
             if (data.success) { this.details = data; }
             else { this.toast(data.message || 'Could not load details.', false); this.selected = null; }
           } catch (e) { this.toast('Network error: ' + e.message, false); this.selected = null; }
           this.loadingDetails = false;
-                },
+        },
 
         async createAccount() {
           this.createBusy = true;
-          let res, data;
           try {
-            res = await fetch(ADMIN_BASE + '/create-account', {
+            const res = await fetch(ADMIN_BASE + '/create-account', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(this.newAcc)
             });
-            data = await res.json();
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.createOpen = false;
+              this.newAcc = { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' };
+              setTimeout(() => window.location.reload(), 1100);
+            }
           } catch (e) {
             this.toast('Network error: ' + e.message, false);
-            this.createBusy = false;
-            return;
-          }
-          this.toast(data.message, !!data.success);
-          if (data.success) {
-            this.createOpen = false;
-            this.newAcc = { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' };
-            setTimeout(() => window.location.reload(), 1100);
           }
           this.createBusy = false;
         },
@@ -483,6 +493,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ salon_id: this.selected, plan: this.grant.plan, cycle: this.grant.cycle })
             });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
             this.toast(data.message || (data.success ? 'Plan applied.' : 'Failed.'), !!data.success);
             if (data.success) {

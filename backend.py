@@ -1,7 +1,9 @@
 from dataclasses import dataclass, asdict
 import sqlite3 as sql
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
+import os
+import re
 
 # ================= SUBSCRIPTION TIERS =================
 # Free-trial + two-tier subscription model:
@@ -76,7 +78,121 @@ def expires_for(cycle, created_on=None):
 AUTH_LEVELS = ("admin", "manager", "cashier")
 
 
+class PostgresCursorWrapper:
+    def __init__(self, pg_conn, pg_cursor):
+        self._conn = pg_conn
+        self._cur = pg_cursor
+        self.lastrowid = None
+        self.rowcount = 0
+
+    def execute(self, sql, params=()):
+        cleaned = sql.strip()
+
+        if cleaned.upper().startswith("PRAGMA"):
+            if "TABLE_INFO" in cleaned.upper():
+                m = re.search(r"table_info\((.*?)\)", cleaned, re.IGNORECASE)
+                if m:
+                    tbl = m.group(1).strip(" \"'`").lower()
+                    cleaned = f"SELECT column_name AS name FROM information_schema.columns WHERE table_name = '{tbl}'"
+                else:
+                    cleaned = "SELECT 1 AS name WHERE 1=0"
+            else:
+                cleaned = "SELECT 1 AS name WHERE 1=0"
+
+        cleaned = cleaned.replace("?", "%s")
+        cleaned = cleaned.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+        if "INSERT OR IGNORE INTO" in cleaned:
+            cleaned = cleaned.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+            if "ON CONFLICT" not in cleaned.upper():
+                if "categories" in cleaned.lower():
+                    cleaned = cleaned.rstrip("; ") + " ON CONFLICT (account_id, name) DO NOTHING"
+                elif "salons" in cleaned.lower():
+                    cleaned = cleaned.rstrip("; ") + " ON CONFLICT (phone) DO NOTHING"
+                else:
+                    cleaned = cleaned.rstrip("; ") + " ON CONFLICT DO NOTHING"
+        cleaned = cleaned.replace("COLLATE NOCASE", "")
+        cleaned = re.sub(r"\browid\b", "id", cleaned, flags=re.IGNORECASE)
+
+        is_insert = cleaned.strip().upper().startswith("INSERT")
+        if is_insert and "RETURNING" not in cleaned.upper():
+            cleaned = cleaned.rstrip("; ") + " RETURNING id"
+
+        try:
+            self._cur.execute(cleaned, params)
+            self.rowcount = self._cur.rowcount
+            if is_insert:
+                try:
+                    row = self._cur.fetchone()
+                    if row and "id" in row:
+                        self.lastrowid = row["id"]
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+            raise e
+        return self
+
+    def fetchone(self):
+        try:
+            return self._cur.fetchone()
+        except Exception:
+            return None
+
+    def fetchall(self):
+        try:
+            return self._cur.fetchall()
+        except Exception:
+            return []
+
+    def executescript(self, script_sql):
+        statements = [s.strip() for s in script_sql.split(";") if s.strip()]
+        for stmt in statements:
+            if not stmt.upper().startswith("PRAGMA"):
+                self.execute(stmt)
+
+    def executemany(self, sql, param_list):
+        for p in param_list:
+            self.execute(sql, p)
+
+
+class PostgresConnWrapper:
+    def __init__(self, dsn):
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        self._conn = psycopg2.connect(dsn)
+        self._conn.autocommit = True
+        self._cursor_factory = RealDictCursor
+
+    def cursor(self):
+        pg_cur = self._conn.cursor(cursor_factory=self._cursor_factory)
+        return PostgresCursorWrapper(self._conn, pg_cur)
+
+    def commit(self):
+        try:
+            self._conn.commit()
+        except Exception:
+            pass
+
+    def rollback(self):
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+
 def get_db():
+    if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
+        dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
+        return PostgresConnWrapper(dsn)
     conn = sql.connect("database.db")
     conn.row_factory = sql.Row
     return conn
@@ -214,6 +330,7 @@ class AuthorizationRepository:
             );
 
             CREATE TABLE IF NOT EXISTS accounts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 auth_id INTEGER NOT NULL,
                 username TEXT NOT NULL UNIQUE,
                 password TEXT NOT NULL,
@@ -570,6 +687,34 @@ class AuthorizationRepository:
         conn.close()
         return True
 
+    def get_subscription(self, sub_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM subscriptions WHERE id = ?", (sub_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_pendingorder(self, order_id, amount, created_at, plan, receipt, email, phone, salon_id=None):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO pendingorders(id, amount, created_at, plan, receipt, email, phone, salon_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (order_id, int(amount), int(created_at), plan, receipt, (email or "").strip(), str(phone or "").strip(), salon_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_pendingorder(self, order_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM pendingorders WHERE id = ?", (order_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def request_account_deletion(self, salon_id, email, reason=""):
         conn = get_db()
         cur = conn.cursor()
@@ -897,7 +1042,7 @@ class StaffRepository:
         for column in ("phone TEXT DEFAULT ''", "gender TEXT DEFAULT ''", "email TEXT DEFAULT ''"):
             try:
                 cur.execute(f"ALTER TABLE staff ADD COLUMN {column}")
-            except sql.OperationalError:
+            except Exception:
                 pass
         conn.commit()
         conn.close()
@@ -1131,13 +1276,24 @@ class BillRepository:
         conn.close()
         return bill_id
 
-    def get_recent_bills(self, account_id, limit=10):
+    def find_recent_duplicate(self, account_id, client_phone, grand_total, window_seconds=4):
+        conn = get_db()
+        cur = conn.cursor()
+        threshold = int(datetime.now().timestamp()) - window_seconds
+        row = cur.execute(
+            "SELECT id FROM bills WHERE account_id = ? AND client_phone = ? AND grand_total = ? AND created_at >= ? LIMIT 1",
+            (account_id, str(client_phone or "").strip(), int(grand_total), threshold),
+        ).fetchone()
+        conn.close()
+        return row["id"] if row else None
+
+    def get_recent_bills(self, account_id, limit=10, offset=0):
         self.seed_defaults_if_empty(account_id)
         conn = get_db()
         cur = conn.cursor()
         rows = cur.execute(
-            "SELECT * FROM bills WHERE account_id = ? ORDER BY created_at DESC LIMIT ?",
-            (account_id, limit),
+            "SELECT * FROM bills WHERE account_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (account_id, int(limit), int(offset)),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -1546,3 +1702,116 @@ class ReportRepository:
             st = r["status"] or "Confirmed"
             by_status[st] = by_status.get(st, 0) + 1
         return {"total": total, "by_status": by_status}
+
+
+class AdminRepository:
+    SETTING_ACCEPTING_PUBLIC = "accepting_public"
+
+    def __init__(self):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings(
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at INTEGER NOT NULL
+            );
+            """
+        )
+        conn.commit()
+        conn.close()
+
+    def get_setting(self, key, default=None):
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            row = cur.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+            conn.close()
+            return row["value"] if row else default
+        except Exception:
+            return default
+
+    def set_setting(self, key, value):
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            now = int(datetime.now().timestamp())
+            cur.execute(
+                """
+                INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+                """,
+                (key, str(value), now),
+            )
+            conn.commit()
+            conn.close()
+            return True
+        except Exception:
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("REPLACE INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)", (key, str(value), int(datetime.now().timestamp())))
+                conn.commit()
+                conn.close()
+                return True
+            except Exception:
+                return False
+
+    def list_salons(self):
+        conn = get_db()
+        cur = conn.cursor()
+        salons = [dict(r) for r in cur.execute("SELECT * FROM salons ORDER BY created_on DESC").fetchall()]
+        out = []
+        for s in salons:
+            sid = s.get("id")
+            s.setdefault("plan", "free")
+            accs = [dict(r) for r in cur.execute("SELECT username FROM accounts WHERE auth_id = ?", (sid,)).fetchall()]
+            s["accounts_count"] = len(accs)
+            s["account_names"] = [a["username"] for a in accs]
+            s["staff_count"] = cur.execute("SELECT COUNT(*) as c FROM staff WHERE account_id = ?", (sid,)).fetchone()["c"]
+            s["services_count"] = cur.execute("SELECT COUNT(*) as c FROM services WHERE account_id = ?", (sid,)).fetchone()["c"]
+            s["customers_count"] = cur.execute("SELECT COUNT(*) as c FROM customers WHERE account_id = ?", (sid,)).fetchone()["c"]
+            s["appointments_count"] = cur.execute("SELECT COUNT(*) as c FROM appointments WHERE account_id = ?", (sid,)).fetchone()["c"]
+            bill_row = cur.execute("SELECT COUNT(*) as c, COALESCE(SUM(grand_total), 0) as rev FROM bills WHERE account_id = ?", (sid,)).fetchone()
+            s["bills_count"] = bill_row["c"]
+            s["revenue_total"] = int(bill_row["rev"] or 0)
+            out.append(s)
+        conn.close()
+        return out
+
+    def salon_details(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        salon = cur.execute("SELECT * FROM salons WHERE id = ?", (salon_id,)).fetchone()
+        if not salon:
+            conn.close()
+            return None
+        salon = dict(salon)
+        accounts = [dict(r) for r in cur.execute("SELECT id, username, auth_level FROM accounts WHERE auth_id = ? ORDER BY id", (salon_id,)).fetchall()]
+        staff = [dict(r) for r in cur.execute("SELECT id, name, role, phone, email, total_revenue, services_done FROM staff WHERE account_id = ? ORDER BY id", (salon_id,)).fetchall()]
+        bills = [dict(r) for r in cur.execute("SELECT id, client_name, grand_total, payment_mode, created_at FROM bills WHERE account_id = ? ORDER BY created_at DESC LIMIT 10", (salon_id,)).fetchall()]
+        bill_stats = cur.execute("SELECT COUNT(*) as c, COALESCE(SUM(grand_total), 0) as rev FROM bills WHERE account_id = ?", (salon_id,)).fetchone()
+        subscriptions = [dict(r) for r in cur.execute("SELECT * FROM subscriptions WHERE salon_id = ? ORDER BY created_at DESC", (salon_id,)).fetchall()]
+        pendingorders = [dict(r) for r in cur.execute("SELECT * FROM pendingorders WHERE salon_id = ? ORDER BY created_at DESC LIMIT 5", (salon_id,)).fetchall()]
+        deletion_requests = [dict(r) for r in cur.execute("SELECT * FROM deletion_requests WHERE salon_id = ? ORDER BY requested_at DESC", (salon_id,)).fetchall()]
+        services_count = cur.execute("SELECT COUNT(*) as c FROM services WHERE account_id = ?", (salon_id,)).fetchone()["c"]
+        customers_count = cur.execute("SELECT COUNT(*) as c FROM customers WHERE account_id = ?", (salon_id,)).fetchone()["c"]
+        appointments_count = cur.execute("SELECT COUNT(*) as c FROM appointments WHERE account_id = ?", (salon_id,)).fetchone()["c"]
+        conn.close()
+
+        return {
+            "salon": salon,
+            "accounts": accounts,
+            "staff": staff,
+            "bills": bills,
+            "bills_count": bill_stats["c"],
+            "revenue_total": int(bill_stats["rev"] or 0),
+            "services_count": services_count,
+            "customers_count": customers_count,
+            "appointments_count": appointments_count,
+            "subscriptions": subscriptions,
+            "pendingorders": pendingorders,
+            "deletion_requests": deletion_requests,
+        }
+

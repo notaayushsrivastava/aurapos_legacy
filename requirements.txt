@@ -1,5 +1,9 @@
 Flask==3.1.2
-razorpay
-flask-mail
-flask-limiter
-supabase
+razorpay>=1.4.1
+flask-mail>=0.10.0
+flask-limiter>=3.10.1
+supabase>=2.13.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.1
+Pillow>=10.4.0
+gunicorn>=23.0.0

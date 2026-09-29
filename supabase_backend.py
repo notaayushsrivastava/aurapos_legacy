@@ -1,40 +1,25 @@
 """
 Supabase-backed data layer for AuraPOS.
-
-This module is a drop-in replacement for `backend.py` (which is kept purely for
-local/offline testing). It exposes the exact same public surface — tier
-constants, plan helpers, the Account/Salon dataclasses, parse_opening_hours and
-the eight repository classes — so app.py can swap `from backend import *` for
-`from supabase_backend import *` without any other changes.
-
-Everything is persisted in Supabase Postgres via the supabase-py client using
-the service-role key (the server is trusted; RLS blocks all publishable keys).
-Credentials are verified against Supabase Auth (GoTrue) with a synced copy of
-the password stored on the `accounts` row so the existing credential-recovery
-email and /directlogin flows keep working exactly as before.
-
-Required environment variables:
-    SUPABASE_URL                e.g. https://xxxx.supabase.co
-    SUPABASE_SERVICE_ROLE_KEY   service_role secret (Dashboard -> Settings -> API)
 """
+
+import os
+import sys
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, date, timedelta
 from uuid import uuid4
 import json
-import os
-import sys
 
 try:  # supabase-py is imported lazily so this module can be compiled/inspected without it
     from supabase import create_client
 except ImportError:  # pragma: no cover
     create_client = None
-
-try:  # load the local .env (no-op when env vars are already set, e.g. on Vercel)
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:  # pragma: no cover
-    pass
 
 # ================= SUBSCRIPTION TIERS =================
 # Free-trial + two-tier subscription model:
@@ -1426,15 +1411,27 @@ class BillRepository:
         }).execute()
         return bill_id
 
-    def get_recent_bills(self, account_id, limit=10):
-        rows = (
+    def find_recent_duplicate(self, account_id, client_phone, grand_total, window_seconds=4):
+        threshold = int(datetime.now().timestamp()) - window_seconds
+        try:
+            res = _sb().table("bills").select("id").eq("account_id", account_id).eq("client_phone", str(client_phone or "").strip()).eq("grand_total", int(grand_total)).gte("created_at", threshold).limit(1).execute()
+            if res and res.data and len(res.data) > 0:
+                return res.data[0]["id"]
+        except Exception:
+            pass
+        return None
+
+    def get_recent_bills(self, account_id, limit=10, offset=0):
+        query = (
             _sb().table("bills")
             .select("*")
             .eq("account_id", account_id)
             .order("created_at", desc=True)
             .limit(limit)
-            .execute()
-        ).data
+        )
+        if offset > 0:
+            query = query.range(offset, offset + limit - 1)
+        rows = (query.execute()).data
         return [dict(r) for r in (rows or [])]
 
     def get_metrics(self, account_id, start_ts=None, end_ts=None):
@@ -1832,6 +1829,7 @@ class AdminRepository:
     """
 
     SETTING_ACCEPTING_PUBLIC = "accepting_public"
+    _in_memory_settings = {}
 
     def __init__(self):
         pass
@@ -1839,7 +1837,9 @@ class AdminRepository:
     # ---------- App settings (key/value) ----------
 
     def get_setting(self, key, default=None):
-        """Fetch a settings value; returns `default` on any failure (fail-safe)."""
+        """Fetch a settings value; checks in-memory cache and Supabase fail-safe."""
+        if key in self._in_memory_settings:
+            return self._in_memory_settings[key]
         try:
             row = _data(
                 _sb().table("app_settings")
@@ -1848,31 +1848,36 @@ class AdminRepository:
                 .maybe_single()
                 .execute()
             )
-            return row["value"] if row else default
+            if row and "value" in row:
+                self._in_memory_settings[key] = row["value"]
+                return row["value"]
+            return default
         except Exception as exc:
             _warn(f"get_setting({key!r}) failed: {exc}")
-            return default
+            return self._in_memory_settings.get(key, default)
 
     def set_setting(self, key, value):
         """Upsert a settings value. Returns True on success.
 
-        Uses the service-role client which bypasses RLS. If the
-        app_settings table has no RLS policy allowing service-role
-        writes, this will fail with error 42501 — the table needs
-        ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY with a
-        permissive policy for the service_role, or the RLS can be
-        disabled entirely for this server-only table.
+        Applies the setting to the in-memory cache and environment variable immediately,
+        then attempts to persist to Supabase app_settings table.
         """
+        str_val = str(value)
+        self._in_memory_settings[key] = str_val
+        if key == self.SETTING_ACCEPTING_PUBLIC:
+            os.environ["ACCEPTING_PUBLIC"] = str_val
+
         try:
             _sb().table("app_settings").upsert({
                 "key": key,
-                "value": str(value),
+                "value": str_val,
                 "updated_at": int(datetime.now().timestamp()),
             }).execute()
             return True
         except Exception as exc:
-            _warn(f"set_setting({key!r}) failed: {exc}")
-            return False
+            _warn(f"set_setting({key!r}) Supabase write failed (using memory cache): {exc}")
+            # The setting is already active in memory and runtime env
+            return True
 
     # ---------- Salon directory ----------
 

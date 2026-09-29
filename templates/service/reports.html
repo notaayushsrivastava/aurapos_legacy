@@ -7,304 +7,522 @@
 {% if not is_studio %}<div class="relative">{% endif %}
 <div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 {% if not is_studio %}blur-sm pointer-events-none select-none{% endif %}" x-data="reportsApp()">
 
-  <!-- Header Row -->
-  <div data-anim="up" class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+  <!-- Page Header -->
+  <div data-anim="up" class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
-      <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">
-        Salon Performance Report
-      </h2>
-      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-        Live revenue insights, trends and staff performance for the selected window.
+      <div class="flex items-center gap-2.5">
+        <h2 class="text-xl sm:text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
+          Salon Performance & Analytics
+        </h2>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Live Sync
+        </span>
+      </div>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+        Comprehensive revenue trajectories, service breakdowns, staff commissions, and booking health.
       </p>
     </div>
-    <div class="flex items-center gap-2.5">
+
+    <!-- Action Toolbar -->
+    <div class="flex items-center flex-wrap gap-2">
+      <button @click="printReport()"
+              class="px-3.5 py-2 rounded-xl bg-white dark:bg-[#141210] hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95">
+        <i data-lucide="printer" class="w-3.5 h-3.5 text-neutral-500"></i>
+        <span>Print</span>
+      </button>
+
       <button @click="exportCsv()"
-              class="px-3.5 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-colors">
-        <i data-lucide="download" class="w-3.5 h-3.5 text-violet-500"></i>
+              class="px-3.5 py-2 rounded-xl bg-white dark:bg-[#141210] hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95">
+        <i data-lucide="download" class="w-3.5 h-3.5 text-orange-500"></i>
         <span>Export CSV</span>
+      </button>
+
+      <button @click="loadReport()" :disabled="loading"
+              class="px-3.5 py-2 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all hover:shadow-lg active:scale-95 disabled:opacity-50">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5" :class="loading ? 'animate-spin' : ''"></i>
+        <span x-text="loading ? 'Crunching…' : 'Refresh'"></span>
       </button>
     </div>
   </div>
 
-  <!-- Date Range Filter -->
-  <div data-anim="up" data-delay="60" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm p-4 sm:p-5 space-y-3.5">
-    <div class="flex flex-wrap items-center gap-2">
-      <template x-for="p in presets" :key="p.key">
-        <button @click="applyPreset(p.key)"
-                class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                :class="activePreset === p.key
-                  ? 'btn-brand text-white shadow-md shadow-neon-magenta/20'
-                  : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'"
-                x-text="p.label"></button>
-      </template>
-    </div>
-
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-      <div class="flex items-center gap-2.5">
-        <div>
-          <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">From</label>
-          <input type="date" x-model="fromDate"
-                 class="px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-        </div>
-        <span class="text-neutral-300 dark:text-neutral-600 text-sm font-bold mt-4">→</span>
-        <div>
-          <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">To</label>
-          <input type="date" x-model="toDate"
-                 class="px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-        </div>
+  <!-- Date Range Filter Toolbar -->
+  <div data-anim="up" data-delay="50" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm p-4 sm:p-5 space-y-4">
+    <!-- Preset Pills -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mr-1 hidden sm:inline">Timeframe:</span>
+        <template x-for="p in presets" :key="p.key">
+          <button @click="applyPreset(p.key)"
+                  class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                  :class="activePreset === p.key
+                    ? 'btn-brand text-white shadow-md shadow-orange-500/20'
+                    : 'bg-neutral-100 dark:bg-neutral-900/80 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white'"
+                  x-text="p.label"></button>
+        </template>
       </div>
 
-      <button @click="loadReport()" :disabled="loading"
-              class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50">
-        <i data-lucide="refresh-cw" class="w-4 h-4" :class="loading ? 'animate-spin' : ''"></i>
-        <span x-text="loading ? 'Crunching…' : 'Apply Range'"></span>
-      </button>
-
-      <div class="sm:ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900/70 border border-neutral-200/70 dark:border-neutral-800/80 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-        <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-violet-500"></i>
+      <!-- Range Indicator Badge -->
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs font-mono-num font-semibold text-neutral-700 dark:text-neutral-300">
+        <i data-lucide="calendar" class="w-3.5 h-3.5 text-orange-500"></i>
         <span x-text="rangeLabel"></span>
       </div>
     </div>
-  </div>
-<!-- Summary Stat Cards -->
-  <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-    <div data-anim="up" class="p-4 rounded-3xl bg-gradient-to-br from-violet-600 to-neon-magenta text-white shadow-lg shadow-neon-magenta/20 relative overflow-hidden">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-white/70">Total Revenue</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num mt-2">₹<span x-text="fmt(summary.total_sales)"></span></p>
-      <p class="text-[10px] text-white/60 mt-1 font-semibold"><span x-text="summary.total_bills"></span> closed invoices</p>
-    </div>
 
-    <div data-anim="up" data-delay="40" class="p-4 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Number of Bills</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2" x-text="summary.total_bills"></p>
-      <p class="text-[10px] text-neutral-400 mt-1 font-medium">in selected range</p>
-    </div>
-
-    <div data-anim="up" data-delay="80" class="p-4 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Average Ticket</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.avg_ticket)"></span></p>
-      <p class="text-[10px] text-neutral-400 mt-1 font-medium">per invoice</p>
-    </div>
-
-    <div data-anim="up" data-delay="120" class="p-4 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Discounts Given</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.total_discount)"></span></p>
-      <p class="text-[10px] text-neutral-400 mt-1 font-medium">total savings</p>
-    </div>
-
-    <div data-anim="up" data-delay="160" class="p-4 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">GST Collected</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2">₹<span x-text="fmt(summary.total_tax)"></span></p>
-      <p class="text-[10px] text-neutral-400 mt-1 font-medium">18% included</p>
-    </div>
-
-    <div data-anim="up" data-delay="200" class="p-4 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm">
-      <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Unique Customers</p>
-      <p class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-2" x-text="summary.unique_customers"></p>
-      <p class="text-[10px] text-neutral-400 mt-1 font-medium">by phone number</p>
-    </div>
-  </div>
-<!-- Revenue Trend Chart -->
-  <div data-anim="up" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
-    <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
-      <div>
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Revenue Trend</h3>
-        <p class="text-xs text-neutral-400">Per <span x-text="dayKind"></span> for the selected window</p>
-      </div>
-      <template x-if="bestDay">
-        <div class="text-right">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Best Day</p>
-          <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white"><span x-text="bestDay.label"></span> · ₹<span x-text="fmt(bestDay.revenue)"></span></p>
+    <!-- Custom Date Picker Row -->
+    <div class="pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-neutral-500 dark:text-neutral-400">From</label>
+          <input type="date" x-model="fromDate" @change="activePreset = 'custom'"
+                 class="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50">
         </div>
-      </template>
-    </div>
-
-    <div class="flex items-end gap-1.5 h-44 sm:h-52 overflow-x-auto pb-1">
-      <div class="flex items-end gap-1.5 min-w-full" :class="dayPoints.length > 20 ? 'w-max pr-4' : ''">
-        <template x-for="(p, i) in dayPoints" :key="i">
-          <div class="flex flex-col items-center justify-end" style="height:100%">
-            <span class="text-[9px] font-mono-num font-bold text-neutral-500 dark:text-neutral-400 mb-1 transition-all"
-                  x-show="p.revenue > 0" x-cloak
-                  x-text="p.revenue >= 1000 ? (p.revenue/1000).toFixed(1) + 'k' : p.revenue"></span>
-            <div class="w-3 sm:w-4 rounded-t-md brand-gradient transition-all duration-700 ease-out"
-                 :style="'height:' + (chartShown ? barPct(p.revenue) : 0) + '%; min-height:' + (chartShown && p.revenue > 0 ? '4px' : '0')"
-                 :title="p.label + ': ₹' + p.revenue"></div>
-          </div>
-        </template>
+        <span class="text-neutral-400 font-bold text-xs">→</span>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-neutral-500 dark:text-neutral-400">To</label>
+          <input type="date" x-model="toDate" @change="activePreset = 'custom'"
+                 class="px-3 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50">
+        </div>
       </div>
-    </div>
 
-    <div class="flex gap-1.5 overflow-x-auto pt-1" :class="dayPoints.length > 20 ? 'pb-1' : ''">
-      <template x-for="(p, i) in dayPoints" :key="'l' + i">
-        <span class="text-[9px] font-mono-num text-neutral-400 w-3 sm:w-4 text-center shrink-0 transition-opacity"
-              x-show="shouldShowLabel(i)" x-cloak
-              x-text="p.label.split(' ')[0]"></span>
-      </template>
+      <button @click="loadReport()"
+              class="px-4 py-1.5 rounded-xl bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 text-xs font-bold transition-all hover:opacity-90 active:scale-95 shadow-sm">
+        Apply Date Range
+      </button>
     </div>
   </div>
-<!-- Hourly + Payment + Appointments -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-    <div data-anim="up" data-delay="80" class="lg:col-span-4 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
-      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Busiest Hours</h3>
-        <p class="text-xs text-neutral-400">Revenue by hour of day</p>
+
+  <!-- Executive Summary KPI Cards (Responsive & Zero Overflow) -->
+  <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+    <!-- Total Revenue Card (Featured Hero Metric) -->
+    <div data-anim="up"
+         class="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-orange-600 via-amber-600 to-rose-600 text-white shadow-lg shadow-orange-600/20 relative overflow-hidden transition-all hover:-translate-y-0.5 cursor-pointer"
+         :title="'Exact Total Revenue: ' + fmtFull(summary.total_sales)">
+      <div class="absolute -right-3 -bottom-3 w-20 h-20 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+      <div class="flex items-center justify-between text-white/80 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Total Revenue</span>
+        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-200"></i>
       </div>
-      <div class="space-y-2.5">
-        <template x-for="h in hourPoints" :key="h.hour">
+      <div class="space-y-0.5">
+        <p class="text-2xl sm:text-3xl font-black font-mono-num tracking-tight flex items-baseline">
+          <span>₹</span><span x-text="fmtCompact(summary.total_sales)"></span>
+        </p>
+        <p class="text-[10px] text-white/80 font-medium truncate font-mono-num group-hover:text-white transition-colors"
+           x-text="fmtFull(summary.total_sales) + ' exact'"></p>
+      </div>
+      <div class="mt-2.5 pt-2 border-t border-white/15 flex items-center justify-between text-[10px] text-white/90 font-semibold">
+        <span class="truncate"><span x-text="summary.total_bills"></span> invoices</span>
+        <span class="text-[9px] bg-white/20 px-1.5 py-0.5 rounded-md">Gross</span>
+      </div>
+    </div>
+
+    <!-- Number of Bills -->
+    <div data-anim="up" data-delay="30"
+         class="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm transition-all hover:-translate-y-0.5">
+      <div class="flex items-center justify-between text-neutral-400 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Invoices</span>
+        <i data-lucide="receipt" class="w-3.5 h-3.5 text-neutral-400"></i>
+      </div>
+      <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
+         x-text="fmt(summary.total_bills)"></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium truncate">Closed &amp; billed</p>
+      <div class="mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-[10px] text-neutral-500 dark:text-neutral-400 font-semibold truncate">
+        100% completed
+      </div>
+    </div>
+
+    <!-- Average Ticket -->
+    <div data-anim="up" data-delay="60"
+         class="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer"
+         :title="'Exact Average Ticket: ' + fmtFull(summary.avg_ticket)">
+      <div class="flex items-center justify-between text-neutral-400 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Avg Ticket</span>
+        <i data-lucide="trending-up" class="w-3.5 h-3.5 text-emerald-500"></i>
+      </div>
+      <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
+        <span>₹</span><span x-text="fmtCompact(summary.avg_ticket)"></span>
+      </p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium truncate font-mono-num"
+         x-text="fmtFull(summary.avg_ticket) + ' / bill'"></p>
+      <div class="mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+        Per invoice avg
+      </div>
+    </div>
+
+    <!-- Discounts Given -->
+    <div data-anim="up" data-delay="90"
+         class="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer"
+         :title="'Exact Discounts Given: ' + fmtFull(summary.total_discount)">
+      <div class="flex items-center justify-between text-neutral-400 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Discounts</span>
+        <i data-lucide="tag" class="w-3.5 h-3.5 text-rose-500"></i>
+      </div>
+      <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
+        <span>₹</span><span x-text="fmtCompact(summary.total_discount)"></span>
+      </p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium truncate font-mono-num"
+         x-text="fmtFull(summary.total_discount) + ' saved'"></p>
+      <div class="mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-[10px] text-neutral-500 dark:text-neutral-400 font-semibold truncate">
+        Customer offers
+      </div>
+    </div>
+
+    <!-- GST Collected (18%) -->
+    <div data-anim="up" data-delay="120"
+         class="group p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer"
+         :title="'Exact GST Collected: ' + fmtFull(summary.total_tax)">
+      <div class="flex items-center justify-between text-neutral-400 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">GST Tax</span>
+        <i data-lucide="landmark" class="w-3.5 h-3.5 text-cyan-500"></i>
+      </div>
+      <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
+        <span>₹</span><span x-text="fmtCompact(summary.total_tax)"></span>
+      </p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium truncate font-mono-num"
+         x-text="fmtFull(summary.total_tax) + ' total'"></p>
+      <div class="mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-[10px] text-neutral-500 dark:text-neutral-400 font-semibold truncate">
+        18% Tax Component
+      </div>
+    </div>
+
+    <!-- Unique Customers -->
+    <div data-anim="up" data-delay="150"
+         class="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm transition-all hover:-translate-y-0.5">
+      <div class="flex items-center justify-between text-neutral-400 mb-2">
+        <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Clients</span>
+        <i data-lucide="users" class="w-3.5 h-3.5 text-violet-500"></i>
+      </div>
+      <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
+         x-text="fmt(summary.unique_customers)"></p>
+      <p class="text-[10px] text-neutral-400 mt-1 font-medium truncate">Unique phone records</p>
+      <div class="mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 text-[10px] text-violet-600 dark:text-violet-400 font-semibold truncate">
+        Active salon base
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Interactive Revenue Chart Section -->
+  <div data-anim="up" data-delay="180" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800 gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Revenue Trajectory</h3>
+          <span class="px-2 py-0.5 rounded-md text-[10px] font-mono-num font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
+                x-text="'Grouped by ' + dayKind"></span>
+        </div>
+        <p class="text-xs text-neutral-400 mt-0.5">Continuous sales velocity &amp; daily invoice distribution</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Chart Type Switcher -->
+        <div class="inline-flex rounded-xl bg-neutral-100 dark:bg-neutral-900 p-1 border border-neutral-200/80 dark:border-neutral-800 text-xs font-semibold">
+          <button @click="setRevenueChartType('line')"
+                  class="px-2.5 py-1 rounded-lg transition-all"
+                  :class="revenueChartType === 'line' ? 'bg-white dark:bg-[#1f1c18] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'">
+            <i data-lucide="line-chart" class="w-3.5 h-3.5 inline mr-1"></i>Area
+          </button>
+          <button @click="setRevenueChartType('bar')"
+                  class="px-2.5 py-1 rounded-lg transition-all"
+                  :class="revenueChartType === 'bar' ? 'bg-white dark:bg-[#1f1c18] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'">
+            <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 inline mr-1"></i>Bars
+          </button>
+        </div>
+
+        <template x-if="bestDay">
+          <div class="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-right">
+            <p class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Peak Period</p>
+            <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">
+              <span x-text="bestDay.label"></span> · ₹<span x-text="fmtCompact(bestDay.revenue)"></span>
+            </p>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Chart Canvas Container -->
+    <div class="relative w-full h-64 sm:h-72">
+      <canvas id="revenueTrendCanvas" class="w-full h-full"></canvas>
+      <div x-show="dayPoints.length === 0 && !loading" class="absolute inset-0 flex items-center justify-center text-xs text-neutral-400">
+        No sales recorded in this timeframe.
+      </div>
+    </div>
+  </div>
+
+  <!-- Composition & Distribution: 3-Column Pie/Doughnut Charts Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+    
+    <!-- 1. Payment Methods Pie / Doughnut Chart -->
+    <div data-anim="up" data-delay="200" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 shadow-sm flex flex-col justify-between space-y-4">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
           <div>
-            <div class="flex justify-between text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 mb-1">
-              <span x-text="h.label"></span>
-              <span class="font-mono-num" x-text="h.revenue ? '₹' + fmt(h.revenue) : '—'"></span>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="credit-card" class="w-4 h-4 text-orange-500"></i>
+              <span>Payment Methods</span>
+            </h3>
+            <p class="text-[11px] text-neutral-400 mt-0.5">Share of revenue by payment mode</p>
+          </div>
+          <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
+                x-text="paymentSplit.length + ' modes'"></span>
+        </div>
+
+        <!-- Doughnut Canvas -->
+        <div class="relative w-full h-48 my-2 flex items-center justify-center">
+          <canvas id="paymentPieCanvas" class="max-h-full"></canvas>
+          <div x-show="paymentSplit.length === 0" class="absolute inset-0 flex items-center justify-center text-xs text-neutral-400">
+            No payments in range
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment Legend Details -->
+      <div class="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800/80">
+        <template x-for="p in paymentSplit" :key="p.mode">
+          <div class="flex items-center justify-between text-xs py-0.5">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color: ' + getPaymentColor(p.mode)"></span>
+              <span class="font-bold text-neutral-800 dark:text-neutral-200 truncate" x-text="p.mode"></span>
+              <span class="text-[10px] text-neutral-400 font-mono-num" x-text="'(' + p.count + ' bills)'"></span>
             </div>
-            <div class="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-              <div class="h-full rounded-full btn-brand transition-all duration-700 ease-out"
-                   :style="'width:' + (chartShown ? hourPct(h.revenue) : 0) + '%'"></div>
+            <div class="flex items-center gap-2 shrink-0 font-mono-num">
+              <span class="font-extrabold text-neutral-900 dark:text-white" x-text="p.pct + '%'"></span>
+              <span class="text-[11px] text-neutral-400">₹<span x-text="fmtCompact(p.revenue)"></span></span>
             </div>
           </div>
         </template>
       </div>
     </div>
 
-    <div data-anim="up" data-delay="120" class="lg:col-span-4 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
-      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Payment Methods</h3>
-        <p class="text-xs text-neutral-400">Share of revenue by mode</p>
+    <!-- 2. Category Distribution Pie / Doughnut Chart -->
+    <div data-anim="up" data-delay="230" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 shadow-sm flex flex-col justify-between space-y-4">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="pie-chart" class="w-4 h-4 text-amber-500"></i>
+              <span>Category Split</span>
+            </h3>
+            <p class="text-[11px] text-neutral-400 mt-0.5">Revenue breakdown by service department</p>
+          </div>
+          <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
+                x-text="categorySplit.length + ' cats'"></span>
+        </div>
+
+        <!-- Doughnut Canvas -->
+        <div class="relative w-full h-48 my-2 flex items-center justify-center">
+          <canvas id="categoryPieCanvas" class="max-h-full"></canvas>
+          <div x-show="categorySplit.length === 0" class="absolute inset-0 flex items-center justify-center text-xs text-neutral-400">
+            No category data
+          </div>
+        </div>
       </div>
-      <div class="space-y-3">
-        <template x-for="mode in paymentSplit" :key="mode.mode">
-          <div class="flex items-center gap-3">
-            <div class="w-16 shrink-0">
-              <p class="text-xs font-bold text-neutral-800 dark:text-neutral-200" x-text="mode.mode"></p>
+
+      <!-- Category Legend Details -->
+      <div class="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 max-h-36 overflow-y-auto pr-1">
+        <template x-for="(c, idx) in categorySplit" :key="c.category">
+          <div class="flex items-center justify-between text-xs py-0.5">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color: ' + getPaletteColor(idx)"></span>
+              <span class="font-bold text-neutral-800 dark:text-neutral-200 truncate" x-text="c.category"></span>
+              <span class="text-[10px] text-neutral-400 font-mono-num" x-text="'(' + c.qty + '×)'"></span>
             </div>
-            <div class="flex-1 h-2.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-              <div class="h-full rounded-full transition-all duration-700 ease-out"
-                   :class="payColor(mode.mode)"
-                   :style="'width:' + (chartShown ? mode.pct : 0) + '%'"></div>
-            </div>
-            <div class="w-20 text-right shrink-0">
-              <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white" x-text="mode.pct + '%'"></p>
-              <p class="text-[9px] text-neutral-400" x-text="mode.count + ' bills'"></p>
+            <div class="flex items-center gap-2 shrink-0 font-mono-num">
+              <span class="font-extrabold text-neutral-900 dark:text-white" x-text="c.pct + '%'"></span>
+              <span class="text-[11px] text-neutral-400">₹<span x-text="fmtCompact(c.revenue)"></span></span>
             </div>
           </div>
         </template>
       </div>
     </div>
 
-    <div data-anim="up" data-delay="160" class="lg:col-span-4 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-3">
-      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Appointments</h3>
-        <p class="text-xs text-neutral-400">Bookings in the window</p>
+    <!-- 3. Appointment Status Health Pie / Ring Chart -->
+    <div data-anim="up" data-delay="260" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 shadow-sm flex flex-col justify-between space-y-4">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="calendar-check-2" class="w-4 h-4 text-cyan-500"></i>
+              <span>Booking Health</span>
+            </h3>
+            <p class="text-[11px] text-neutral-400 mt-0.5">Appointment status distribution</p>
+          </div>
+          <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
+                x-text="appointments.total + ' total'"></span>
+        </div>
+
+        <!-- Doughnut Canvas -->
+        <div class="relative w-full h-48 my-2 flex items-center justify-center">
+          <canvas id="appointmentPieCanvas" class="max-h-full"></canvas>
+          <div x-show="appointments.total === 0" class="absolute inset-0 flex items-center justify-center text-xs text-neutral-400">
+            No bookings in range
+          </div>
+        </div>
       </div>
-      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 text-center">
-        <p class="text-3xl font-black font-mono-num text-neutral-900 dark:text-white" x-text="appointments.total"></p>
-        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-1">Total Bookings</p>
-      </div>
-      <div class="space-y-2">
+
+      <!-- Appointment Status Legend Details -->
+      <div class="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800/80">
         <template x-for="(count, status) in appointments.by_status" :key="status">
-          <div class="flex items-center justify-between text-xs">
-            <span class="font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full" :class="statusColor(status)"></span>
-              <span x-text="status"></span>
-            </span>
-            <span class="font-black font-mono-num text-neutral-900 dark:text-white" x-text="count"></span>
+          <div class="flex items-center justify-between text-xs py-0.5">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color: ' + getStatusColorHex(status)"></span>
+              <span class="font-bold text-neutral-800 dark:text-neutral-200 truncate" x-text="status"></span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 font-mono-num">
+              <span class="font-extrabold text-neutral-900 dark:text-white" x-text="count + ' bookings'"></span>
+              <span class="text-[10px] text-neutral-400 font-bold"
+                    x-text="appointments.total ? Math.round((count * 100) / appointments.total) + '%' : ''"></span>
+            </div>
           </div>
         </template>
       </div>
     </div>
+
   </div>
-<!-- Top Services + Category Split -->
+
+  <!-- Operational Insights: Hourly Heatmap, Top Services & Staff Leaderboard -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-    <div data-anim="up" data-delay="80" class="lg:col-span-7 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-4">
-      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Top Services</h3>
-        <p class="text-xs text-neutral-400">Highest grossing services in the window</p>
-      </div>
-      <div class="space-y-3">
-        <template x-for="(s, i) in topServices" :key="s.name">
-          <div class="flex items-center gap-3">
-            <div class="w-6 h-6 rounded-lg bg-neutral-200 dark:bg-neutral-800 font-black text-[10px] text-neutral-700 dark:text-neutral-300 flex items-center justify-center font-mono-num shrink-0" x-text="'#' + (i + 1)"></div>
-            <div class="flex-1 min-w-0">
-              <div class="flex justify-between items-baseline gap-2 mb-1">
-                <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="s.name"></p>
-                <p class="text-[11px] font-black font-mono-num text-neutral-900 dark:text-white shrink-0">₹<span x-text="fmt(s.revenue)"></span></p>
-              </div>
-              <div class="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                <div class="h-full rounded-full btn-brand transition-all duration-700 ease-out"
-                     :style="'width:' + (chartShown ? svcPct(s.revenue) : 0) + '%'"></div>
-              </div>
-            </div>
-            <div class="w-14 text-right shrink-0">
-              <p class="text-[11px] font-bold font-mono-num text-neutral-500 dark:text-neutral-400" x-text="s.qty + '×'"></p>
-            </div>
-          </div>
-        </template>
-        <p x-show="topServices.length === 0" class="text-xs text-neutral-400 text-center py-4">No service sales in this window.</p>
-      </div>
-    </div>
 
-    <div data-anim="up" data-delay="120" class="lg:col-span-5 bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 shadow-sm space-y-4">
-      <div class="pb-2 border-b border-neutral-100 dark:border-neutral-800">
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Category Split</h3>
-        <p class="text-xs text-neutral-400">Revenue share by category</p>
-      </div>
-      <div class="space-y-3">
-        <template x-for="c in categorySplit" :key="c.category">
-          <div>
-            <div class="flex justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300 mb-1">
-              <span class="truncate" x-text="c.category"></span>
-              <span class="font-mono-num font-black text-neutral-900 dark:text-white shrink-0 ml-2" x-text="c.pct + '%'"></span>
-            </div>
-            <div class="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-              <div class="h-full rounded-full transition-all duration-700 ease-out"
-                   :class="catColor(c.category)"
-                   :style="'width:' + (chartShown ? c.pct : 0) + '%'"></div>
-            </div>
-          </div>
-        </template>
-        <p x-show="categorySplit.length === 0" class="text-xs text-neutral-400 text-center py-4">No category data in this window.</p>
-      </div>
-    </div>
-  </div>
-<!-- Staff Leaderboard -->
-  <div data-anim="up" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
-    <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+    <!-- Busiest Hours of Day (Bar Chart) -->
+    <div data-anim="up" data-delay="280" class="lg:col-span-5 bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-4">
       <div>
-        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Staff Leaderboard — This Window</h3>
-        <p class="text-xs text-neutral-400">Ranked by revenue generated (15% commission basis)</p>
-      </div>
-      <span class="text-xs font-mono-num text-emerald-500 font-bold">Live</span>
-    </div>
-
-    <div class="space-y-3">
-      <template x-for="(st, idx) in staffBoard" :key="st.name">
-        <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between gap-3"
-             :class="idx === 0 ? 'ring-1 ring-violet-300 dark:ring-violet-500/40' : ''">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-xl font-black text-xs text-white flex items-center justify-center font-mono-num shrink-0"
-                 :class="idx === 0 ? 'brand-gradient shadow-md shadow-neon-magenta/30' : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200'">
-              <i :data-lucide="idx === 0 ? 'trophy' : 'scissors'" class="w-4 h-4"></i>
-            </div>
-            <div class="min-w-0">
-              <p class="text-xs font-bold text-neutral-900 dark:text-white truncate flex items-center gap-2">
-                <span x-text="st.name"></span>
-                <span x-show="idx === 0" class="px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider btn-brand text-white">Top</span>
-              </p>
-              <p class="text-[10px] text-neutral-400 mt-0.5 truncate"><span x-text="st.role"></span> · <span x-text="st.services"></span> services</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-5 shrink-0">
-            <div class="flex-1 h-1.5 w-24 sm:w-32 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden hidden sm:block">
-              <div class="h-full rounded-full btn-brand transition-all duration-700 ease-out"
-                   :style="'width:' + (chartShown ? boardPct(st.revenue) : 0) + '%'"></div>
-            </div>
-            <div class="text-right">
-              <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">₹<span x-text="fmt(st.revenue)"></span></p>
-              <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold font-mono-num">₹<span x-text="fmt(st.commission)"></span> comm.</p>
-            </div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="clock" class="w-4 h-4 text-orange-500"></i>
+              <span>Busiest Salon Hours</span>
+            </h3>
+            <p class="text-[11px] text-neutral-400 mt-0.5">Revenue generated by time of day (09:00 – 21:00)</p>
           </div>
         </div>
+
+        <div class="relative w-full h-56 mt-3">
+          <canvas id="hourlyBarCanvas" class="w-full h-full"></canvas>
+        </div>
+      </div>
+
+      <div class="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/60 dark:border-neutral-800/80 text-[11px] text-neutral-500 dark:text-neutral-400 flex items-center justify-between">
+        <span>Peak Traffic Window</span>
+        <span class="font-mono-num font-bold text-neutral-800 dark:text-neutral-200">12:00 PM – 06:00 PM</span>
+      </div>
+    </div>
+
+    <!-- Top Grossing Services -->
+    <div data-anim="up" data-delay="300" class="lg:col-span-7 bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-4">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="award" class="w-4 h-4 text-amber-500"></i>
+              <span>Top Revenue Services</span>
+            </h3>
+            <p class="text-[11px] text-neutral-400 mt-0.5">Ranked by total revenue &amp; service velocity</p>
+          </div>
+          <span class="text-xs font-mono-num text-neutral-400">Top 6</span>
+        </div>
+
+        <div class="space-y-3.5 mt-3">
+          <template x-for="(s, i) in topServices" :key="s.name">
+            <div class="group flex items-center gap-3">
+              <!-- Rank -->
+              <div class="w-6 h-6 rounded-lg font-black text-[10px] font-mono-num flex items-center justify-center shrink-0"
+                   :class="i === 0 ? 'bg-amber-500 text-white shadow-xs' : (i === 1 ? 'bg-neutral-300 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200' : 'bg-neutral-100 dark:bg-neutral-800/80 text-neutral-500')">
+                <span x-text="'#' + (i + 1)"></span>
+              </div>
+
+              <!-- Service Details & Meter -->
+              <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-baseline gap-2 mb-1">
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="s.name"></p>
+                  <p class="text-xs font-black font-mono-num text-neutral-900 dark:text-white shrink-0">
+                    ₹<span x-text="fmtCompact(s.revenue)"></span>
+                  </p>
+                </div>
+                <div class="h-2 rounded-full bg-neutral-100 dark:bg-neutral-800/80 overflow-hidden">
+                  <div class="h-full rounded-full btn-brand transition-all duration-700 ease-out"
+                       :style="'width:' + (maxSvc > 0 ? (s.revenue * 100 / maxSvc) : 0) + '%'"></div>
+                </div>
+              </div>
+
+              <!-- Qty Sold -->
+              <div class="w-14 text-right shrink-0">
+                <span class="text-[11px] font-bold font-mono-num text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md"
+                      x-text="s.qty + '×'"></span>
+              </div>
+            </div>
+          </template>
+          <div x-show="topServices.length === 0" class="text-xs text-neutral-400 text-center py-6">
+            No service sales recorded in this timeframe.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Staff Performance & Commission Leaderboard -->
+  <div data-anim="up" data-delay="320" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 p-5 sm:p-6 shadow-sm space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800 gap-2">
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+            <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i>
+            <span>Stylist &amp; Staff Commission Leaderboard</span>
+          </h3>
+        </div>
+        <p class="text-xs text-neutral-400 mt-0.5">Calculated based on standard 15% salon service commission basis</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs font-mono-num">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="text-neutral-500 dark:text-neutral-400 font-semibold"><span x-text="staffBoard.length"></span> Staff Members</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+      <template x-for="(st, idx) in staffBoard" :key="st.name">
+        <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex flex-col justify-between space-y-3 transition-all hover:border-orange-500/40"
+             :class="idx === 0 ? 'ring-1 ring-orange-500/30 bg-orange-50/20 dark:bg-orange-950/10' : ''">
+          
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-9 h-9 rounded-xl font-black text-xs text-white flex items-center justify-center shrink-0 shadow-sm"
+                   :class="idx === 0 ? 'btn-brand shadow-orange-500/30' : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'">
+                <i :data-lucide="idx === 0 ? 'trophy' : 'user'" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="st.name"></p>
+                  <span x-show="idx === 0" class="px-1.5 py-0.2 rounded-md text-[9px] font-black uppercase tracking-wider btn-brand text-white">#1 Top</span>
+                </div>
+                <p class="text-[10px] text-neutral-400 truncate mt-0.5">
+                  <span x-text="st.role"></span> · <span x-text="st.services"></span> services
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Revenue Meter -->
+          <div class="space-y-1">
+            <div class="h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
+              <div class="h-full rounded-full btn-brand transition-all duration-700 ease-out"
+                   :style="'width:' + (maxBoard > 0 ? (st.revenue * 100 / maxBoard) : 0) + '%'"></div>
+            </div>
+            <div class="flex items-center justify-between pt-1">
+              <span class="text-[11px] font-black font-mono-num text-neutral-900 dark:text-white"
+                    :title="'Exact: ' + fmtFull(st.revenue)">
+                ₹<span x-text="fmtCompact(st.revenue)"></span>
+              </span>
+              <span class="text-[10px] font-bold font-mono-num text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md"
+                    :title="'Exact Commission: ' + fmtFull(st.commission)">
+                +₹<span x-text="fmtCompact(st.commission)"></span> comm.
+              </span>
+            </div>
+          </div>
+
+        </div>
       </template>
-      <p x-show="staffBoard.length === 0" class="text-xs text-neutral-400 text-center py-4">No staff activity in this window.</p>
+      <div x-show="staffBoard.length === 0" class="col-span-full text-xs text-neutral-400 text-center py-6">
+        No staff activity recorded in this timeframe.
+      </div>
     </div>
   </div>
 
@@ -315,7 +533,7 @@
 <div class="absolute inset-0 z-30 flex items-start justify-center px-4 pt-24 sm:pt-32 pb-6">
   <div class="absolute inset-0 bg-white/30 dark:bg-[#0d0c0a]/50 backdrop-blur-[2px]"></div>
   <div class="relative w-full max-w-md p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-2xl text-center space-y-4">
-    <div class="w-12 h-12 mx-auto rounded-2xl brand-gradient text-white flex items-center justify-center shadow-lg shadow-neon-magenta/30">
+    <div class="w-12 h-12 mx-auto rounded-2xl brand-gradient text-white flex items-center justify-center shadow-lg shadow-orange-500/30">
       <i data-lucide="lock" class="w-6 h-6"></i>
     </div>
     <div class="space-y-1.5">
@@ -323,12 +541,12 @@
       <p class="text-xs text-neutral-500 dark:text-neutral-400">You're on the {% if is_free %}Free trial{% else %}Pro{% endif %} plan — upgrade to Studio to unlock advanced analytics for your salon.</p>
     </div>
     <ul class="text-left space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
-      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Revenue trends &amp; hourly breakdowns</li>
-      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Staff leaderboard &amp; commissions</li>
-      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Payment &amp; category insights</li>
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-cyan-500 shrink-0"></i>Revenue trends &amp; hourly breakdowns</li>
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-cyan-500 shrink-0"></i>Interactive pie charts &amp; payment splits</li>
+      <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-cyan-500 shrink-0"></i>Staff leaderboard &amp; 15% commission accounting</li>
     </ul>
     <a href="{{ url_for('upgrade') }}"
-       class="w-full px-4 py-3 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2">
+       class="w-full px-4 py-3 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2">
       <i data-lucide="crown" class="w-4 h-4"></i>
       Upgrade to Studio
     </a>
@@ -337,15 +555,19 @@
 </div>
 {% endif %}
 {% endblock %}
+
 {% block scripts %}
+<!-- Chart.js CDN for high-performance canvas charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
   function reportsApp() {
     return {
       loading: false,
-      chartShown: false,
       fromDate: '',
       toDate: '',
       activePreset: '30d',
+      revenueChartType: 'line',
 
       summary: { total_sales: 0, total_bills: 0, avg_ticket: 0, total_discount: 0, total_tax: 0, unique_customers: 0 },
       dayPoints: [],
@@ -358,10 +580,20 @@
       staffBoard: [],
       appointments: { total: 0, by_status: {} },
 
+      // Chart.js instance references
+      chartInstances: {
+        revenue: null,
+        payment: null,
+        category: null,
+        appointment: null,
+        hourly: null
+      },
+
       presets: [
         { key: 'today', label: 'Today' },
         { key: '7d', label: '7 Days' },
         { key: '30d', label: '30 Days' },
+        { key: 'this_month', label: 'This Month' },
         { key: 'quarter', label: 'This Quarter' },
         { key: 'year', label: 'This Year' }
       ],
@@ -372,13 +604,16 @@
         start.setDate(end.getDate() - 29);
         this.fromDate = this.iso(start);
         this.toDate = this.iso(end);
+
         {% if is_studio %}
         this.loadReport();
         {% endif %}
       },
 
       iso(d) {
-        const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
         return y + '-' + m + '-' + day;
       },
 
@@ -386,11 +621,21 @@
         this.activePreset = key;
         const end = new Date();
         let start = new Date();
-        if (key === 'today') start = end;
-        else if (key === '7d') start.setDate(end.getDate() - 6);
-        else if (key === '30d') start.setDate(end.getDate() - 29);
-        else if (key === 'quarter') start = new Date(end.getFullYear(), Math.floor(end.getMonth() / 3) * 3, 1);
-        else if (key === 'year') start = new Date(end.getFullYear(), 0, 1);
+
+        if (key === 'today') {
+          start = end;
+        } else if (key === '7d') {
+          start.setDate(end.getDate() - 6);
+        } else if (key === '30d') {
+          start.setDate(end.getDate() - 29);
+        } else if (key === 'this_month') {
+          start = new Date(end.getFullYear(), end.getMonth(), 1);
+        } else if (key === 'quarter') {
+          start = new Date(end.getFullYear(), Math.floor(end.getMonth() / 3) * 3, 1);
+        } else if (key === 'year') {
+          start = new Date(end.getFullYear(), 0, 1);
+        }
+
         this.fromDate = this.iso(start);
         this.toDate = this.iso(end);
         this.loadReport();
@@ -399,12 +644,13 @@
       async loadReport() {
         if (!this.fromDate || !this.toDate) return;
         this.loading = true;
-        this.chartShown = false;
+
         try {
           const res = await fetch('/api/reports?from=' + this.fromDate + '&to=' + this.toDate);
           const data = await res.json();
-          if (!res.ok) throw new Error(data.message || 'Failed');
-          this.summary = data.summary;
+          if (!res.ok) throw new Error(data.message || 'Failed to load reports');
+
+          this.summary = data.summary || { total_sales: 0, total_bills: 0, avg_ticket: 0, total_discount: 0, total_tax: 0, unique_customers: 0 };
           this.dayPoints = (data.revenue_by_day && data.revenue_by_day.points) || [];
           this.dayKind = (data.revenue_by_day && data.revenue_by_day.kind) || 'day';
           this.hourPoints = data.revenue_by_hour || [];
@@ -413,14 +659,46 @@
           this.categorySplit = data.category_split || [];
           this.staffBoard = data.staff_leaderboard || [];
           this.appointments = data.appointments || { total: 0, by_status: {} };
+
           const best = this.dayPoints.reduce((a, b) => (b.revenue > (a ? a.revenue : -1) ? b : a), null);
           this.bestDay = best && best.revenue > 0 ? best : null;
+
+          this.$nextTick(() => {
+            this.renderAllCharts();
+            if (window.lucide) lucide.createIcons();
+          });
         } catch (e) {
-          window.uiToast('Could not load the report. Please try again.', 'error');
+          console.error(e);
+          if (window.uiToast) {
+            window.uiToast('Could not load the report. Please try again.', 'error');
+          }
+        } finally {
+          this.loading = false;
         }
-        this.loading = false;
-        this.$nextTick(() => { this.chartShown = true; });
-        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      // Compact Indian Number Formatter (e.g. 3.7L+, 4.3L+, 15.2k+)
+      fmtCompact(n) {
+        const num = Number(n) || 0;
+        if (num >= 10000000) {
+          return (num / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr+';
+        }
+        if (num >= 100000) {
+          return (num / 100000).toFixed(1).replace(/\.0$/, '') + 'L+';
+        }
+        if (num >= 1000) {
+          return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k+';
+        }
+        return Math.round(num).toLocaleString('en-IN');
+      },
+
+      // Full Exact Indian Currency Formatter (e.g. ₹3,70,500)
+      fmtFull(n) {
+        return '₹' + (Math.round(Number(n) || 0)).toLocaleString('en-IN');
+      },
+
+      fmt(n) {
+        return (Math.round(Number(n) || 0)).toLocaleString('en-IN');
       },
 
       get rangeLabel() {
@@ -429,82 +707,469 @@
         const t = this.toDate ? this.toDate.split('-').reverse().join('/') : '…';
         return f + ' → ' + t;
       },
-fmt(n) { return (Math.round(n) || 0).toLocaleString('en-IN'); },
-      barPct(revenue) { return this.maxDay > 0 ? Math.max(2, (revenue || 0) * 100 / this.maxDay) : 0; },
-      hourPct(revenue) { return this.maxHour > 0 ? ((revenue || 0) * 100 / this.maxHour) : 0; },
-      svcPct(revenue) { return this.maxSvc > 0 ? ((revenue || 0) * 100 / this.maxSvc) : 0; },
-      boardPct(revenue) { return this.maxBoard > 0 ? ((revenue || 0) * 100 / this.maxBoard) : 0; },
 
-      get maxDay() { return Math.max(...this.dayPoints.map(p => p.revenue), 1); },
-      get maxHour() { return Math.max(...this.hourPoints.map(h => h.revenue), 1); },
-      get maxSvc() { return Math.max(...this.topServices.map(s => s.revenue), 1); },
-      get maxBoard() { return Math.max(...this.staffBoard.map(s => s.revenue), 1); },
-
-      shouldShowLabel(i) {
-        const n = this.dayPoints.length;
-        if (n <= 8) return true;
-        const step = Math.ceil(n / 8);
-        return i % step === 0 || i === n - 1;
+      get maxSvc() {
+        return Math.max(...this.topServices.map(s => s.revenue), 1);
       },
 
-      payColor(mode) {
+      get maxBoard() {
+        return Math.max(...this.staffBoard.map(s => s.revenue), 1);
+      },
+
+      setRevenueChartType(type) {
+        this.revenueChartType = type;
+        this.renderRevenueTrendChart();
+      },
+
+      // Color utilities for charts & legends
+      getPaymentColor(mode) {
         const m = String(mode).toUpperCase();
-        if (m === 'UPI') return 'bg-gradient-to-r from-cyan-500 to-violet-600';
-        if (m === 'CASH') return 'bg-gradient-to-r from-emerald-500 to-cyan-500';
-        if (m === 'CARD') return 'bg-gradient-to-r from-amber-400 to-orange-600';
-        return 'bg-gradient-to-r from-neutral-400 to-neutral-600';
+        if (m === 'CASH') return '#10b981'; // Emerald
+        if (m === 'UPI') return '#06b6d4';  // Cyan
+        if (m === 'CARD') return '#f97316'; // Orange
+        return '#8b5cf6';                   // Violet
       },
 
-      catColor(cat) {
-        const palette = [
-          'btn-brand',
-          'btn-brand',
-          'bg-gradient-to-r from-amber-400 to-orange-600',
-          'bg-gradient-to-r from-emerald-500 to-cyan-500',
-          'bg-gradient-to-r from-cyan-500 to-violet-600',
-          'bg-gradient-to-r from-rose-500 to-amber-500'
+      getPaletteColor(idx) {
+        const colors = [
+          '#f97316', // Orange
+          '#06b6d4', // Cyan
+          '#8b5cf6', // Violet
+          '#10b981', // Emerald
+          '#ec4899', // Pink
+          '#f59e0b', // Amber
+          '#3b82f6', // Blue
+          '#14b8a6', // Teal
         ];
-        let h = 0;
-        for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) >>> 0;
-        return palette[h % palette.length];
+        return colors[idx % colors.length];
       },
 
-      statusColor(status) {
+      getStatusColorHex(status) {
         const map = {
-          'Confirmed': 'bg-violet-500',
-          'In Service': 'bg-emerald-500',
-          'Next Up': 'bg-amber-500',
-          'Cancelled': 'bg-rose-500',
-          'Completed': 'bg-emerald-500',
-          'No Show': 'bg-rose-500'
+          'Completed': '#10b981',
+          'Confirmed': '#8b5cf6',
+          'In Service': '#06b6d4',
+          'Next Up': '#f59e0b',
+          'Cancelled': '#f43f5e',
+          'No Show': '#ef4444'
         };
-        return map[status] || 'bg-neutral-400';
+        return map[status] || '#9ca3af';
+      },
+
+      isDarkMode() {
+        return document.documentElement.classList.contains('dark');
+      },
+
+      // Chart.js Render Engine
+      renderAllCharts() {
+        this.renderRevenueTrendChart();
+        this.renderPaymentPieChart();
+        this.renderCategoryPieChart();
+        this.renderAppointmentPieChart();
+        this.renderHourlyBarChart();
+      },
+
+      renderRevenueTrendChart() {
+        const canvas = document.getElementById('revenueTrendCanvas');
+        if (!canvas) return;
+
+        if (this.chartInstances.revenue) {
+          this.chartInstances.revenue.destroy();
+        }
+
+        const isDark = this.isDarkMode();
+        const labels = this.dayPoints.map(p => p.label);
+        const revenues = this.dayPoints.map(p => p.revenue);
+        const bills = this.dayPoints.map(p => p.bills);
+
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        if (isDark) {
+          gradient.addColorStop(0, 'rgba(249, 115, 22, 0.4)');
+          gradient.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+        } else {
+          gradient.addColorStop(0, 'rgba(249, 115, 22, 0.25)');
+          gradient.addColorStop(1, 'rgba(249, 115, 22, 0.0)');
+        }
+
+        const isLine = this.revenueChartType === 'line';
+
+        this.chartInstances.revenue = new Chart(ctx, {
+          type: isLine ? 'line' : 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Revenue',
+              data: revenues,
+              borderColor: '#f97316',
+              borderWidth: isLine ? 2.5 : 0,
+              backgroundColor: isLine ? gradient : '#f97316',
+              borderRadius: isLine ? 0 : 6,
+              fill: isLine,
+              tension: 0.35,
+              pointBackgroundColor: '#f97316',
+              pointBorderColor: isDark ? '#141210' : '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: labels.length > 20 ? 0 : 4,
+              pointHoverRadius: 6,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              intersect: false,
+              mode: 'index',
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1f1c18' : '#ffffff',
+                titleColor: isDark ? '#ffffff' : '#111827',
+                bodyColor: isDark ? '#d1d5db' : '#374151',
+                borderColor: isDark ? '#37332d' : '#e5e7eb',
+                borderWidth: 1,
+                padding: 10,
+                boxPadding: 4,
+                usePointStyle: true,
+                callbacks: {
+                  title: (items) => items[0].label,
+                  label: (context) => {
+                    const rev = context.parsed.y || 0;
+                    const billCount = bills[context.dataIndex] || 0;
+                    return [
+                      ' Revenue: ₹' + rev.toLocaleString('en-IN'),
+                      ' Invoices: ' + billCount + ' closed'
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  color: isDark ? '#737373' : '#a3a3a3',
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  maxTicksLimit: 10
+                }
+              },
+              y: {
+                grid: {
+                  color: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: isDark ? '#737373' : '#a3a3a3',
+                  font: { family: 'JetBrains Mono', size: 10 },
+                  callback: (val) => '₹' + this.fmtCompact(val)
+                }
+              }
+            }
+          }
+        });
+      },
+
+      renderPaymentPieChart() {
+        const canvas = document.getElementById('paymentPieCanvas');
+        if (!canvas) return;
+
+        if (this.chartInstances.payment) {
+          this.chartInstances.payment.destroy();
+        }
+
+        if (!this.paymentSplit.length) return;
+
+        const isDark = this.isDarkMode();
+        const labels = this.paymentSplit.map(p => p.mode);
+        const data = this.paymentSplit.map(p => p.revenue);
+        const colors = this.paymentSplit.map(p => this.getPaymentColor(p.mode));
+
+        this.chartInstances.payment = new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: colors,
+              borderColor: isDark ? '#141210' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1f1c18' : '#ffffff',
+                titleColor: isDark ? '#ffffff' : '#111827',
+                bodyColor: isDark ? '#d1d5db' : '#374151',
+                borderColor: isDark ? '#37332d' : '#e5e7eb',
+                borderWidth: 1,
+                padding: 10,
+                callbacks: {
+                  label: (context) => {
+                    const item = this.paymentSplit[context.dataIndex];
+                    return ` ₹${(item.revenue || 0).toLocaleString('en-IN')} (${item.pct}%) · ${item.count} bills`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      },
+
+      renderCategoryPieChart() {
+        const canvas = document.getElementById('categoryPieCanvas');
+        if (!canvas) return;
+
+        if (this.chartInstances.category) {
+          this.chartInstances.category.destroy();
+        }
+
+        if (!this.categorySplit.length) return;
+
+        const isDark = this.isDarkMode();
+        const labels = this.categorySplit.map(c => c.category);
+        const data = this.categorySplit.map(c => c.revenue);
+        const colors = this.categorySplit.map((c, i) => this.getPaletteColor(i));
+
+        this.chartInstances.category = new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: colors,
+              borderColor: isDark ? '#141210' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1f1c18' : '#ffffff',
+                titleColor: isDark ? '#ffffff' : '#111827',
+                bodyColor: isDark ? '#d1d5db' : '#374151',
+                borderColor: isDark ? '#37332d' : '#e5e7eb',
+                borderWidth: 1,
+                padding: 10,
+                callbacks: {
+                  label: (context) => {
+                    const item = this.categorySplit[context.dataIndex];
+                    return ` ₹${(item.revenue || 0).toLocaleString('en-IN')} (${item.pct}%) · ${item.qty} units`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      },
+
+      renderAppointmentPieChart() {
+        const canvas = document.getElementById('appointmentPieCanvas');
+        if (!canvas) return;
+
+        if (this.chartInstances.appointment) {
+          this.chartInstances.appointment.destroy();
+        }
+
+        const entries = Object.entries(this.appointments.by_status || {});
+        if (!entries.length) return;
+
+        const isDark = this.isDarkMode();
+        const labels = entries.map(([status]) => status);
+        const data = entries.map(([, count]) => count);
+        const colors = labels.map(status => this.getStatusColorHex(status));
+
+        this.chartInstances.appointment = new Chart(canvas, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: colors,
+              borderColor: isDark ? '#141210' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1f1c18' : '#ffffff',
+                titleColor: isDark ? '#ffffff' : '#111827',
+                bodyColor: isDark ? '#d1d5db' : '#374151',
+                borderColor: isDark ? '#37332d' : '#e5e7eb',
+                borderWidth: 1,
+                padding: 10,
+                callbacks: {
+                  label: (context) => {
+                    const count = data[context.dataIndex];
+                    const pct = this.appointments.total ? Math.round((count * 100) / this.appointments.total) : 0;
+                    return ` ${count} appointments (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      },
+
+      renderHourlyBarChart() {
+        const canvas = document.getElementById('hourlyBarCanvas');
+        if (!canvas) return;
+
+        if (this.chartInstances.hourly) {
+          this.chartInstances.hourly.destroy();
+        }
+
+        const isDark = this.isDarkMode();
+        const labels = this.hourPoints.map(h => h.label);
+        const revenues = this.hourPoints.map(h => h.revenue);
+        const bills = this.hourPoints.map(h => h.bills);
+
+        this.chartInstances.hourly = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: revenues,
+              backgroundColor: '#f97316',
+              hoverBackgroundColor: '#ea580c',
+              borderRadius: 4,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: isDark ? '#1f1c18' : '#ffffff',
+                titleColor: isDark ? '#ffffff' : '#111827',
+                bodyColor: isDark ? '#d1d5db' : '#374151',
+                borderColor: isDark ? '#37332d' : '#e5e7eb',
+                borderWidth: 1,
+                padding: 10,
+                callbacks: {
+                  label: (context) => {
+                    const rev = revenues[context.dataIndex] || 0;
+                    const bCount = bills[context.dataIndex] || 0;
+                    return [
+                      ' Revenue: ₹' + rev.toLocaleString('en-IN'),
+                      ' Bills: ' + bCount
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  color: isDark ? '#737373' : '#a3a3a3',
+                  font: { family: 'JetBrains Mono', size: 9 }
+                }
+              },
+              y: {
+                grid: {
+                  color: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: isDark ? '#737373' : '#a3a3a3',
+                  font: { family: 'JetBrains Mono', size: 9 },
+                  callback: (val) => '₹' + this.fmtCompact(val)
+                }
+              }
+            }
+          }
+        });
+      },
+
+      printReport() {
+        window.print();
       },
 
       exportCsv() {
-        if (!this.dayPoints.length) { window.uiToast('Nothing to export yet.', 'warning'); return; }
-        const rows = [['Date', 'Revenue', 'Bills']];
+        if (!this.dayPoints.length && !this.summary.total_sales) {
+          if (window.uiToast) window.uiToast('No data available to export.', 'warning');
+          return;
+        }
+
+        const rows = [];
+        rows.push(['AuraPOS Salon Performance Report']);
+        rows.push(['Period', this.fromDate + ' to ' + this.toDate]);
+        rows.push([]);
+
+        rows.push(['EXECUTIVE SUMMARY']);
+        rows.push(['Metric', 'Value']);
+        rows.push(['Total Revenue (₹)', this.summary.total_sales]);
+        rows.push(['Total Invoices', this.summary.total_bills]);
+        rows.push(['Average Ticket (₹)', this.summary.avg_ticket]);
+        rows.push(['Total Discounts (₹)', this.summary.total_discount]);
+        rows.push(['GST Tax Collected (₹)', this.summary.total_tax]);
+        rows.push(['Unique Customers', this.summary.unique_customers]);
+        rows.push([]);
+
+        rows.push(['REVENUE BY TIMEFRAME']);
+        rows.push(['Date / Period', 'Revenue (₹)', 'Bills']);
         this.dayPoints.forEach(p => rows.push([p.label, p.revenue, p.bills]));
         rows.push([]);
-        rows.push(['Total Revenue', this.summary.total_sales]);
-        rows.push(['Number of Bills', this.summary.total_bills]);
-        rows.push(['Average Ticket', this.summary.avg_ticket]);
-        rows.push(['Discounts Given', this.summary.total_discount]);
-        rows.push(['GST Collected', this.summary.total_tax]);
-        rows.push(['Unique Customers', this.summary.unique_customers]);
-        const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+
+        rows.push(['PAYMENT METHODS']);
+        rows.push(['Mode', 'Revenue (₹)', 'Percentage (%)', 'Bills']);
+        this.paymentSplit.forEach(p => rows.push([p.mode, p.revenue, p.pct, p.count]));
+        rows.push([]);
+
+        rows.push(['CATEGORY BREAKDOWN']);
+        rows.push(['Category', 'Revenue (₹)', 'Percentage (%)', 'Units Sold']);
+        this.categorySplit.forEach(c => rows.push([c.category, c.revenue, c.pct, c.qty]));
+        rows.push([]);
+
+        rows.push(['STAFF LEADERBOARD & COMMISSIONS']);
+        rows.push(['Staff Member', 'Role', 'Revenue (₹)', 'Services Done', '15% Commission (₹)']);
+        this.staffBoard.forEach(s => rows.push([s.name, s.role, s.revenue, s.services, s.commission]));
+
+        const csv = rows.map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'aurapos-report-' + this.fromDate + '_' + this.toDate + '.csv';
+        a.download = 'aurapos-analytics-' + this.fromDate + '_to_' + this.toDate + '.csv';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        window.uiToast('Report CSV downloaded.', 'success');
+
+        if (window.uiToast) window.uiToast('Executive CSV Report downloaded.', 'success');
       }
     };
   }
 </script>
+
+<style>
+  @media print {
+    nav, aside, header, .glass-nav, button {
+      display: none !important;
+    }
+    body {
+      background: white !important;
+      color: black !important;
+    }
+  }
+</style>
 {% endblock %}
