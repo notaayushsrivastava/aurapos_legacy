@@ -234,10 +234,11 @@ class Salon:
 # ================= SUPABASE CLIENT & AUTH HELPERS =================
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
+# Server-side operations MUST use the Supabase service-role secret.
+# Do not fall back to SUPABASE_KEY: that name is commonly used for the
+# anon/publishable key, which cannot create Auth users or bypass RLS.
 SUPABASE_SERVICE_ROLE_KEY = (
-    os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_KEY")
-    or ""
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or ""
 ).strip()
 
 _client = None
@@ -256,15 +257,6 @@ def get_client():
         if create_client is None:
             raise RuntimeError(
                 "The 'supabase' package is not installed. Run: pip install supabase"
-            )
-        # Warn if we fell back to SUPABASE_KEY (likely the anon key, which
-        # does NOT bypass RLS — this causes the 42501 errors on app_settings).
-        if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY"):
-            _warn(
-                "SUPABASE_SERVICE_ROLE_KEY is not set — falling back to "
-                "SUPABASE_KEY which is likely the anon key and will NOT "
-                "bypass Row Level Security. Set SUPABASE_SERVICE_ROLE_KEY "
-                "to the service_role secret from Dashboard -> Project Settings -> API."
             )
         _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     return _client
