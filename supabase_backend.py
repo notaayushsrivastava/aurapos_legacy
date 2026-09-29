@@ -234,33 +234,54 @@ class Salon:
 # ================= SUPABASE CLIENT & AUTH HELPERS =================
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
-# Server-side operations MUST use the Supabase service-role secret.
-# Do not fall back to SUPABASE_KEY: that name is commonly used for the
-# anon/publishable key, which cannot create Auth users or bypass RLS.
-SUPABASE_SERVICE_ROLE_KEY = (
-    os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or ""
+# Server-side operations MUST use a Supabase secret key.
+# The current Supabase key is SUPABASE_SECRET_KEY (sb_secret_...). The
+# legacy SUPABASE_SERVICE_ROLE_KEY is still supported through 2026.
+# NEVER fall back to SUPABASE_KEY / anon / publishable keys: those cannot
+# create Auth users or bypass RLS.
+SUPABASE_SECRET_KEY = (
+    os.environ.get("SUPABASE_SECRET_KEY")
+    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    or ""
 ).strip()
 
 _client = None
 
 
+def _validate_server_key(key):
+    """Reject browser/public Supabase keys before making privileged requests."""
+    if not key:
+        return
+    if key.startswith("sb_publishable_"):
+        raise RuntimeError(
+            "Invalid Supabase server credential: SUPABASE_SECRET_KEY is set to "
+            "a publishable key. Use the secret key (sb_secret_...) from "
+            "Dashboard -> Project Settings -> API Keys."
+        )
+    if not key.startswith("sb_secret_") and not key.startswith("eyJ"):
+        raise RuntimeError(
+            "Invalid Supabase server credential. SUPABASE_SECRET_KEY must be "
+            "a secret key (sb_secret_...) or the legacy service_role JWT."
+        )
+
+
 def get_client():
-    """Return (and cache) the Supabase service-role client."""
+    """Return (and cache) the Supabase privileged server client."""
     global _client
     if _client is None:
-        if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
             raise RuntimeError(
-                "Supabase credentials are missing. Set SUPABASE_URL and "
-                "SUPABASE_SERVICE_ROLE_KEY in the .env file / environment "
-                "(Dashboard -> Project Settings -> API)."
+                "Supabase server credentials are missing. Set SUPABASE_URL and "
+                "SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY) "
+                "in the .env file / environment."
             )
+        _validate_server_key(SUPABASE_SECRET_KEY)
         if create_client is None:
             raise RuntimeError(
                 "The 'supabase' package is not installed. Run: pip install supabase"
             )
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        _client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
     return _client
-
 
 def _warn(msg):
     print(f"[supabase_backend] {msg}", file=sys.stderr)
