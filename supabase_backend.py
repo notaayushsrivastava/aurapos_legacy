@@ -363,29 +363,6 @@ def delete_logo_from_storage(salon_id):
         _warn(f"storage: logo delete for salon {salon_id} failed: {exc}")
 
 
-def _sb_verify_credentials(username, password):
-    """Verify credentials against Supabase Auth.
-
-    Returns True when Supabase Auth confirms the pair, False on an explicit
-    credential rejection, and None when the Auth service could not be reached
-    (callers then fall back to the synced DB password).
-    """
-    try:
-        _sb().auth.sign_in_with_password({
-            "email": (username or "").strip(),
-            "password": password or "",
-        })
-        return True
-    except Exception as exc:
-        # AuthApiError with status 400/401/422 == invalid credentials; anything
-        # else (network, 5xx, misconfiguration) is a service-level failure.
-        status = getattr(exc, "status", None) or getattr(exc, "code", None)
-        if status in (400, 401, 422):
-            return False
-        _warn(f"Supabase Auth: sign-in check unavailable ({exc}); using synced password.")
-        return None
-
-
 # ================= REPOSITORIES =================
 
 class AuthorizationRepository:
