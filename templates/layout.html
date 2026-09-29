@@ -768,29 +768,35 @@
              this.consentGiven = 'essential_only';
            }
          }"
+         x-init="$nextTick(() => { if (window.lucide) lucide.createIcons(); })"
          x-show="!consentGiven"
          x-cloak
-         x-transition:enter="transition ease-out duration-500 transform"
-         x-transition:enter-start="opacity-0 translate-y-8 scale-95"
+         x-transition:enter="transition ease-out duration-400 transform"
+         x-transition:enter-start="opacity-0 translate-y-6 scale-95"
          x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-         x-transition:leave="transition ease-in duration-300 transform"
+         x-transition:leave="transition ease-in duration-250 transform"
          x-transition:leave-start="opacity-100 scale-100"
-         x-transition:leave-end="opacity-0 translate-y-8 scale-95"
-         class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[100] p-5 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl shadow-2xl">
-      <div class="flex items-start gap-3.5">
-        <div class="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-primary mt-0.5">
-          <i data-lucide="cookie" class="w-5 h-5"></i>
+         x-transition:leave-end="opacity-0 translate-y-6 scale-95"
+          class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-[70] p-4 sm:p-4.5 rounded-2xl cookie-banner backdrop-blur-xl shadow-2xl">
+      <div class="flex items-start gap-3">
+        <div class="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0 text-orange-500 dark:text-orange-400 mt-0.5">
+          <i data-lucide="cookie" class="w-4 h-4"></i>
         </div>
         <div class="flex-1 text-xs">
-          <h4 class="font-bold text-neutral-900 dark:text-neutral-100 text-sm mb-1">Privacy & Cookie Choices</h4>
-          <p class="text-neutral-600 dark:text-neutral-400 leading-relaxed mb-3">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <h4 class="font-bold text-neutral-900 dark:text-white text-sm">Privacy &amp; Cookie Choices</h4>
+            <button @click="rejectOptional()" class="text-neutral-400 hover:text-neutral-600 dark:hover:text-white p-1 -mr-1 -mt-1 rounded-lg transition-colors" aria-label="Dismiss cookie notice">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <p class="text-neutral-600 dark:text-neutral-300 leading-relaxed mb-3 text-[11px] sm:text-xs">
             We use essential local tokens to safeguard salon billing sessions, prevent unauthorized terminal access, and maintain split-payment state.
           </p>
           <div class="flex items-center gap-2">
-            <button @click="acceptAll()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-primary hover:bg-primary-hover shadow-md shadow-primary/20 transition-all">
+            <button @click="acceptAll()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white btn-brand shadow-md shadow-orange-500/20 hover:shadow-orange-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all">
               Accept All
             </button>
-            <button @click="rejectOptional()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+            <button @click="rejectOptional()" class="px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white border border-neutral-200 dark:border-neutral-700/80 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
               Essential Only
             </button>
           </div>

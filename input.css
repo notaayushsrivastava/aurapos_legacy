@@ -258,6 +258,17 @@
     -webkit-backdrop-filter: blur(12px);
   }
 
+  .cookie-banner {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid #e9e5dd;
+    color: #141210;
+  }
+  .dark .cookie-banner {
+    background-color: rgba(20, 18, 16, 0.96);
+    border: 1px solid #2a2721;
+    color: #f4f2ed;
+  }
+
   /* Grain — film texture for hero surfaces. Absolute/fixed, never scrolling. */
   .noise {
     position: absolute;
