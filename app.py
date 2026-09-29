@@ -339,6 +339,8 @@ def inject_salon():
 
 @limiter.exempt
 @app.route('/', methods=['GET'])
+@app.route('/api/index', methods=['GET'])
+@app.route('/api/index.py', methods=['GET'])
 def index():
     return render_template('intro/about.html')
 
