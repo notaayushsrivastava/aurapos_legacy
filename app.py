@@ -47,8 +47,6 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "id" not in session:
-            if request.path.startswith("/api/"):
-                return jsonify({"success": False, "message": "Authentication required.", "auth_required": True}), 401
             flash("Please sign in to access your salon terminal.", "warning")
             return redirect(url_for("login"))
         return f(*args, **kwargs)
