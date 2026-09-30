@@ -9,7 +9,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/output.css">
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     .brand-gradient { background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%); }
@@ -18,64 +17,35 @@
   </style>
 </head>
 <body class="bg-[#0d0c0a] text-neutral-100 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden antialiased selection:bg-amber-500 selection:text-black">
-
-  <!-- Ambient Background Glows -->
   <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[140px] pointer-events-none"></div>
   <div class="absolute bottom-1/4 right-1/4 w-[350px] h-[350px] bg-violet-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-
   <main class="w-full max-w-lg relative z-10 text-center space-y-6">
-    <!-- Brand Mark Header -->
     <div class="flex items-center justify-center gap-3">
       {{ aura_tile('w-10 h-10 rounded-2xl shadow-lg shadow-violet-600/20 ring-1 ring-white/20', 'w-5 h-5') }}
       {{ aura_wordmark('text-xl') }}
     </div>
-
-    <!-- Maintenance Status Card -->
     <div class="bg-[#141210]/95 backdrop-blur-2xl border border-amber-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-amber-950/40 relative overflow-hidden ring-1 ring-white/10 space-y-5">
-      <!-- Top Accent Bar -->
       <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600"></div>
-
-      <!-- Icon -->
       <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 grid place-items-center mx-auto shadow-lg shadow-amber-500/20 relative">
-        <i data-lucide="shield-alert" class="w-8 h-8 animate-pulse"></i>
+        <i data-lucide="shield-alert" class="w-8 h-8"></i>
       </div>
-
       <div class="space-y-2">
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 border border-amber-500/30 text-amber-300">
-          <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-          <span>Platform Upgrades Active</span>
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Temporarily Unavailable</span>
         </span>
         <h1 class="text-2xl font-black text-white tracking-tight">System Under Maintenance</h1>
         <p class="text-xs text-neutral-300 leading-relaxed max-w-md mx-auto pt-1 font-medium">
-          {{ maintenance_message or "Scheduled platform maintenance and infrastructure upgrades are currently in progress. All salon data remains safe and secure." }}
+          {{ maintenance_message or "AuraPOS is temporarily unavailable while we carry out platform maintenance. Your salon data remains safe and secure." }}
         </p>
       </div>
-
-      <!-- Live Sync Telemetry Box -->
-      <div class="p-4 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-xs text-neutral-400 space-y-2 text-left">
-        <div class="flex items-center justify-between">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500">Live Status Feed</span>
-          <span id="socket-status" class="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-            <span id="socket-status-text">Connecting to realtime engine…</span>
-          </span>
-        </div>
-        <p class="text-[11px] text-neutral-400 leading-normal">
-          This window has a live socket listener. As soon as the platform upgrade concludes, this page will automatically reload and resume normal operation.
+      <div class="p-4 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-xs text-neutral-400 text-center">
+        <p class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mb-2">What should I do?</p>
+        <p class="text-[11px] text-neutral-400 leading-relaxed">
+          Please check back later. You do not need to keep this page open or wait for an automatic update.
         </p>
-      </div>
-
-      <!-- Interactive Actions -->
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-        <button id="btn-check-status" onclick="checkStatusNow()"
-                class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="refresh-icon"></i>
-          <span>Check Status Now</span>
-        </button>
       </div>
     </div>
-
-    <!-- Admin Bypass Footer -->
     <div class="pt-2 text-xs text-neutral-500 flex items-center justify-center gap-2">
       <span>Are you a SuperAdmin?</span>
       <a href="/admin" class="text-neutral-400 hover:text-white font-semibold underline underline-offset-4 transition-colors">
@@ -83,69 +53,6 @@
       </a>
     </div>
   </main>
-
-  <script>
-    lucide.createIcons();
-
-    const statusBadge = document.getElementById('socket-status');
-    const statusText = document.getElementById('socket-status-text');
-    const refreshIcon = document.getElementById('refresh-icon');
-
-    // Initialize Socket.IO connection
-    try {
-      const socket = io({
-        transports: ['polling'],
-        upgrade: false,
-        reconnectionAttempts: 20,
-        reconnectionDelay: 1500
-      });
-
-      socket.on('connect', () => {
-        statusBadge.className = 'inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400';
-        statusText.innerHTML = 'Realtime Socket Connected';
-      });
-
-      socket.on('disconnect', () => {
-        statusBadge.className = 'inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-400';
-        statusText.innerHTML = 'Reconnecting…';
-      });
-
-      // Listen for maintenance toggle
-      socket.on('maintenance_update', (data) => {
-        if (data && !data.active) {
-          statusBadge.className = 'inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400';
-          statusText.innerHTML = 'Platform Online! Reloading…';
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 800);
-        }
-      });
-    } catch(err) {
-      console.warn('Socket connection fallback:', err);
-    }
-
-    // Manual status checker
-    async function checkStatusNow() {
-      if (refreshIcon) refreshIcon.classList.add('animate-spin');
-      try {
-        const res = await fetch('/api/platform-status');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.maintenance && !json.maintenance.active) {
-            window.location.href = '/';
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Status check:', e);
-      }
-      setTimeout(() => {
-        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
-      }, 600);
-    }
-
-    // Background polling fallback every 8 seconds
-    setInterval(checkStatusNow, 8000);
-  </script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>
