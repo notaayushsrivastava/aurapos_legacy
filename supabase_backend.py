@@ -2361,6 +2361,3 @@ class AdminRepository:
         except Exception:
             return []
 
-
-from backend import TerminalRepository
-
