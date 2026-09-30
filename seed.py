@@ -13,7 +13,13 @@ from datetime import datetime, timedelta
 import json
 import psycopg2
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 
 def seed_database(include_demo_transactions=True):
     print(f"[SEED] Connecting to {DATABASE_URL}...")

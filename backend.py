@@ -114,20 +114,37 @@ class PostgresCursorWrapper:
         cleaned = re.sub(r"\browid\b", "id", cleaned, flags=re.IGNORECASE)
 
         is_insert = cleaned.strip().upper().startswith("INSERT")
-        if is_insert and "RETURNING" not in cleaned.upper():
-            cleaned = cleaned.rstrip("; ") + " RETURNING id"
+        wants_returning = is_insert and "RETURNING" not in cleaned.upper()
+        if wants_returning:
+            if "app_settings" in cleaned.lower():
+                ret_sql = cleaned.rstrip("; ") + " RETURNING key"
+            else:
+                ret_sql = cleaned.rstrip("; ") + " RETURNING id"
+        else:
+            ret_sql = cleaned
 
         try:
-            self._cur.execute(cleaned, params)
+            self._cur.execute(ret_sql, params)
             self.rowcount = self._cur.rowcount
             if is_insert:
                 try:
                     row = self._cur.fetchone()
-                    if row and "id" in row:
-                        self.lastrowid = row["id"]
+                    if row:
+                        if "id" in row:
+                            self.lastrowid = row["id"]
+                        elif "key" in row:
+                            self.lastrowid = row["key"]
                 except Exception:
                     pass
         except Exception as e:
+            if wants_returning and "does not exist" in str(e).lower():
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                self._cur.execute(cleaned, params)
+                self.rowcount = self._cur.rowcount
+                return self
             try:
                 self._conn.rollback()
             except Exception:
@@ -191,7 +208,7 @@ class PostgresConnWrapper:
 
 def get_db():
     if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
-        dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
+        dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
         return PostgresConnWrapper(dsn)
     conn = sql.connect("database.db")
     conn.row_factory = sql.Row
@@ -1812,33 +1829,47 @@ class ReportRepository:
 
 class AdminRepository:
     SETTING_ACCEPTING_PUBLIC = "accepting_public"
+    _in_memory_settings = {}
 
     def __init__(self):
-        conn = get_db()
-        cur = conn.cursor()
-        cur.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS app_settings(
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_at INTEGER NOT NULL
-            );
-            """
-        )
-        conn.commit()
-        conn.close()
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_settings(
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     def get_setting(self, key, default=None):
+        if key in self._in_memory_settings:
+            return self._in_memory_settings[key]
         try:
             conn = get_db()
             cur = conn.cursor()
             row = cur.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
             conn.close()
-            return row["value"] if row else default
-        except Exception:
+            if row and "value" in row:
+                self._in_memory_settings[key] = row["value"]
+                return row["value"]
             return default
+        except Exception:
+            return self._in_memory_settings.get(key, default)
 
     def set_setting(self, key, value):
+        str_val = str(value)
+        self._in_memory_settings[key] = str_val
+        if key == self.SETTING_ACCEPTING_PUBLIC:
+            os.environ["ACCEPTING_PUBLIC"] = str_val
+
         try:
             conn = get_db()
             cur = conn.cursor()
@@ -1848,7 +1879,7 @@ class AdminRepository:
                 INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
                 """,
-                (key, str(value), now),
+                (key, str_val, now),
             )
             conn.commit()
             conn.close()
@@ -1857,12 +1888,13 @@ class AdminRepository:
             try:
                 conn = get_db()
                 cur = conn.cursor()
-                cur.execute("REPLACE INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)", (key, str(value), int(datetime.now().timestamp())))
+                cur.execute("REPLACE INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)", (key, str_val, int(datetime.now().timestamp())))
                 conn.commit()
                 conn.close()
                 return True
             except Exception:
-                return False
+                # Setting is already in-memory and applied to runtime environment
+                return True
 
     def list_salons(self):
         conn = get_db()
@@ -1920,4 +1952,187 @@ class AdminRepository:
             "pendingorders": pendingorders,
             "deletion_requests": deletion_requests,
         }
+
+    def get_platform_metrics(self):
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+        
+        salons = [dict(r) for r in cur.execute("SELECT id, salon_name, plan, created_on, expires_on FROM salons").fetchall()]
+        total_salons = len(salons)
+        pro_count = sum(1 for s in salons if s.get("plan") == "pro")
+        studio_count = sum(1 for s in salons if s.get("plan") == "studio")
+        free_count = sum(1 for s in salons if (s.get("plan") or "free") not in ("pro", "studio"))
+        expired_count = sum(1 for s in salons if s.get("expires_on") and int(s.get("expires_on")) < now)
+        
+        bill_stats = cur.execute("SELECT COUNT(*) as c, COALESCE(SUM(grand_total), 0) as rev FROM bills").fetchone()
+        total_bills = bill_stats["c"] if bill_stats else 0
+        total_revenue = int(bill_stats["rev"] or 0) if bill_stats else 0
+        
+        pm_rows = [dict(r) for r in cur.execute("SELECT payment_mode, COUNT(*) as c, COALESCE(SUM(grand_total), 0) as rev FROM bills GROUP BY payment_mode").fetchall()]
+        payment_split = {r["payment_mode"] or "Other": {"count": r["c"], "revenue": int(r["rev"] or 0)} for r in pm_rows}
+        
+        apt_stats = cur.execute("SELECT COUNT(*) as c FROM appointments").fetchone()
+        total_appointments = apt_stats["c"] if apt_stats else 0
+        apt_status_rows = [dict(r) for r in cur.execute("SELECT status, COUNT(*) as c FROM appointments GROUP BY status").fetchall()]
+        appointments_by_status = {r["status"] or "Other": r["c"] for r in apt_status_rows}
+        
+        total_customers = cur.execute("SELECT COUNT(*) as c FROM customers").fetchone()["c"]
+        total_staff = cur.execute("SELECT COUNT(*) as c FROM staff").fetchone()["c"]
+        total_services = cur.execute("SELECT COUNT(*) as c FROM services").fetchone()["c"]
+        
+        recent_bills = [dict(r) for r in cur.execute("""
+            SELECT b.id, b.client_name, b.grand_total, b.payment_mode, b.created_at, b.account_id, s.salon_name
+            FROM bills b
+            LEFT JOIN salons s ON b.account_id = s.id
+            ORDER BY b.created_at DESC LIMIT 10
+        """).fetchall()]
+        
+        top_salon_rows = [dict(r) for r in cur.execute("""
+            SELECT b.account_id as id, s.salon_name, s.plan, COUNT(b.id) as bills_count, COALESCE(SUM(b.grand_total), 0) as revenue
+            FROM bills b
+            JOIN salons s ON b.account_id = s.id
+            GROUP BY b.account_id, s.salon_name, s.plan
+            ORDER BY revenue DESC LIMIT 5
+        """).fetchall()]
+        
+        conn.close()
+        
+        return {
+            "total_salons": total_salons,
+            "pro_count": pro_count,
+            "studio_count": studio_count,
+            "free_count": free_count,
+            "expired_count": expired_count,
+            "total_bills": total_bills,
+            "total_revenue": total_revenue,
+            "payment_split": payment_split,
+            "total_appointments": total_appointments,
+            "appointments_by_status": appointments_by_status,
+            "total_customers": total_customers,
+            "total_staff": total_staff,
+            "total_services": total_services,
+            "recent_bills": recent_bills,
+            "top_salons": top_salon_rows,
+        }
+
+    def update_salon(self, salon_id, updates):
+        conn = get_db()
+        cur = conn.cursor()
+        fields = []
+        vals = []
+        allowed = ["salon_name", "name", "email", "phone", "address", "booking_slug", "plan", "billing_cycle"]
+        for k in allowed:
+            if k in updates:
+                fields.append(f"{k} = ?")
+                vals.append(updates[k])
+        if not fields:
+            conn.close()
+            return False
+        vals.append(salon_id)
+        cur.execute(f"UPDATE salons SET {', '.join(fields)} WHERE id = ?", vals)
+        conn.commit()
+        conn.close()
+        return True
+
+    def reset_owner_password(self, salon_id, new_password):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE accounts SET password = ? WHERE auth_id = ? AND auth_level = 'admin'", (new_password, salon_id))
+        conn.commit()
+        conn.close()
+        return True
+
+    def delete_salon(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        for tbl in ["accounts", "categories", "services", "staff", "appointments", "bills", "customers"]:
+            try:
+                col = "auth_id" if tbl == "accounts" else "account_id"
+                cur.execute(f"DELETE FROM {tbl} WHERE {col} = ?", (salon_id,))
+            except Exception:
+                pass
+        for tbl in ["subscriptions", "pendingorders", "deletion_requests", "salon_settings"]:
+            try:
+                cur.execute(f"DELETE FROM {tbl} WHERE salon_id = ?", (salon_id,))
+            except Exception:
+                pass
+        cur.execute("DELETE FROM salons WHERE id = ?", (salon_id,))
+        conn.commit()
+        conn.close()
+        return True
+
+    def export_salon(self, salon_id):
+        details = self.salon_details(salon_id)
+        if not details:
+            return None
+        conn = get_db()
+        cur = conn.cursor()
+        services = [dict(r) for r in cur.execute("SELECT * FROM services WHERE account_id = ?", (salon_id,)).fetchall()]
+        customers = [dict(r) for r in cur.execute("SELECT * FROM customers WHERE account_id = ?", (salon_id,)).fetchall()]
+        categories = [dict(r) for r in cur.execute("SELECT * FROM categories WHERE account_id = ?", (salon_id,)).fetchall()]
+        all_bills = [dict(r) for r in cur.execute("SELECT * FROM bills WHERE account_id = ? ORDER BY created_at DESC", (salon_id,)).fetchall()]
+        all_appts = [dict(r) for r in cur.execute("SELECT * FROM appointments WHERE account_id = ? ORDER BY date DESC", (salon_id,)).fetchall()]
+        conn.close()
+        return {
+            "salon": details["salon"],
+            "team_accounts": details["accounts"],
+            "staff": details["staff"],
+            "categories": categories,
+            "services": services,
+            "customers": customers,
+            "appointments": all_appts,
+            "bills": all_bills,
+            "subscriptions": details["subscriptions"],
+            "exported_at": int(datetime.now().timestamp()),
+            "schema_version": "1.0",
+        }
+
+    def get_database_table_counts(self):
+        conn = get_db()
+        cur = conn.cursor()
+        tables = [
+            "salons", "accounts", "bills", "appointments", "customers",
+            "services", "staff", "categories", "subscriptions",
+            "pendingorders", "deletion_requests", "app_settings", "salon_settings"
+        ]
+        counts = {}
+        for tbl in tables:
+            try:
+                row = cur.execute(f"SELECT COUNT(*) as c FROM {tbl}").fetchone()
+                counts[tbl] = row["c"] if row else 0
+            except Exception:
+                counts[tbl] = 0
+        conn.close()
+        return counts
+
+    def add_audit_log(self, admin_user, action, target, details=""):
+        try:
+            raw = self.get_setting("admin_audit_log", "[]")
+            logs = json.loads(raw) if raw else []
+            if not isinstance(logs, list):
+                logs = []
+            entry = {
+                "timestamp": int(datetime.now().timestamp()),
+                "admin": admin_user,
+                "action": action,
+                "target": str(target),
+                "details": str(details),
+            }
+            logs.insert(0, entry)
+            logs = logs[:100]
+            self.set_setting("admin_audit_log", json.dumps(logs))
+            return True
+        except Exception:
+            return False
+
+    def get_audit_logs(self, limit=50):
+        try:
+            raw = self.get_setting("admin_audit_log", "[]")
+            logs = json.loads(raw) if raw else []
+            if not isinstance(logs, list):
+                return []
+            return logs[:limit]
+        except Exception:
+            return []
 

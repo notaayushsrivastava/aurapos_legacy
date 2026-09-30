@@ -1990,3 +1990,186 @@ class AdminRepository:
             "deletion_requests": [dict(d) for d in deletion_requests],
         }
 
+    def get_platform_metrics(self):
+        now = int(datetime.now().timestamp())
+        salons = self._fetch_all("salons", "id, salon_name, plan, created_on, expires_on")
+        total_salons = len(salons)
+        pro_count = sum(1 for s in salons if s.get("plan") == "pro")
+        studio_count = sum(1 for s in salons if s.get("plan") == "studio")
+        free_count = sum(1 for s in salons if (s.get("plan") or "free") not in ("pro", "studio"))
+        expired_count = sum(1 for s in salons if s.get("expires_on") and int(s.get("expires_on")) < now)
+
+        bill_rows = self._fetch_all("bills", "id, client_name, grand_total, payment_mode, created_at, account_id", order="created_at", desc=True)
+        total_bills = len(bill_rows)
+        total_revenue = sum(int(b.get("grand_total") or 0) for b in bill_rows)
+
+        payment_split = {}
+        for b in bill_rows:
+            pm = b.get("payment_mode") or "Other"
+            if pm not in payment_split:
+                payment_split[pm] = {"count": 0, "revenue": 0}
+            payment_split[pm]["count"] += 1
+            payment_split[pm]["revenue"] += int(b.get("grand_total") or 0)
+
+        appts = self._fetch_all("appointments", "id, status")
+        total_appointments = len(appts)
+        appointments_by_status = {}
+        for a in appts:
+            st = a.get("status") or "Other"
+            appointments_by_status[st] = appointments_by_status.get(st, 0) + 1
+
+        total_customers = len(self._fetch_all("customers", "id"))
+        total_staff = len(self._fetch_all("staff", "id"))
+        total_services = len(self._fetch_all("services", "id"))
+
+        salon_name_map = {s.get("id"): s.get("salon_name") for s in salons}
+        recent_bills = []
+        for b in bill_rows[:10]:
+            d = dict(b)
+            d["salon_name"] = salon_name_map.get(b.get("account_id"), "Salon #" + str(b.get("account_id")))
+            recent_bills.append(d)
+
+        salon_rev = {}
+        salon_bills = {}
+        for b in bill_rows:
+            sid = b.get("account_id")
+            salon_rev[sid] = salon_rev.get(sid, 0) + int(b.get("grand_total") or 0)
+            salon_bills[sid] = salon_bills.get(sid, 0) + 1
+
+        top_salons = []
+        sorted_sids = sorted(salon_rev.keys(), key=lambda k: salon_rev[k], reverse=True)[:5]
+        for sid in sorted_sids:
+            s_obj = next((s for s in salons if s.get("id") == sid), {})
+            top_salons.append({
+                "id": sid,
+                "salon_name": s_obj.get("salon_name", "Salon #" + str(sid)),
+                "plan": s_obj.get("plan", "free"),
+                "bills_count": salon_bills.get(sid, 0),
+                "revenue": salon_rev.get(sid, 0),
+            })
+
+        return {
+            "total_salons": total_salons,
+            "pro_count": pro_count,
+            "studio_count": studio_count,
+            "free_count": free_count,
+            "expired_count": expired_count,
+            "total_bills": total_bills,
+            "total_revenue": total_revenue,
+            "payment_split": payment_split,
+            "total_appointments": total_appointments,
+            "appointments_by_status": appointments_by_status,
+            "total_customers": total_customers,
+            "total_staff": total_staff,
+            "total_services": total_services,
+            "recent_bills": recent_bills,
+            "top_salons": top_salons,
+        }
+
+    def update_salon(self, salon_id, updates):
+        allowed = ["salon_name", "name", "email", "phone", "address", "booking_slug", "plan", "billing_cycle"]
+        payload = {k: updates[k] for k in allowed if k in updates}
+        if not payload:
+            return False
+        try:
+            _sb().table("salons").update(payload).eq("id", salon_id).execute()
+            return True
+        except Exception as exc:
+            _warn(f"update_salon failed: {exc}")
+            return False
+
+    def reset_owner_password(self, salon_id, new_password):
+        try:
+            _sb().table("accounts").update({"password": new_password}).eq("auth_id", salon_id).eq("auth_level", "admin").execute()
+            return True
+        except Exception as exc:
+            _warn(f"reset_owner_password failed: {exc}")
+            return False
+
+    def delete_salon(self, salon_id):
+        for tbl in ["accounts", "categories", "services", "staff", "appointments", "bills", "customers"]:
+            try:
+                col = "auth_id" if tbl == "accounts" else "account_id"
+                _sb().table(tbl).delete().eq(col, salon_id).execute()
+            except Exception:
+                pass
+        for tbl in ["subscriptions", "pendingorders", "deletion_requests", "salon_settings"]:
+            try:
+                _sb().table(tbl).delete().eq("salon_id", salon_id).execute()
+            except Exception:
+                pass
+        try:
+            _sb().table("salons").delete().eq("id", salon_id).execute()
+            return True
+        except Exception as exc:
+            _warn(f"delete_salon failed: {exc}")
+            return False
+
+    def export_salon(self, salon_id):
+        details = self.salon_details(salon_id)
+        if not details:
+            return None
+        services = self._fetch_all("services", "*", eq_col="account_id", eq_val=salon_id)
+        customers = self._fetch_all("customers", "*", eq_col="account_id", eq_val=salon_id)
+        categories = self._fetch_all("categories", "*", eq_col="account_id", eq_val=salon_id)
+        all_bills = self._fetch_all("bills", "*", eq_col="account_id", eq_val=salon_id, order="created_at", desc=True)
+        all_appts = self._fetch_all("appointments", "*", eq_col="account_id", eq_val=salon_id, order="date", desc=True)
+        return {
+            "salon": details["salon"],
+            "team_accounts": details["accounts"],
+            "staff": details["staff"],
+            "categories": [dict(c) for c in categories],
+            "services": [dict(s) for s in services],
+            "customers": [dict(c) for c in customers],
+            "appointments": [dict(a) for a in all_appts],
+            "bills": [dict(b) for b in all_bills],
+            "subscriptions": details["subscriptions"],
+            "exported_at": int(datetime.now().timestamp()),
+            "schema_version": "1.0",
+        }
+
+    def get_database_table_counts(self):
+        tables = [
+            "salons", "accounts", "bills", "appointments", "customers",
+            "services", "staff", "categories", "subscriptions",
+            "pendingorders", "deletion_requests", "app_settings", "salon_settings"
+        ]
+        counts = {}
+        for tbl in tables:
+            try:
+                res = _sb().table(tbl).select("id", count="exact").limit(1).execute()
+                counts[tbl] = res.count or 0
+            except Exception:
+                counts[tbl] = 0
+        return counts
+
+    def add_audit_log(self, admin_user, action, target, details=""):
+        try:
+            raw = self.get_setting("admin_audit_log", "[]")
+            logs = json.loads(raw) if raw else []
+            if not isinstance(logs, list):
+                logs = []
+            entry = {
+                "timestamp": int(datetime.now().timestamp()),
+                "admin": admin_user,
+                "action": action,
+                "target": str(target),
+                "details": str(details),
+            }
+            logs.insert(0, entry)
+            logs = logs[:100]
+            self.set_setting("admin_audit_log", json.dumps(logs))
+            return True
+        except Exception:
+            return False
+
+    def get_audit_logs(self, limit=50):
+        try:
+            raw = self.get_setting("admin_audit_log", "[]")
+            logs = json.loads(raw) if raw else []
+            if not isinstance(logs, list):
+                return []
+            return logs[:limit]
+        except Exception:
+            return []
+

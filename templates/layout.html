@@ -60,6 +60,16 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
+  <!-- Socket.IO Client for Real-time Events -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <!-- Initial Platform Realtime State -->
+  <script>
+    window.__INITIAL_ANNOUNCEMENT__ = {{ platform_announcement | tojson }};
+    window.__INITIAL_MAINTENANCE__ = {{ platform_maintenance | tojson }};
+    window.__IS_SUPERADMIN__ = {{ 'true' if is_superadmin else 'false' }};
+  </script>
+
   <!-- Alpine.js for lightweight declarative reactivity -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
 
@@ -131,6 +141,138 @@
 
 <body class="bg-neutral-50 text-neutral-900 dark:bg-[#0d0c0a] dark:text-neutral-100 min-h-screen flex flex-col font-sans transition-colors duration-200 antialiased selection:bg-neon-cyan selection:text-black"
       x-data="globalApp()">
+
+  {% if is_impersonating %}
+  <!-- SuperAdmin Impersonation Banner -->
+  <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-black px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xl sticky top-0 z-[100] border-b border-black/20">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-black animate-ping"></span>
+      <span><strong>SUPERADMIN IMPERSONATION:</strong> Viewing salon <em>{{ current_salon.salon_name if current_salon else session.get('username') }}</em> (Salon #{{ session.get('id') }}).</span>
+    </div>
+    <a href="/admin/exit-impersonation" class="px-3.5 py-1 bg-black text-amber-300 hover:text-white rounded-lg text-xs font-black shadow transition-all active:scale-95 flex items-center gap-1.5">
+      <span>Exit Impersonation</span> &rarr;
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Real-time Right-Side Announcement Notification Pop-up (pops from right of the screen on any page) -->
+  <div x-cloak
+       x-show="announcement.visible"
+       x-transition:enter="transition-all transform ease-out duration-500"
+       x-transition:enter-start="translate-x-[120%] opacity-0 scale-95"
+       x-transition:enter-end="translate-x-0 opacity-100 scale-100"
+       x-transition:leave="transition-all transform ease-in duration-300"
+       x-transition:leave-start="translate-x-0 opacity-100 scale-100"
+       x-transition:leave-end="translate-x-[120%] opacity-0 scale-95"
+       class="fixed top-20 sm:top-24 right-4 sm:right-6 z-[95] max-w-sm sm:max-w-md w-[calc(100vw-2rem)] pointer-events-auto">
+
+    <div class="relative overflow-hidden rounded-3xl p-5 shadow-2xl backdrop-blur-2xl ring-1 transition-all duration-300"
+         :class="{
+           'bg-[#141210]/95 border border-violet-500/40 ring-violet-500/20 shadow-violet-950/50': announcement.type === 'info',
+           'bg-[#141210]/95 border border-amber-500/40 ring-amber-500/20 shadow-amber-950/50': announcement.type === 'warning',
+           'bg-[#141210]/95 border border-emerald-500/40 ring-emerald-500/20 shadow-emerald-950/50': announcement.type === 'success'
+         }">
+
+      <!-- Ambient Glow Behind Card -->
+      <div class="absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl pointer-events-none opacity-30"
+           :class="{
+             'bg-violet-500': announcement.type === 'info',
+             'bg-amber-500': announcement.type === 'warning',
+             'bg-emerald-500': announcement.type === 'success'
+           }"></div>
+
+      <!-- Top Strip Indicator -->
+      <div class="absolute top-0 left-0 right-0 h-1"
+           :class="{
+             'bg-gradient-to-r from-violet-600 via-pink-600 to-violet-500': announcement.type === 'info',
+             'bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500': announcement.type === 'warning',
+             'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400': announcement.type === 'success'
+           }"></div>
+
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-3 pb-3 border-b border-white/5">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl grid place-items-center shrink-0 border shadow-sm"
+               :class="{
+                 'bg-violet-500/10 border-violet-500/30 text-violet-400': announcement.type === 'info',
+                 'bg-amber-500/10 border-amber-500/30 text-amber-400': announcement.type === 'warning',
+                 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': announcement.type === 'success'
+               }">
+            <i data-lucide="megaphone" class="w-4 h-4" x-show="announcement.type === 'info'"></i>
+            <i data-lucide="alert-triangle" class="w-4 h-4" x-show="announcement.type === 'warning'"></i>
+            <i data-lucide="check-circle-2" class="w-4 h-4" x-show="announcement.type === 'success'"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-black uppercase tracking-wider text-neutral-400">Platform Broadcast</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live
+              </span>
+            </div>
+            <p class="text-[11px] text-neutral-400 font-mono-num" x-text="announcement.timeAgo || 'Broadcast notice'"></p>
+          </div>
+        </div>
+
+        <button @click="dismissAnnouncement()"
+                class="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Dismiss notification">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Body Message -->
+      <div class="py-3">
+        <p class="text-xs sm:text-sm font-semibold text-neutral-100 leading-relaxed" x-text="announcement.message"></p>
+      </div>
+
+      <!-- Footer Action -->
+      <div class="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
+        <span class="text-neutral-500">Official SuperAdmin Notice</span>
+        <button @click="dismissAnnouncement()"
+                class="px-3 py-1 rounded-lg text-xs font-bold text-neutral-300 hover:text-white hover:bg-white/10 transition-colors">
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-time Maintenance Mode Lockout Overlay (triggers live if maintenance is toggled on while user is active) -->
+  <div x-cloak
+       x-show="maintenance.active && !isSuperAdmin"
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 backdrop-blur-none"
+       x-transition:enter-end="opacity-100 backdrop-blur-2xl"
+       x-transition:leave="transition ease-in duration-200"
+       x-transition:leave-start="opacity-100 backdrop-blur-2xl"
+       x-transition:leave-end="opacity-0 backdrop-blur-none"
+       class="fixed inset-0 z-[150] bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 text-center pointer-events-auto">
+    <div class="max-w-md w-full p-8 rounded-3xl bg-[#141210] border border-amber-500/40 shadow-2xl shadow-amber-950/50 space-y-5">
+      <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 grid place-items-center mx-auto shadow-lg shadow-amber-500/20">
+        <i data-lucide="shield-alert" class="w-8 h-8 animate-pulse"></i>
+      </div>
+      <div>
+        <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 border border-amber-500/30 text-amber-300">
+          Scheduled Maintenance
+        </span>
+        <h2 class="text-xl font-black text-white mt-3">Platform Maintenance in Progress</h2>
+        <p class="text-xs text-neutral-300 leading-relaxed mt-2" x-text="maintenance.message"></p>
+      </div>
+      <div class="p-3.5 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-xs text-neutral-400 space-y-1">
+        <div class="flex items-center justify-center gap-2 text-emerald-400 font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Live Sync Active</span>
+        </div>
+        <p class="text-[11px] text-neutral-500">This screen will automatically resume normal operations the moment maintenance ends.</p>
+      </div>
+      <div class="pt-2">
+        <button @click="window.location.reload()"
+                class="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-xs font-bold text-white border border-neutral-700 transition-all">
+          Check Status Now
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Interactive Flash Messages Toast Container -->
   <div class="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none px-4 sm:px-0" id="toast-container">
@@ -604,6 +746,164 @@
     function globalApp() {
       return {
         theme: localStorage.getItem('aura_theme') || 'dark',
+        isSuperAdmin: !!window.__IS_SUPERADMIN__,
+
+        // Realtime Announcement
+        announcement: {
+          visible: false,
+          message: window.__INITIAL_ANNOUNCEMENT__?.message || '',
+          type: window.__INITIAL_ANNOUNCEMENT__?.type || 'info',
+          active: !!window.__INITIAL_ANNOUNCEMENT__?.active,
+          updated_at: window.__INITIAL_ANNOUNCEMENT__?.updated_at || 0,
+          timeAgo: ''
+        },
+
+        // Realtime Maintenance
+        maintenance: {
+          active: !!window.__INITIAL_MAINTENANCE__?.active,
+          message: window.__INITIAL_MAINTENANCE__?.message || 'Platform maintenance in progress. We will be back shortly.'
+        },
+
+        init() {
+          this.initRealtime();
+        },
+
+        initRealtime() {
+          this.calculateTimeAgo();
+
+          // Show announcement if active and not previously dismissed for this specific timestamp
+          if (this.announcement.active && this.announcement.message) {
+            const dismissedKey = 'aurapos_announcement_' + this.announcement.updated_at;
+            if (sessionStorage.getItem(dismissedKey) !== 'dismissed') {
+              setTimeout(() => {
+                this.announcement.visible = true;
+                this.playNotificationChime();
+                this.refreshIcons();
+              }, 600);
+            }
+          }
+
+          // Initialize Socket.IO connection
+          this.initSocket();
+        },
+
+        initSocket() {
+          if (typeof io !== 'function') return;
+
+          try {
+            const socket = io({
+              transports: ['websocket', 'polling'],
+              reconnectionAttempts: 20,
+              reconnectionDelay: 2000
+            });
+
+            socket.on('connect', () => {
+              // Socket connection established
+            });
+
+            socket.on('announcement_update', (data) => {
+              if (!data) return;
+              this.announcement.message = data.message || '';
+              this.announcement.type = data.type || 'info';
+              this.announcement.active = !!data.active;
+              this.announcement.updated_at = data.updated_at || Math.floor(Date.now() / 1000);
+              this.calculateTimeAgo();
+
+              if (this.announcement.active && this.announcement.message) {
+                // Instantly pop notification from right of the screen
+                this.announcement.visible = true;
+                this.playNotificationChime();
+                this.refreshIcons();
+              } else {
+                // Slide out to the right
+                this.announcement.visible = false;
+              }
+            });
+
+            socket.on('maintenance_update', (data) => {
+              if (!data) return;
+              this.maintenance.active = !!data.active;
+              if (data.message) this.maintenance.message = data.message;
+              this.refreshIcons();
+            });
+          } catch (err) {
+            console.warn('Socket connection fallback:', err);
+          }
+
+          // Background fallback polling every 25 seconds
+          setInterval(async () => {
+            try {
+              const res = await fetch('/api/platform-status');
+              if (res.ok) {
+                const json = await res.json();
+                if (json.announcement && json.announcement.updated_at !== this.announcement.updated_at) {
+                  this.announcement.message = json.announcement.message || '';
+                  this.announcement.type = json.announcement.type || 'info';
+                  this.announcement.active = !!json.announcement.active;
+                  this.announcement.updated_at = json.announcement.updated_at;
+                  this.calculateTimeAgo();
+                  if (this.announcement.active && this.announcement.message) {
+                    this.announcement.visible = true;
+                    this.refreshIcons();
+                  } else {
+                    this.announcement.visible = false;
+                  }
+                }
+                if (json.maintenance) {
+                  this.maintenance.active = !!json.maintenance.active;
+                  if (json.maintenance.message) this.maintenance.message = json.maintenance.message;
+                }
+              }
+            } catch(e) {}
+          }, 25000);
+        },
+
+        dismissAnnouncement() {
+          this.announcement.visible = false;
+          if (this.announcement.updated_at) {
+            sessionStorage.setItem('aurapos_announcement_' + this.announcement.updated_at, 'dismissed');
+          }
+        },
+
+        calculateTimeAgo() {
+          if (!this.announcement.updated_at) {
+            this.announcement.timeAgo = 'Platform notice';
+            return;
+          }
+          const secs = Math.floor(Date.now() / 1000 - this.announcement.updated_at);
+          if (secs < 60) this.announcement.timeAgo = 'Broadcasted just now';
+          else if (secs < 3600) this.announcement.timeAgo = `${Math.floor(secs / 60)}m ago`;
+          else if (secs < 86400) this.announcement.timeAgo = `${Math.floor(secs / 3600)}h ago`;
+          else this.announcement.timeAgo = new Date(this.announcement.updated_at * 1000).toLocaleDateString();
+        },
+
+        playNotificationChime() {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.25);
+          } catch (e) {}
+        },
+
+        refreshIcons() {
+          setTimeout(() => {
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+              window.lucide.createIcons();
+            }
+          }, 40);
+        },
+
         toggleTheme() {
           const isDark = document.documentElement.classList.contains('dark');
           if (isDark) {
@@ -615,7 +915,6 @@
             localStorage.setItem('aura_theme', 'dark');
             this.theme = 'dark';
           }
-          // Re-render icons if needed
           setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
         }
       }

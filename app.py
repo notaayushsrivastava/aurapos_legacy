@@ -12,6 +12,7 @@ from flask import (
     Blueprint, send_from_directory,
 )
 import razorpay
+from types import SimpleNamespace
 from uuid import uuid4
 
 if os.environ.get("USE_POSTGRES") or os.environ.get("USE_POSTGRESQL") or (os.environ.get("DATABASE_URL") and not os.environ.get("SUPABASE_URL")):
@@ -20,6 +21,7 @@ else:
     from supabase_backend import *
 
 from flask_mail import Mail, Message
+from flask_socketio import SocketIO, emit
 from functools import wraps
 from datetime import timedelta, datetime, date
 from flask_limiter import Limiter
@@ -194,6 +196,14 @@ logger = logging.getLogger("aurapos")
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder,
             static_url_path='')
 
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="threading",
+    ping_timeout=25,
+    ping_interval=10
+)
+
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "oqhwd9qyweijsdiuweqifbu")
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB maximum upload limit
 
@@ -207,6 +217,59 @@ customerRepo = CustomerRepository()
 categoryRepo = CategoryRepository()
 reportRepo = ReportRepository()
 adminRepo = AdminRepository()
+
+
+def is_maintenance_active():
+    """Returns (active: bool, message: str) for the platform maintenance lock."""
+    try:
+        maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        if not maint_raw:
+            return False, ""
+        data = json.loads(maint_raw)
+        return bool(data.get("active")), str(data.get("message") or "Scheduled platform maintenance in progress. We'll be back shortly.")
+    except Exception:
+        return False, ""
+
+
+@app.before_request
+def check_maintenance_mode():
+    """Gating middleware for platform-wide maintenance mode."""
+    active, msg = is_maintenance_active()
+    if not active:
+        return None
+
+    # SuperAdmin session is always exempt
+    if session.get("is_admin"):
+        return None
+
+    path = request.path or "/"
+    # Admin console paths exempt
+    if path.startswith("/admin") or path == "/admin":
+        return None
+
+    # Static assets, socket.io, health, and status APIs exempt
+    if (
+        path.startswith("/static")
+        or path.startswith("/assets")
+        or path.startswith("/socket.io")
+        or path in ("/output.css", "/favicon.ico", "/robots.txt", "/sitemap.xml", "/api/platform-status")
+    ):
+        return None
+
+    # API endpoints receive 503 JSON payload
+    if path.startswith("/api/"):
+        return jsonify({
+            "success": False,
+            "maintenance": True,
+            "message": msg,
+        }), 503
+
+    # Browser requests receive dedicated 503 maintenance page
+    return render_template(
+        "maintenance.html",
+        maintenance_message=msg,
+        is_superadmin=bool(session.get("is_admin")),
+    ), 503
 
 
 def public_signup_state():
@@ -319,20 +382,42 @@ def compress_image_blob(blob, mime, max_dim=800, quality=85):
 
 @app.context_processor
 def inject_salon():
-    """Expose the current salon and its tier helpers to every template."""
+    """Expose current salon, tier helpers, impersonation state, global announcement and maintenance state."""
+    announcement = {}
+    try:
+        ann_raw = adminRepo.get_setting("platform_announcement", "{}")
+        announcement = json.loads(ann_raw) if ann_raw else {}
+    except Exception:
+        pass
+
+    maintenance = {}
+    try:
+        maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        maintenance = json.loads(maint_raw) if maint_raw else {}
+    except Exception:
+        pass
+
+    res = {
+        "platform_announcement": announcement,
+        "platform_maintenance": maintenance,
+        "is_impersonating": bool(session.get("impersonating")),
+        "is_superadmin": bool(session.get("is_admin")),
+    }
     if "id" in session:
         salon = authRepo.get_salon(session["id"])
         plan = (salon.plan if salon else "") or ""
         tier = plan if plan in TIER_PLANS else "pro"
-        return dict(
+        res.update(dict(
             current_salon=salon,
             tier=tier,
             is_studio=(tier == "studio"),
             is_pro=(tier == "pro"),
             is_free=(tier == "free"),
             TIER_PLANS=TIER_PLANS,
-        )
-    return dict(current_salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS)
+        ))
+        return res
+    res.update(dict(current_salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS))
+    return res
 
 
 # ================= PUBLIC ROUTES =================
@@ -345,19 +430,169 @@ def index():
     return render_template('intro/about.html')
 
 
-def render_booking_portal(salon):
-    """Helper to render the live client self-booking portal for a specific salon."""
-    target_id = salon.id if salon else 1
-    services = serviceRepo.get_booking_services(target_id)
-    staff = staffRepo.get_staff(target_id)
+# ================= HARDCODED DEMO SALON DATA (/b/demo) =================
+DEMO_SALON = SimpleNamespace(
+    id=1,
+    name="Aura Demo Master",
+    salon_name="Aura Luxury Salon & Studio",
+    phone="+91 98765 43210",
+    email="demo@aurasalon.com",
+    address="402 High Street Mall, 100ft Road, Indiranagar, Bengaluru",
+    latitude=12.9716,
+    longitude=77.5946,
+    logo=None,
+    booking_slug="demo",
+    plan="studio",
+    billing_cycle="yearly",
+    opening_hours="{}",
+)
 
-    opening_hours = parse_opening_hours(salon)
+DEMO_OPENING_HOURS = {
+    "monday": {"key": "monday", "label": "Monday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "tuesday": {"key": "tuesday", "label": "Tuesday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "wednesday": {"key": "wednesday", "label": "Wednesday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "thursday": {"key": "thursday", "label": "Thursday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "friday": {"key": "friday", "label": "Friday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "saturday": {"key": "saturday", "label": "Saturday", "open": "09:00", "close": "21:00", "isOpen": True},
+    "sunday": {"key": "sunday", "label": "Sunday", "open": "10:00", "close": "19:00", "isOpen": True},
+}
+
+DEMO_SERVICES = [
+    {
+        "id": 101,
+        "name": "Signature Haircut & Wash",
+        "category": "Haircuts",
+        "price": 450,
+        "duration": 35,
+        "staff": "Alex Rivera",
+        "description": "Includes consultation, deep cleansing wash, precision haircut, and blow-dry finish.",
+        "gender": "Any",
+        "active": 1,
+    },
+    {
+        "id": 102,
+        "name": "Women's Layer Cut & Blowdry",
+        "category": "Haircuts",
+        "price": 750,
+        "duration": 45,
+        "staff": "Alex Rivera",
+        "description": "Personalized face-framing texture layering with heat styling and argan shine spray.",
+        "gender": "Female",
+        "active": 1,
+    },
+    {
+        "id": 103,
+        "name": "Hydra-Dew Glow Facial",
+        "category": "Spa & Facial",
+        "price": 1500,
+        "duration": 60,
+        "staff": "Priya Nair",
+        "description": "Deep pore ultrasonic cleanse, antioxidant serum infusion, and cooling collagen mask.",
+        "gender": "Any",
+        "active": 1,
+    },
+    {
+        "id": 104,
+        "name": "Luxury Organic Hair Spa",
+        "category": "Treatments",
+        "price": 1200,
+        "duration": 50,
+        "staff": "Priya Nair",
+        "description": "Detox scalp therapy with hot oil massage, lavender steam wrap, and deep conditioning.",
+        "gender": "Any",
+        "active": 1,
+    },
+    {
+        "id": 105,
+        "name": "Full Balayage & Toning Gloss",
+        "category": "Hair Color",
+        "price": 3200,
+        "duration": 120,
+        "staff": "Priya Nair",
+        "description": "Hand-painted sun-kissed dimension followed by a conditioning gloss treatment.",
+        "gender": "Female",
+        "active": 1,
+    },
+    {
+        "id": 106,
+        "name": "Royal Beard Sculpt & Hot Towel",
+        "category": "Bridal & Grooming",
+        "price": 350,
+        "duration": 25,
+        "staff": "Marcus Vance",
+        "description": "Straight razor edge lining, organic beard oil hydration, and eucalyptus hot towel steam.",
+        "gender": "Male",
+        "active": 1,
+    },
+    {
+        "id": 107,
+        "name": "Keratin Protein Smoothing",
+        "category": "Treatments",
+        "price": 4500,
+        "duration": 90,
+        "staff": "Alex Rivera",
+        "description": "Frizz-eliminating botanical keratin treatment for silky, high-shine hair lasting up to 3 months.",
+        "gender": "Any",
+        "active": 1,
+    },
+    {
+        "id": 108,
+        "name": "Express Blowdry & Volume Styling",
+        "category": "Styling",
+        "price": 500,
+        "duration": 30,
+        "staff": "Marcus Vance",
+        "description": "Bouncy voluminous blowout with thermal protection and flexible hold finish.",
+        "gender": "Any",
+        "active": 1,
+    },
+]
+
+DEMO_STAFF = [
+    {
+        "id": 201,
+        "name": "Alex Rivera",
+        "role": "Senior Stylist",
+        "phone": "+91 98110 23456",
+        "gender": "Male",
+        "email": "alex@aurasalon.in",
+    },
+    {
+        "id": 202,
+        "name": "Priya Nair",
+        "role": "Master Colorist",
+        "phone": "+91 98220 34567",
+        "gender": "Female",
+        "email": "priya@aurasalon.in",
+    },
+    {
+        "id": 203,
+        "name": "Marcus Vance",
+        "role": "Grooming Specialist",
+        "phone": "+91 98330 45678",
+        "gender": "Male",
+        "email": "marcus@aurasalon.in",
+    },
+]
+
+
+def render_booking_portal(salon, services=None, staff=None, opening_hours=None, is_demo=False):
+    """Helper to render the live client self-booking portal for a specific salon."""
+    target_id = getattr(salon, "id", None) or (salon.get("id") if isinstance(salon, dict) else 1) or 1
+    if services is None:
+        services = serviceRepo.get_booking_services(target_id)
+    if staff is None:
+        staff = staffRepo.get_staff(target_id)
+
+    if opening_hours is None:
+        opening_hours = parse_opening_hours(salon)
+
     now = datetime.now()
     weekday = WEEKDAY_KEYS[now.weekday()]
     today_entry = opening_hours.get(weekday) or {}
     open_now = False
     today_hours_label = "Hours not set"
-    if today_entry and not today_entry.get("closed"):
+    if today_entry and not today_entry.get("closed") and today_entry.get("isOpen", True):
         open_t = str(today_entry.get("open") or "")
         close_t = str(today_entry.get("close") or "")
         if open_t and close_t:
@@ -379,6 +614,19 @@ def render_booking_portal(salon):
         opening_hours=opening_hours,
         today_hours_label=today_hours_label,
         open_now=open_now,
+        is_demo=is_demo,
+    )
+
+
+@app.route('/b/demo')
+def demo_booking():
+    """Hardcoded showcase demo booking page for previewing client self-scheduling."""
+    return render_booking_portal(
+        salon=DEMO_SALON,
+        services=DEMO_SERVICES,
+        staff=DEMO_STAFF,
+        opening_hours=DEMO_OPENING_HOURS,
+        is_demo=True,
     )
 
 
@@ -387,10 +635,9 @@ def vanity_booking(slug):
     """Client booking portal opened via unique 5-char vanity ID (/b/<ID>)."""
     slug_clean = str(slug).strip()
     if slug_clean.lower() == "demo":
-        salon = authRepo.get_salon(1) or authRepo.get_salon(session.get("id", 1))
-    else:
-        salon = authRepo.get_salon_by_slug(slug_clean)
+        return redirect(url_for('demo_booking'))
 
+    salon = authRepo.get_salon_by_slug(slug_clean)
     if not salon:
         flash("The requested salon booking portal could not be found.", "warning")
         return redirect(url_for('booking_showcase'))
@@ -399,17 +646,8 @@ def vanity_booking(slug):
 
 @app.route('/booking', methods=["GET"])
 @app.route('/booking/', methods=["GET"])
-@app.route('/booking/<int:salon_id>', methods=["GET"])
-def booking(salon_id=None):
-    """Showcase demo salon booking page with features, or redirect salon_id to vanity /b/<slug>."""
-    if salon_id is not None:
-        salon = authRepo.get_salon(salon_id)
-        if salon and getattr(salon, "booking_slug", None):
-            return redirect(url_for('vanity_booking', slug=salon.booking_slug))
-        if salon:
-            return render_booking_portal(salon)
-        return redirect(url_for('booking'))
-
+def booking():
+    """Showcase demo salon booking page with features."""
     user_salon = None
     if "id" in session:
         user_salon = authRepo.get_salon(session["id"])
@@ -1908,7 +2146,7 @@ def admin_home():
         salons = adminRepo.list_salons()
     except Exception as exc:
         salons = []
-        flash(f"Could not load salons from Supabase: {exc}", "error")
+        flash(f"Could not load salons: {exc}", "error")
 
     if q:
         ql = q.lower().lstrip("#")
@@ -1939,12 +2177,48 @@ def admin_home():
         "pro": sum(1 for r in rows if r.get("plan") == "pro"),
         "studio": sum(1 for r in rows if r.get("plan") == "studio"),
         "free": sum(1 for r in rows if (r.get("plan") or "free") not in ("pro", "studio")),
+        "expired": sum(1 for r in rows if r.get("is_expired")),
     }
+
+    try:
+        metrics = adminRepo.get_platform_metrics()
+    except Exception:
+        metrics = {}
+
+    try:
+        table_counts = adminRepo.get_database_table_counts()
+    except Exception:
+        table_counts = {}
+
+    try:
+        audit_logs = adminRepo.get_audit_logs(30)
+    except Exception:
+        audit_logs = []
+
+    try:
+        announcement_raw = adminRepo.get_setting("platform_announcement", "{}")
+        announcement = json.loads(announcement_raw) if announcement_raw else {}
+    except Exception:
+        announcement = {}
+
+    try:
+        maintenance_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        maintenance = json.loads(maintenance_raw) if maintenance_raw else {}
+    except Exception:
+        maintenance = {}
+
+    db_engine = "PostgreSQL (Supabase Local)" if os.environ.get("USE_POSTGRES") else "Supabase Data API"
 
     return render_template(
         "admin/admin_dashboard.html",
         salons=rows,
         stats=stats,
+        metrics=metrics,
+        table_counts=table_counts,
+        audit_logs=audit_logs,
+        announcement=announcement,
+        maintenance=maintenance,
+        db_engine=db_engine,
         q=q,
         public_open=public_signup_state(),
         admin_user=session.get("admin_user", ADMIN_USER),
@@ -1971,11 +2245,20 @@ def admin_login():
 
     session["is_admin"] = True
     session["admin_user"] = username or ADMIN_USER
+    try:
+        adminRepo.add_audit_log(session["admin_user"], "LOGIN", "SuperAdmin Console", "Successful login")
+    except Exception:
+        pass
     return redirect(url_for("admin.admin_home"))
 
 
 @admin_bp.post("/logout")
 def admin_logout():
+    user = session.get("admin_user", ADMIN_USER)
+    try:
+        adminRepo.add_audit_log(user, "LOGOUT", "SuperAdmin Console", "Signed out")
+    except Exception:
+        pass
     session.pop("is_admin", None)
     session.pop("admin_user", None)
     return redirect(url_for("admin.admin_home"))
@@ -1987,10 +2270,11 @@ def admin_public_toggle():
     current = public_signup_state()
     new_state = not current
     if not adminRepo.set_setting(AdminRepository.SETTING_ACCEPTING_PUBLIC, "true" if new_state else "false"):
-        return jsonify({"success": False, "message": "Could not save the setting — check Supabase connectivity."}), 502
+        return jsonify({"success": False, "message": "Could not save the setting — check database connectivity."}), 502
     message = ("Public sign-ups are now OPEN — Pro/Studio purchases are enabled."
                if new_state else
                "Public sign-ups are CLOSED — Pro/Studio purchases stay blocked (beta).")
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "TOGGLE_PUBLIC", "Registration", f"Public open: {new_state}")
     return jsonify({"success": True, "accepting_public": new_state, "message": message})
 
 
@@ -2004,6 +2288,11 @@ def admin_grant_plan():
         return jsonify({"success": False, "message": "Invalid salon id."}), 400
     plan = (data.get("plan") or "").strip().lower()
     cycle = (data.get("cycle") or "monthly").strip().lower()
+    try:
+        days = int(float(str(data.get("days") or 0)))
+    except (TypeError, ValueError):
+        days = 0
+
     if plan not in ("pro", "studio", "free"):
         return jsonify({"success": False, "message": "Plan must be pro, studio or free."}), 400
     if plan == "free":
@@ -2015,16 +2304,14 @@ def admin_grant_plan():
     if not salon:
         return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
 
+    now_ts = int(datetime.now().timestamp())
     plan_id = plan if cycle != "yearly" else f"{plan}_yearly"
-    tier, resolved_cycle, pricing = resolve_plan(plan_id)
-    expires_ts = expires_for(resolved_cycle)
+    tier, resolved_cycle, _pricing = resolve_plan(plan_id)
+    expires_ts = (now_ts + days * 86400) if days > 0 else expires_for(resolved_cycle, now_ts)
 
     if not authRepo.update_salon_plan(salon_id, tier, resolved_cycle, expires_ts):
         return jsonify({"success": False, "message": "Plan update failed — salon row not found."}), 502
 
-    # Verify the persisted subscription state before reporting success. This
-    # prevents a transient Supabase/PostgREST failure from looking like a
-    # successful admin plan change while the salon remains on its old tier.
     persisted = authRepo.get_salon(salon_id)
     if (
         not persisted
@@ -2034,7 +2321,7 @@ def admin_grant_plan():
     ):
         return jsonify({
             "success": False,
-            "message": "Plan update could not be verified in the database. The account was not reported as updated.",
+            "message": "Plan update could not be verified in the database.",
         }), 502
 
     try:
@@ -2049,8 +2336,9 @@ def admin_grant_plan():
             phone=salon.phone or "",
         )
     except Exception as exc:
-        print("Admin grant: subscription log failed (plan still applied):", exc)
+        print("Admin grant subscription log failed:", exc)
 
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "GRANT_PLAN", f"Salon #{salon_id} ({salon.salon_name})", f"{tier.upper()} ({resolved_cycle}) until {_fmt_date(expires_ts)}")
     label = TIER_PLANS.get(tier, {}).get("label", tier.title())
     return jsonify({
         "success": True,
@@ -2070,15 +2358,264 @@ def admin_salon_details(salon_id):
     return jsonify({"success": True, **details})
 
 
+@admin_bp.post("/api/salon/<int:salon_id>/update")
+@admin_required
+def admin_update_salon(salon_id):
+    data = request.get_json(silent=True) or {}
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+    
+    updates = {}
+    for k in ["salon_name", "name", "email", "phone", "address", "booking_slug"]:
+        if k in data and str(data[k]).strip():
+            updates[k] = str(data[k]).strip()
+    
+    if "phone" in updates:
+        phone_clean = "".join(ch for ch in updates["phone"] if ch.isdigit())
+        if len(phone_clean) == 10:
+            updates["phone"] = phone_clean
+
+    if not updates:
+        return jsonify({"success": False, "message": "No valid fields provided to update."}), 400
+        
+    ok = adminRepo.update_salon(salon_id, updates)
+    if ok:
+        adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "UPDATE_SALON", f"Salon #{salon_id}", f"Updated {', '.join(updates.keys())}")
+        return jsonify({"success": True, "message": f"Salon #{salon_id} updated successfully!"})
+    return jsonify({"success": False, "message": "Failed to update salon in database."}), 500
+
+
+@admin_bp.post("/api/salon/<int:salon_id>/reset-password")
+@admin_required
+def admin_reset_password(salon_id):
+    data = request.get_json(silent=True) or {}
+    new_password = str(data.get("password") or "").strip()
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "Password must be at least 6 characters."}), 400
+    
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+        
+    ok = adminRepo.reset_owner_password(salon_id, new_password)
+    if ok:
+        adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "RESET_PASSWORD", f"Salon #{salon_id}", "Reset owner login password")
+        return jsonify({"success": True, "message": f"Password reset successfully for owner of {salon.salon_name}."})
+    return jsonify({"success": False, "message": "Failed to reset password."}), 500
+
+
+@admin_bp.post("/api/salon/<int:salon_id>/delete")
+@admin_required
+def admin_delete_salon(salon_id):
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+        
+    salon_name = salon.salon_name
+    ok = adminRepo.delete_salon(salon_id)
+    if ok:
+        adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "DELETE_SALON", f"Salon #{salon_id}", f"Wiped salon {salon_name}")
+        return jsonify({"success": True, "message": f"Salon #{salon_id} ({salon_name}) deleted completely."})
+    return jsonify({"success": False, "message": "Failed to delete salon."}), 500
+
+
+@admin_bp.get("/api/salon/<int:salon_id>/export")
+@admin_required
+def admin_export_salon(salon_id):
+    export_data = adminRepo.export_salon(salon_id)
+    if not export_data:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+    
+    slug = export_data.get("salon", {}).get("booking_slug") or f"salon_{salon_id}"
+    resp = Response(
+        json.dumps(export_data, indent=2, default=str),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment;filename=aurapos_backup_{slug}_{int(datetime.now().timestamp())}.json"}
+    )
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "EXPORT_SALON_JSON", f"Salon #{salon_id}", "Downloaded full JSON backup")
+    return resp
+
+
+@admin_bp.get("/export-csv")
+@admin_required
+def admin_export_csv():
+    salons = adminRepo.list_salons()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Salon Name", "Owner Name", "Email", "Phone", "Plan",
+        "Billing Cycle", "Created Date", "Expires Date", "Seats", "Bills Count", "Total Revenue"
+    ])
+    for s in salons:
+        writer.writerow([
+            s.get("id"),
+            s.get("salon_name"),
+            s.get("name"),
+            s.get("email"),
+            s.get("phone"),
+            s.get("plan"),
+            s.get("billing_cycle"),
+            _fmt_date(s.get("created_on")),
+            _fmt_date(s.get("expires_on")),
+            s.get("accounts_count", 1),
+            s.get("bills_count", 0),
+            s.get("revenue_total", 0),
+        ])
+    
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "EXPORT_ALL_CSV", "Platform", f"Exported {len(salons)} salons to CSV")
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment;filename=aurapos_salons_{date.today().isoformat()}.csv"}
+    )
+
+
+@admin_bp.post("/impersonate/<int:salon_id>")
+@admin_required
+def admin_impersonate(salon_id):
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+    
+    details = adminRepo.salon_details(salon_id)
+    accounts = details.get("accounts") if details else []
+    admin_acc = next((a for a in accounts if a.get("auth_level") == "admin"), None) or (accounts[0] if accounts else None)
+    
+    username = admin_acc.get("username") if admin_acc else salon.email
+    session["impersonating"] = True
+    session["impersonating_admin"] = session.get("admin_user", ADMIN_USER)
+    session["id"] = salon_id
+    session["username"] = username
+    session["auth_level"] = "admin"
+    
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "IMPERSONATE", f"Salon #{salon_id}", f"Logged in as {salon.salon_name}")
+    return jsonify({"success": True, "redirect_url": url_for("dashboard")})
+
+
+@app.route("/admin/exit-impersonation")
+def admin_exit_impersonation():
+    if session.get("impersonating"):
+        session.pop("impersonating", None)
+        admin_user = session.pop("impersonating_admin", ADMIN_USER)
+        session["is_admin"] = True
+        session["admin_user"] = admin_user
+        session.pop("id", None)
+        session.pop("username", None)
+        session.pop("auth_level", None)
+        flash("Exited impersonation mode. Welcome back to SuperAdmin console.", "info")
+    return redirect(url_for("admin.admin_home"))
+
+
+@admin_bp.post("/announcement")
+@admin_required
+def admin_set_announcement():
+    data = request.get_json(silent=True) or {}
+    message = str(data.get("message") or "").strip()
+    b_type = str(data.get("type") or "info").strip().lower()
+    active = bool(data.get("active", False))
+    
+    payload = {
+        "message": message,
+        "type": b_type if b_type in ("info", "warning", "success") else "info",
+        "active": active and bool(message),
+        "updated_at": int(datetime.now().timestamp()),
+        "updated_by": session.get("admin_user", ADMIN_USER),
+    }
+    adminRepo.set_setting("platform_announcement", json.dumps(payload))
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "ANNOUNCEMENT", "Global", f"Banner: {message[:30]}... (active={payload['active']})")
+
+    # Real-time WebSocket event broadcast to all connected clients
+    try:
+        socketio.emit("announcement_update", payload)
+    except Exception as exc:
+        logger.debug(f"Socket announcement broadcast error: {exc}")
+
+    return jsonify({"success": True, "announcement": payload, "message": "Announcement broadcast updated!"})
+
+
+@admin_bp.post("/maintenance-toggle")
+@admin_required
+def admin_maintenance_toggle():
+    data = request.get_json(silent=True) or {}
+    active = bool(data.get("active", False))
+    message = str(data.get("message") or "Scheduled platform maintenance in progress. We'll be back shortly.").strip()
+    payload = {
+        "active": active,
+        "message": message,
+        "updated_at": int(datetime.now().timestamp()),
+        "updated_by": session.get("admin_user", ADMIN_USER),
+    }
+    adminRepo.set_setting("platform_maintenance", json.dumps(payload))
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "MAINTENANCE_TOGGLE", "Global", f"Maintenance active={active}")
+
+    # Real-time WebSocket event broadcast to all connected clients
+    try:
+        socketio.emit("maintenance_update", payload)
+    except Exception as exc:
+        logger.debug(f"Socket maintenance broadcast error: {exc}")
+
+    return jsonify({"success": True, "maintenance": payload, "message": f"Maintenance mode {'enabled' if active else 'disabled'}."})
+
+
+@app.get("/api/platform-status")
+def api_platform_status():
+    """Public read-only health & status for live client hydration and fallback polling."""
+    ann_raw = adminRepo.get_setting("platform_announcement", "{}")
+    maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+    try:
+        ann = json.loads(ann_raw) if ann_raw else {}
+    except Exception:
+        ann = {}
+    try:
+        maint = json.loads(maint_raw) if maint_raw else {}
+    except Exception:
+        maint = {}
+    return jsonify({
+        "success": True,
+        "announcement": ann,
+        "maintenance": maint,
+        "timestamp": int(datetime.now().timestamp())
+    })
+
+
+@socketio.on("connect")
+def handle_socket_connect():
+    """Initial push of live platform announcement & maintenance state upon client connection."""
+    try:
+        ann_raw = adminRepo.get_setting("platform_announcement", "{}")
+        maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        ann = json.loads(ann_raw) if ann_raw else {}
+        maint = json.loads(maint_raw) if maint_raw else {}
+        emit("platform_state", {"announcement": ann, "maintenance": maint})
+    except Exception as exc:
+        logger.debug(f"Socket connection handshake error: {exc}")
+
+
+@admin_bp.get("/api/health")
+@admin_required
+def admin_health_check():
+    start = datetime.now()
+    try:
+        counts = adminRepo.get_database_table_counts()
+        duration_ms = round((datetime.now() - start).total_seconds() * 1000, 2)
+        engine = "PostgreSQL (Supabase local)" if os.environ.get("USE_POSTGRES") else "Supabase REST"
+        return jsonify({
+            "success": True,
+            "status": "healthy",
+            "latency_ms": duration_ms,
+            "engine": engine,
+            "database_url": os.environ.get("DATABASE_URL", "default"),
+            "table_counts": counts,
+        })
+    except Exception as exc:
+        return jsonify({"success": False, "status": "unhealthy", "error": str(exc)}), 500
+
+
 @admin_bp.post("/create-account")
 @admin_required
 def admin_create_account():
-    """Manually create a salon + owner account with a custom plan & validity.
-
-    The owner's login credentials are pre-confirmed in Supabase Auth, so the
-    salon can sign in immediately. Plan/cycle choose the defaults; `days`
-    (optional) overrides the validity window with a custom number of days.
-    """
+    """Manually create a salon + owner account with a custom plan & validity."""
     data = request.get_json(silent=True) or {}
     owner_name = str(data.get("owner_name") or "").strip()
     salon_name = str(data.get("salon_name") or "").strip()
@@ -2120,8 +2657,6 @@ def admin_create_account():
     expires_ts = (now_ts + days * 86400) if days else expires_for(resolved_cycle, now_ts)
 
     try:
-        # Resolve the exact admin-selected plan up front. This avoids creating
-        # a default/free salon and then relying on a second write to upgrade it.
         salon_id = authRepo.create_auth(
             owner_name, salon_name, phone, email, password,
             plan=plan_id, created_on=now_ts,
@@ -2129,7 +2664,6 @@ def admin_create_account():
     except Exception as exc:
         return jsonify({"success": False, "message": f"Could not create account: {exc}"}), 502
 
-    # Custom validity is the only case requiring a second plan write.
     if days:
         if not authRepo.update_salon_plan(salon_id, resolved_tier, resolved_cycle, expires_ts):
             return jsonify({
@@ -2137,8 +2671,6 @@ def admin_create_account():
                 "message": "Account was created, but its custom plan validity could not be saved.",
             }), 502
 
-    # Never report an account as created until the selected subscription state
-    # is confirmed by a fresh database read.
     persisted = authRepo.get_salon(salon_id)
     if (
         not persisted
@@ -2163,9 +2695,9 @@ def admin_create_account():
             phone=phone,
         )
     except Exception as exc:
-        # The account and plan are already valid; only the audit history failed.
-        print("Admin create: subscription logging failed (plan already applied):", exc)
+        print("Admin create subscription logging failed:", exc)
 
+    adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "CREATE_SALON", f"Salon #{salon_id} ({salon_name})", f"Owner {email} · {resolved_tier.upper()}")
     label = TIER_PLANS.get(resolved_tier, {}).get("label", resolved_tier.title())
     return jsonify({
         "success": True,
@@ -2251,5 +2783,5 @@ def unhandled_exception(e):
 
 if __name__ == '__main__':
     print("Hello!, Press Ctrl+C to exit.")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
 

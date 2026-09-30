@@ -3,431 +3,1684 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Console — AuraPOS</title>
+  <title>SuperAdmin Control Center — AuraPOS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/output.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/output.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
     .font-mono-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+    .brand-gradient { background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%); }
+    .neon-border { border-color: rgba(124, 58, 237, 0.3); }
+    /* Custom scrollbar for tables & modals */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
   </style>
 </head>
-<body class="bg-neutral-100 dark:bg-[#0d0c0a] text-neutral-900 dark:text-neutral-100 min-h-screen font-sans antialiased"
-      x-data="adminApp()">
+<body class="bg-neutral-950 text-neutral-100 min-h-screen font-sans antialiased selection:bg-violet-500 selection:text-white pb-16"
+      x-data="adminApp()"
+      x-init="initApp()"
+      @keydown.escape.window="closeAllModals()">
 
-  <!-- Toast -->
-  <div x-cloak x-show="toastShow" x-transition
-       class="fixed top-5 right-5 z-[60] p-4 rounded-xl border shadow-xl text-sm font-medium max-w-md"
-       :class="toastOk ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
-                        : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-300'"
-       x-text="toastMsg"></div>
+  <!-- Toast Notification Container -->
+  <div x-cloak x-show="toastShow" x-transition:enter="transition ease-out duration-300 transform"
+       x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+       x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+       x-transition:leave="transition ease-in duration-200 transform"
+       x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+       x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+       class="fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3.5 rounded-2xl border shadow-2xl text-xs font-semibold max-w-md backdrop-blur-xl"
+       :class="toastOk ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200 shadow-emerald-950/50'
+                        : 'bg-rose-950/90 border-rose-500/40 text-rose-200 shadow-rose-950/50'">
+    <i :data-lucide="toastOk ? 'check-circle-2' : 'alert-circle'" class="w-5 h-5 shrink-0"></i>
+    <span class="flex-1" x-text="toastMsg"></span>
+    <button @click="toastShow = false" class="text-neutral-400 hover:text-white p-1 rounded-lg">
+      <i data-lucide="x" class="w-4 h-4"></i>
+    </button>
+  </div>
 
-  <div class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+  <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
-    <!-- Header -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl brand-gradient grid place-items-center text-white font-black text-lg">A</div>
+    <!-- Top Navigation / Header -->
+    <header class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-neutral-800/80">
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl brand-gradient grid place-items-center text-white font-black text-xl shadow-lg shadow-violet-600/30 ring-1 ring-white/20">
+          A
+        </div>
         <div>
-          <h1 class="text-lg font-black tracking-tight">AuraPOS Admin</h1>
-          <p class="text-[11px] text-neutral-500">Signed in as <span class="font-semibold">{{ admin_user }}</span></p>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-black tracking-tight text-white">AuraPOS SuperAdmin</h1>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-violet-500/10 border border-violet-500/30 text-violet-400">
+              Control Center
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
+            <span>Admin: <strong class="text-neutral-200">{{ admin_user }}</strong></span>
+            <span>·</span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-neutral-900 border border-neutral-800 text-[11px] font-mono-num text-neutral-300">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              {{ db_engine }}
+            </span>
+          </div>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="px-3 py-1.5 rounded-full text-[11px] font-bold border"
-              :class="publicOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
-                                  : 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-300'">
-          Public testing: <span x-text="publicOpen ? 'OPEN' : 'CLOSED (beta)'"></span>
-        </span>
-        <button @click="createOpen = true"
-                class="px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-600/25 transition-all active:scale-95 flex items-center gap-1.5">
-          <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Create account
-        </button>
+
+      <div class="flex flex-wrap items-center gap-2.5">
+        <!-- Public Signup Toggle Badge Button -->
         <button @click="togglePublic()" :disabled="busy"
-                class="px-4 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 disabled:opacity-50"
-                :class="publicOpen ? 'bg-rose-600/10 border-rose-500/30 text-rose-500 hover:bg-rose-600/20'
-                                    : 'bg-emerald-600/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-600/20'"
-                x-text="publicOpen ? 'Close to public' : 'Open to public'"></button>
+                title="Click to toggle public registrations"
+                class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
+                :class="publicOpen ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'">
+          <span class="w-2 h-2 rounded-full" :class="publicOpen ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+          Public Signups: <span x-text="publicOpen ? 'OPEN' : 'CLOSED'"></span>
+        </button>
+
+        <!-- Maintenance Mode Badge -->
+        <span class="px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5"
+              :class="maintenance.active ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse'
+                                         : 'bg-neutral-900 border-neutral-800 text-neutral-400'">
+          <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+          Maintenance: <span x-text="maintenance.active ? 'ACTIVE' : 'OFF'"></span>
+        </span>
+
+        <!-- Provision Salon Action -->
+        <button @click="openCreateModal()"
+                class="px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/30 transition-all active:scale-95 flex items-center gap-1.5">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+          <span>Provision Salon</span>
+        </button>
+
+        <!-- Export CSV Button -->
+        <a href="{{ url_for('admin.admin_export_csv') }}"
+           class="px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-neutral-200 transition-all active:scale-95 flex items-center gap-1.5"
+           title="Export all salons to CSV">
+          <i data-lucide="download" class="w-3.5 h-3.5 text-neutral-400"></i>
+          <span>Export CSV</span>
+        </a>
+
+        <!-- Logout -->
         <form method="post" action="{{ url_for('admin.admin_logout') }}">
-          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors">
-            Logout
+          <button type="submit"
+                  class="px-3 py-2 rounded-xl text-xs font-bold bg-neutral-900 hover:bg-rose-950/40 hover:text-rose-400 border border-neutral-800 hover:border-rose-800/40 text-neutral-300 transition-colors flex items-center gap-1.5"
+                  title="Sign out of SuperAdmin">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
           </button>
         </form>
       </div>
-    </div>
+    </header>
 
+    <!-- Default Password Security Warning Banner -->
     {% if using_default_admin_pwd %}
-      <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-xs font-medium">
-        &#9888; The admin password is still the default — change <code>ADMIN_PASSWORD</code> in your environment before deploying.
+      <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center justify-between gap-3 shadow-lg shadow-amber-950/20">
+        <div class="flex items-center gap-2.5">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 shrink-0"></i>
+          <span><strong>Security Alert:</strong> The SuperAdmin password is currently using the insecure default. Configure <code>ADMIN_PASSWORD</code> in your environment immediately before production deployment.</span>
+        </div>
       </div>
     {% endif %}
 
-    <!-- Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
-        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Salons</p>
-        <p class="text-2xl font-black font-mono-num mt-1">{{ stats.total }}</p>
+    <!-- Global Broadcast Announcement Active Indicator -->
+    <template x-if="announcement.active && announcement.message">
+      <div class="p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 shadow-lg"
+           :class="{
+             'bg-violet-950/40 border-violet-500/40 text-violet-200': announcement.type === 'info',
+             'bg-amber-950/40 border-amber-500/40 text-amber-200': announcement.type === 'warning',
+             'bg-emerald-950/40 border-emerald-500/40 text-emerald-200': announcement.type === 'success'
+           }">
+        <div class="flex items-center gap-2">
+          <i data-lucide="megaphone" class="w-4 h-4 shrink-0 text-violet-400"></i>
+          <span><strong>Active Platform Broadcast:</strong> <span x-text="announcement.message"></span></span>
+        </div>
+        <button @click="activeTab = 'broadcast'" class="text-[11px] underline opacity-80 hover:opacity-100">Manage</button>
       </div>
-      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
-        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Pro</p>
-        <p class="text-2xl font-black font-mono-num mt-1 text-violet-500">{{ stats.pro }}</p>
+    </template>
+
+    <!-- Executive KPI Ribbon (Top Metrics) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <!-- Total Platform GMV -->
+      <div class="bg-[#141210] rounded-2xl border border-neutral-800/80 p-4 sm:p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all shadow-md">
+        <div class="flex items-center justify-between text-neutral-400">
+          <span class="text-[10px] font-bold uppercase tracking-wider">Platform Gross GMV</span>
+          <div class="p-2 rounded-xl bg-violet-500/10 text-violet-400">
+            <i data-lucide="banknote" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl sm:text-3xl font-black font-mono-num mt-2 text-white" x-text="fmtMoney(metrics.total_revenue || 0)"></p>
+        <div class="flex items-center gap-1.5 mt-2 text-[11px] text-neutral-400 font-mono-num">
+          <span class="text-emerald-400 font-bold" x-text="metrics.total_bills || 0"></span>
+          <span>total customer invoices</span>
+        </div>
       </div>
-      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
-        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Studio</p>
-        <p class="text-2xl font-black font-mono-num mt-1 text-neon-magenta">{{ stats.studio }}</p>
+
+      <!-- Active Salons & Tier Breakdown -->
+      <div class="bg-[#141210] rounded-2xl border border-neutral-800/80 p-4 sm:p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all shadow-md">
+        <div class="flex items-center justify-between text-neutral-400">
+          <span class="text-[10px] font-bold uppercase tracking-wider">Total Registered Salons</span>
+          <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+            <i data-lucide="store" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl sm:text-3xl font-black font-mono-num mt-2 text-white" x-text="stats.total || 0"></p>
+        <div class="flex items-center gap-1.5 mt-2 text-[11px] text-neutral-400 font-mono-num">
+          <span class="text-violet-400 font-bold" x-text="stats.pro || 0"></span> Pro ·
+          <span class="text-pink-400 font-bold" x-text="stats.studio || 0"></span> Studio ·
+          <span class="text-emerald-400 font-bold" x-text="stats.free || 0"></span> Free
+        </div>
       </div>
-      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4">
-        <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Free / Trial</p>
-        <p class="text-2xl font-black font-mono-num mt-1 text-emerald-500">{{ stats.free }}</p>
+
+      <!-- Total Appointments -->
+      <div class="bg-[#141210] rounded-2xl border border-neutral-800/80 p-4 sm:p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all shadow-md">
+        <div class="flex items-center justify-between text-neutral-400">
+          <span class="text-[10px] font-bold uppercase tracking-wider">Total Appointments</span>
+          <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <i data-lucide="calendar-check" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl sm:text-3xl font-black font-mono-num mt-2 text-white" x-text="metrics.total_appointments || 0"></p>
+        <div class="flex items-center gap-1.5 mt-2 text-[11px] text-neutral-400 font-mono-num">
+          <span class="text-emerald-400 font-bold" x-text="(metrics.appointments_by_status && metrics.appointments_by_status['Completed']) || 0"></span>
+          <span>completed bookings</span>
+        </div>
+      </div>
+
+      <!-- Clients & Staff -->
+      <div class="bg-[#141210] rounded-2xl border border-neutral-800/80 p-4 sm:p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all shadow-md">
+        <div class="flex items-center justify-between text-neutral-400">
+          <span class="text-[10px] font-bold uppercase tracking-wider">Clients & Stylists</span>
+          <div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+            <i data-lucide="users" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-2xl sm:text-3xl font-black font-mono-num mt-2 text-white" x-text="metrics.total_customers || 0"></p>
+        <div class="flex items-center gap-1.5 mt-2 text-[11px] text-neutral-400 font-mono-num">
+          <span class="text-neutral-200 font-bold" x-text="metrics.total_staff || 0"></span>
+          <span>stylists across all salons</span>
+        </div>
       </div>
     </div>
 
-    <!-- Search -->
-    <form method="get" action="{{ url_for('admin.admin_home') }}" class="flex gap-2">
-      <input name="q" value="{{ q }}" placeholder="Search by salon, owner, email, phone or #id"
-             class="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-[#141210] border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
-      <button type="submit" class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors">Search</button>
-      {% if q %}<a href="{{ url_for('admin.admin_home') }}" class="px-4 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-bold grid place-items-center">Clear</a>{% endif %}
-    </form>
+    <!-- Segmented Navigation Tabs Bar -->
+    <div class="flex items-center gap-1.5 p-1 rounded-2xl bg-[#141210] border border-neutral-800/80 overflow-x-auto">
+      <button @click="setTab('salons')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap"
+              :class="activeTab === 'salons' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'">
+        <i data-lucide="store" class="w-3.5 h-3.5"></i>
+        <span>Salons Directory</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono-num"
+              :class="activeTab === 'salons' ? 'bg-violet-700/60 text-white' : 'bg-neutral-800 text-neutral-300'"
+              x-text="salonsList.length"></span>
+      </button>
 
-    <!-- Salons table -->
-    <div class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
-      <table class="w-full text-xs min-w-[860px]">
-        <thead>
-          <tr class="text-left text-[10px] uppercase tracking-wider text-neutral-400 border-b border-neutral-200 dark:border-neutral-800">
-            <th class="px-4 py-3">Salon</th>
-            <th class="px-4 py-3">Owner</th>
-            <th class="px-4 py-3">Contact</th>
-            <th class="px-4 py-3">Plan</th>
-            <th class="px-4 py-3">Expires</th>
-            <th class="px-4 py-3 text-center">Seats</th>
-            <th class="px-4 py-3 text-center">Bills</th>
-            <th class="px-4 py-3 text-right">Revenue</th>
-            <th class="px-4 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for s in salons %}
-          <tr class="border-b border-neutral-100 dark:border-neutral-800/60 hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors">
-            <td class="px-4 py-3">
-              <p class="font-bold">{{ s.salon_name }}</p>
-              <p class="text-[10px] text-neutral-400 font-mono-num">#{{ s.id }} · joined {{ s.created_str }}</p>
-            </td>
-            <td class="px-4 py-3">{{ s.name }}</td>
-            <td class="px-4 py-3">
-              <p>{{ s.email or '—' }}</p>
-              <p class="text-[10px] text-neutral-400 font-mono-num">{{ s.phone or '—' }}</p>
-            </td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide
-                {% if s.plan == 'studio' %}bg-gradient-to-r from-neon-magenta/15 to-neon-cyan/15 text-neon-magenta border border-neon-magenta/30
-                {% elif s.plan == 'pro' %}bg-violet-500/10 text-violet-500 border border-violet-500/30
-                {% else %}bg-emerald-500/10 text-emerald-500 border border-emerald-500/30{% endif %}">{{ s.plan_label }}</span>
-              <p class="text-[10px] text-neutral-400 mt-0.5">{{ s.cycle }}</p>
-            </td>
-            <td class="px-4 py-3 font-mono-num">
-              {{ s.expires_str }}
-              {% if s.is_expired %}<span class="block text-[10px] text-rose-500 font-bold">expired</span>{% endif %}
-            </td>
-            <td class="px-4 py-3 text-center">
-              <span class="font-mono-num font-bold">{{ s.accounts_count }}</span>
-              {% if s.account_names %}
-              <div class="text-[10px] text-neutral-400 mt-1 max-w-[190px] truncate mx-auto"
-                   title="{{ s.account_names | join(', ') }}">
-                {{ s.account_names[:2] | join(', ') }}{% if s.account_names|length > 2 %} +{{ s.account_names|length - 2 }} more{% endif %}
-              </div>
-              {% endif %}
-            </td>
-            <td class="px-4 py-3 text-center font-mono-num">{{ s.bills_count }}</td>
-            <td class="px-4 py-3 text-right font-mono-num font-bold">{{ s.revenue_str }}</td>
-            <td class="px-4 py-3 text-right whitespace-nowrap">
-              <button @click="openDetails({{ s.id }})"
-                      class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-violet-500/60 text-[11px] font-bold transition-colors">
-                Details
-              </button>
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="9" class="px-4 py-10 text-center text-neutral-400 text-sm">
-              {% if q %}No salons match “{{ q }}”.{% else %}No salons registered yet.{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <button @click="setTab('analytics')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap"
+              :class="activeTab === 'analytics' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'">
+        <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+        <span>Platform Analytics & GMV</span>
+      </button>
+
+      <button @click="setTab('broadcast')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap"
+              :class="activeTab === 'broadcast' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'">
+        <i data-lucide="megaphone" class="w-3.5 h-3.5"></i>
+        <span>Broadcast & Ops</span>
+        <span x-show="announcement.active" class="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></span>
+      </button>
+
+      <button @click="setTab('health')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap"
+              :class="activeTab === 'health' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'">
+        <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+        <span>System Health & DB</span>
+      </button>
+
+      <button @click="setTab('audit')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap"
+              :class="activeTab === 'audit' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-neutral-400 hover:text-white hover:bg-neutral-900'">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+        <span>Security Audit Trail</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono-num"
+              :class="activeTab === 'audit' ? 'bg-violet-700/60 text-white' : 'bg-neutral-800 text-neutral-300'"
+              x-text="auditLogs.length"></span>
+      </button>
     </div>
-  </div>
 
-  <!-- Details modal -->
-  <div x-cloak x-show="selected" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm grid place-items-center p-4"
-       @click.self="selected = null" @keydown.escape.window="selected = null">
-    <div class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 w-full max-w-3xl max-h-[88vh] overflow-y-auto p-5 sm:p-6 space-y-5">
+    <!-- ========================================== -->
+    <!-- TAB 1: SALONS DIRECTORY                    -->
+    <!-- ========================================== -->
+    <div x-show="activeTab === 'salons'" x-cloak class="space-y-4">
+      <!-- Search & Filter Ribbon -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <!-- Tier Filter Chips -->
+        <div class="flex items-center gap-1.5 p-1 rounded-xl bg-[#141210] border border-neutral-800/80 overflow-x-auto">
+          <button @click="tierFilter = 'all'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap"
+                  :class="tierFilter === 'all' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'">
+            All (<span x-text="salonsList.length"></span>)
+          </button>
+          <button @click="tierFilter = 'pro'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap text-violet-400"
+                  :class="tierFilter === 'pro' ? 'bg-violet-500/20 border border-violet-500/30' : 'hover:bg-neutral-800/50'">
+            Pro (<span x-text="stats.pro"></span>)
+          </button>
+          <button @click="tierFilter = 'studio'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap text-pink-400"
+                  :class="tierFilter === 'studio' ? 'bg-pink-500/20 border border-pink-500/30' : 'hover:bg-neutral-800/50'">
+            Studio (<span x-text="stats.studio"></span>)
+          </button>
+          <button @click="tierFilter = 'free'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap text-emerald-400"
+                  :class="tierFilter === 'free' ? 'bg-emerald-500/20 border border-emerald-500/30' : 'hover:bg-neutral-800/50'">
+            Free (<span x-text="stats.free"></span>)
+          </button>
+          <button @click="tierFilter = 'expired'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap text-rose-400"
+                  :class="tierFilter === 'expired' ? 'bg-rose-500/20 border border-rose-500/30' : 'hover:bg-neutral-800/50'">
+            Expired (<span x-text="stats.expired || 0"></span>)
+          </button>
+        </div>
 
-      <template x-if="details">
-        <div class="space-y-5">
-          <!-- Modal header -->
-          <div class="flex items-start justify-between gap-3">
+        <!-- Search Input -->
+        <div class="relative flex-1 max-w-md">
+          <i data-lucide="search" class="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" x-model="searchQuery"
+                 placeholder="Search salons by name, owner, phone, email or #id…"
+                 class="w-full pl-9 pr-8 py-2 rounded-xl bg-[#141210] border border-neutral-800 text-xs text-neutral-100 placeholder-neutral-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all">
+          <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Salons Directory Table -->
+      <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left min-w-[960px]">
+            <thead>
+              <tr class="text-[10px] uppercase tracking-wider text-neutral-400 bg-neutral-900/60 border-b border-neutral-800">
+                <th class="px-5 py-3.5">Salon Entity</th>
+                <th class="px-4 py-3.5">Owner / Contact</th>
+                <th class="px-4 py-3.5">Plan & Expiry</th>
+                <th class="px-4 py-3.5 text-center">Team & Staff</th>
+                <th class="px-4 py-3.5 text-right">Invoices & GMV</th>
+                <th class="px-5 py-3.5 text-right">Operational Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/60">
+              <template x-for="s in filteredSalons" :key="s.id">
+                <tr class="hover:bg-neutral-900/40 transition-colors group">
+                  <!-- Salon Details -->
+                  <td class="px-5 py-3.5">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-400 font-black grid place-items-center text-xs shrink-0">
+                        <span x-text="s.salon_name ? s.salon_name.charAt(0).toUpperCase() : 'S'"></span>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-1.5">
+                          <p class="font-bold text-neutral-100 text-sm" x-text="s.salon_name"></p>
+                          <span class="text-[10px] font-mono-num text-neutral-500">#<span x-text="s.id"></span></span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-0.5 text-[10px] text-neutral-400">
+                          <span>Joined <span x-text="s.created_str"></span></span>
+                          <template x-if="s.booking_slug">
+                            <a :href="'/b/' + s.booking_slug" target="_blank"
+                               class="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors"
+                               title="View public booking page">
+                              <i data-lucide="external-link" class="w-3 h-3"></i>
+                              <span>/b/<span x-text="s.booking_slug"></span></span>
+                            </a>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Owner & Contact -->
+                  <td class="px-4 py-3.5">
+                    <p class="font-semibold text-neutral-200" x-text="s.name"></p>
+                    <p class="text-[11px] text-neutral-400 truncate max-w-[180px]" :title="s.email" x-text="s.email || '—'"></p>
+                    <p class="text-[10px] font-mono-num text-neutral-400" x-text="s.phone || '—'"></p>
+                  </td>
+
+                  <!-- Plan & Expiry -->
+                  <td class="px-4 py-3.5">
+                    <div class="flex items-center gap-1.5">
+                      <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border"
+                            :class="{
+                              'bg-violet-500/10 text-violet-400 border-violet-500/30': s.plan === 'pro',
+                              'bg-pink-500/10 text-pink-400 border-pink-500/30': s.plan === 'studio',
+                              'bg-emerald-500/10 text-emerald-400 border-emerald-500/30': s.plan === 'free' || !s.plan
+                            }"
+                            x-text="s.plan_label || s.plan"></span>
+                      <span class="text-[10px] text-neutral-400 capitalize" x-text="s.cycle || '—'"></span>
+                    </div>
+                    <div class="text-[10px] font-mono-num mt-1"
+                         :class="s.is_expired ? 'text-rose-400 font-bold' : 'text-neutral-400'">
+                      <span x-text="s.expires_str || '—'"></span>
+                      <span x-show="s.is_expired" class="ml-1 px-1 rounded bg-rose-500/20 text-rose-300">EXPIRED</span>
+                    </div>
+                  </td>
+
+                  <!-- Team & Staff -->
+                  <td class="px-4 py-3.5 text-center">
+                    <div class="inline-flex flex-col items-center">
+                      <div class="flex items-center gap-1.5 text-neutral-200 font-bold font-mono-num">
+                        <span x-text="s.accounts_count || 1"></span>
+                        <span class="text-neutral-500 font-normal">seats</span>
+                      </div>
+                      <span class="text-[10px] text-neutral-400 font-mono-num" x-text="(s.staff_count || 0) + ' stylists'"></span>
+                    </div>
+                  </td>
+
+                  <!-- Invoices & GMV -->
+                  <td class="px-4 py-3.5 text-right">
+                    <p class="font-black text-sm text-neutral-100 font-mono-num" x-text="s.revenue_str || '₹0'"></p>
+                    <p class="text-[10px] text-neutral-400 font-mono-num mt-0.5" x-text="(s.bills_count || 0) + ' bills'"></p>
+                  </td>
+
+                  <!-- Actions -->
+                  <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                    <div class="inline-flex items-center gap-1.5">
+                      <!-- 1-Click Impersonate Button -->
+                      <button @click="impersonateSalon(s.id)"
+                              class="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition-all flex items-center gap-1 active:scale-95"
+                              title="Login as this salon (Impersonate)">
+                        <i data-lucide="key-round" class="w-3 h-3"></i>
+                        <span>Impersonate</span>
+                      </button>
+
+                      <!-- Inspect / Deep Dive -->
+                      <button @click="openDetails(s.id)"
+                              class="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 hover:border-neutral-600 text-neutral-200 text-[11px] font-bold transition-all active:scale-95"
+                              title="Inspect full salon telemetry & history">
+                        Inspect
+                      </button>
+
+                      <!-- Plan & Validity -->
+                      <button @click="openGrantModal(s)"
+                              class="px-2.5 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[11px] font-bold transition-all active:scale-95"
+                              title="Grant or extend subscription validity">
+                        Plan
+                      </button>
+
+                      <!-- Quick Edit -->
+                      <button @click="openEditModal(s)"
+                              class="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                              title="Edit salon details">
+                        <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                      </button>
+
+                      <!-- Reset Password -->
+                      <button @click="openResetModal(s)"
+                              class="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400 transition-colors"
+                              title="Reset owner password">
+                        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                      </button>
+
+                      <!-- Export JSON Backup -->
+                      <a :href="ADMIN_BASE + '/api/salon/' + s.id + '/export'"
+                         class="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-cyan-400 transition-colors inline-block"
+                         title="Download complete JSON database backup">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                      </a>
+
+                      <!-- Delete Danger -->
+                      <button @click="openDeleteModal(s)"
+                              class="p-1.5 rounded-lg bg-neutral-800 hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition-colors"
+                              title="Delete salon and all related data">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+
+              <!-- Empty Filter State -->
+              <template x-if="filteredSalons.length === 0">
+                <tr>
+                  <td colspan="6" class="px-6 py-12 text-center text-neutral-400">
+                    <i data-lucide="inbox" class="w-8 h-8 mx-auto text-neutral-600 mb-2"></i>
+                    <p class="font-bold text-sm">No salons match the selected filters.</p>
+                    <p class="text-xs text-neutral-500 mt-1">Try resetting the search query or tier filters.</p>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: PLATFORM ANALYTICS & GMV            -->
+    <!-- ========================================== -->
+    <div x-show="activeTab === 'analytics'" x-cloak class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Payment Channels Breakdown -->
+        <div class="lg:col-span-2 bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-lg font-black tracking-tight" x-text="details.salon.salon_name"></h2>
-              <p class="text-[11px] text-neutral-400 font-mono-num">
-                #<span x-text="details.salon.id"></span> · <span x-text="details.salon.name"></span> · joined <span x-text="fmtDate(details.salon.created_on)"></span>
-              </p>
+              <h2 class="text-base font-black text-white">Payment Method Distribution</h2>
+              <p class="text-xs text-neutral-400">Total volume and revenue collected across all salons</p>
             </div>
-            <button @click="selected = null" class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold">Close</button>
+            <span class="text-xs font-mono-num font-bold text-emerald-400" x-text="fmtMoney(metrics.total_revenue || 0) + ' Total GMV'"></span>
           </div>
 
-          <!-- Key facts -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
-              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Contact</p>
-              <p class="mt-1 truncate" x-text="details.salon.email || '—'"></p>
-              <p class="font-mono-num" x-text="details.salon.phone || '—'"></p>
-            </div>
-            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
-              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Plan</p>
-              <p class="mt-1 font-bold capitalize" x-text="(details.salon.plan || 'free') + ' · ' + (details.salon.billing_cycle || '—')"></p>
-              <p class="text-[10px] text-neutral-400" x-text="'expires ' + fmtDate(details.salon.expires_on)"></p>
-            </div>
-            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
-              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">All-time revenue</p>
-              <p class="mt-1 font-black font-mono-num" x-text="fmtMoney(details.revenue_total)"></p>
-              <p class="text-[10px] text-neutral-400" x-text="details.bills_count + ' bills'"></p>
-            </div>
-            <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
-              <p class="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">Records</p>
-              <p class="mt-1" x-text="details.services_count + ' services'"></p>
-              <p class="text-[10px] text-neutral-400" x-text="details.customers_count + ' customers · ' + details.appointments_count + ' appts'"></p>
-            </div>
-          </div>
-
-          <!-- Grant plan -->
-          <div class="p-4 rounded-2xl border border-violet-500/30 bg-violet-500/5 space-y-3">
-            <p class="text-xs font-black uppercase tracking-wider text-violet-500 dark:text-violet-400">Grant beta plan</p>
-            <div class="flex flex-wrap items-end gap-2">
-              <label class="text-[11px] font-semibold text-neutral-400">
-                Plan
-                <select x-model="grant.plan" class="mt-1 block px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
-                  <option value="pro">Pro</option>
-                  <option value="studio">Studio</option>
-                  <option value="free">Free Trial (revoke paid)</option>
-                </select>
-              </label>
-              <label class="text-[11px] font-semibold text-neutral-400" x-show="grant.plan !== 'free'">
-                Cycle
-                <select x-model="grant.cycle" class="mt-1 block px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly (2 months free)</option>
-                </select>
-              </label>
-              <button @click="grantPlan()" :disabled="busy"
-                      class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-600/25 active:scale-95 transition-all">
-                Apply plan
-              </button>
-            </div>
-            <p class="text-[10px] text-neutral-400">Zero-cost grant — logged in the salon's subscription history with receipt “granted-by:…”.</p>
-          </div>
-
-          <!-- Team accounts -->
-          <div>
-            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Team accounts (<span x-text="details.accounts.length"></span>)</p>
-            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
-              <template x-for="a in details.accounts" :key="a.id">
-                <div class="flex items-center justify-between px-3 py-2 text-xs">
-                  <span class="font-medium" x-text="a.username"></span>
-                  <span class="px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-[10px] font-bold uppercase" x-text="a.auth_level"></span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <template x-for="(val, key) in (metrics.payment_split || {})" :key="key">
+              <div class="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold uppercase tracking-wider text-neutral-300" x-text="key"></span>
+                  <span class="text-[10px] font-mono-num px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400" x-text="val.count + ' bills'"></span>
                 </div>
-              </template>
-              <template x-if="!details.accounts.length">
-                <p class="px-3 py-3 text-xs text-neutral-400">No accounts.</p>
-              </template>
-            </div>
-          </div>
-
-          <!-- Staff -->
-          <div>
-            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Staff (<span x-text="details.staff.length"></span>)</p>
-            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
-              <template x-for="st in details.staff" :key="st.id">
-                <div class="flex items-center justify-between px-3 py-2 text-xs">
-                  <span><span class="font-medium" x-text="st.name"></span> <span class="text-neutral-400" x-text="'· ' + (st.role || '')"></span></span>
-                  <span class="font-mono-num text-neutral-400" x-text="fmtMoney(st.total_revenue) + ' · ' + (st.services_done || 0) + ' services'"></span>
+                <p class="text-xl font-black font-mono-num text-white mt-2" x-text="fmtMoney(val.revenue)"></p>
+                <!-- Percentage Bar -->
+                <div class="w-full bg-neutral-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                  <div class="bg-violet-500 h-full rounded-full transition-all"
+                       :style="'width: ' + ((val.revenue / (metrics.total_revenue || 1)) * 100).toFixed(1) + '%'"></div>
                 </div>
-              </template>
-              <template x-if="!details.staff.length">
-                <p class="px-3 py-3 text-xs text-neutral-400">No staff on record.</p>
-              </template>
+                <p class="text-[10px] font-mono-num text-neutral-400 mt-1.5 text-right"
+                   x-text="((val.revenue / (metrics.total_revenue || 1)) * 100).toFixed(1) + '%'"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Tier Distribution Card -->
+        <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+          <h2 class="text-base font-black text-white">Subscription Tiers</h2>
+          <p class="text-xs text-neutral-400">Current active tenant licenses</p>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-violet-400">Pro Plan (₹1,499/mo)</span>
+                <span class="font-mono-num" x-text="stats.pro + ' salons'"></span>
+              </div>
+              <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                <div class="bg-violet-500 h-full rounded-full" :style="'width: ' + ((stats.pro / (stats.total || 1)) * 100) + '%'"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-pink-400">Studio Plan (₹2,999/mo)</span>
+                <span class="font-mono-num" x-text="stats.studio + ' salons'"></span>
+              </div>
+              <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                <div class="bg-pink-500 h-full rounded-full" :style="'width: ' + ((stats.studio / (stats.total || 1)) * 100) + '%'"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-emerald-400">Free / Trial</span>
+                <span class="font-mono-num" x-text="stats.free + ' salons'"></span>
+              </div>
+              <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                <div class="bg-emerald-500 h-full rounded-full" :style="'width: ' + ((stats.free / (stats.total || 1)) * 100) + '%'"></div>
+              </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Subscription history -->
+      <!-- Top Grossing Salons Leaderboard -->
+      <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between">
           <div>
-            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Subscription history</p>
-            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
-              <template x-for="sub in details.subscriptions" :key="sub.id">
-                <div class="flex items-center justify-between px-3 py-2 text-xs gap-3">
-                  <span class="font-mono-num truncate" x-text="sub.id"></span>
-                  <span class="text-neutral-400" x-text="(sub.plan || '—') + ' · ' + (sub.billing_cycle || '—')"></span>
-                  <span class="font-mono-num" x-text="fmtMoney(sub.amount)"></span>
-                  <span class="text-neutral-400" x-text="fmtDate(sub.created_at)"></span>
-                </div>
-              </template>
-              <template x-if="!details.subscriptions.length">
-                <p class="px-3 py-3 text-xs text-neutral-400">No payments recorded.</p>
-              </template>
-            </div>
+            <h2 class="text-base font-black text-white">Top Grossing Salons</h2>
+            <p class="text-xs text-neutral-400">Ranked by verified bill checkout totals</p>
           </div>
+        </div>
 
-          <!-- Recent bills -->
-          <div>
-            <p class="text-xs font-black uppercase tracking-wider text-neutral-400 mb-2">Recent bills</p>
-            <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/60">
-              <template x-for="b in details.bills" :key="b.id">
-                <div class="flex items-center justify-between px-3 py-2 text-xs gap-3">
-                  <span class="font-mono-num truncate" x-text="b.id"></span>
-                  <span class="text-neutral-400 truncate" x-text="b.client_name || '—'"></span>
-                  <span class="text-neutral-400" x-text="b.payment_mode"></span>
-                  <span class="font-mono-num font-bold" x-text="fmtMoney(b.grand_total)"></span>
-                  <span class="text-neutral-400" x-text="fmtDate(b.created_at)"></span>
+        <div class="divide-y divide-neutral-800/60">
+          <template x-for="(ts, index) in (metrics.top_salons || [])" :key="ts.id">
+            <div class="py-3 flex items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <span class="w-7 h-7 rounded-xl font-black text-xs grid place-items-center shrink-0"
+                      :class="{
+                        'bg-amber-400/20 text-amber-300 border border-amber-400/40': index === 0,
+                        'bg-neutral-300/20 text-neutral-200 border border-neutral-300/40': index === 1,
+                        'bg-amber-700/20 text-amber-500 border border-amber-700/40': index === 2,
+                        'bg-neutral-800 text-neutral-400': index > 2
+                      }"
+                      x-text="'#' + (index + 1)"></span>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <p class="font-bold text-neutral-100 text-sm" x-text="ts.salon_name"></p>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-violet-500/10 text-violet-400 border border-violet-500/30" x-text="ts.plan"></span>
+                  </div>
+                  <p class="text-[11px] text-neutral-400 font-mono-num" x-text="ts.bills_count + ' invoices billed'"></p>
                 </div>
-              </template>
-              <template x-if="!details.bills.length">
-                <p class="px-3 py-3 text-xs text-neutral-400">No bills yet.</p>
-              </template>
-            </div>
-          </div>
+              </div>
 
-          <!-- Deletion requests -->
-          <template x-if="details.deletion_requests.length">
-            <div class="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5">
-              <p class="text-xs font-black uppercase tracking-wider text-rose-500 mb-2">Deletion requests</p>
-              <template x-for="(d, i) in details.deletion_requests" :key="i">
-                <p class="text-xs text-rose-600 dark:text-rose-300">
-                  <span x-text="fmtDate(d.requested_at)"></span> — <span x-text="d.email || 'no email'"></span>
-                  <span class="text-neutral-400" x-text="d.reason ? ('· ' + d.reason) : ''"></span>
-                </p>
-              </template>
+              <div class="flex items-center gap-4">
+                <span class="text-base font-black font-mono-num text-white" x-text="fmtMoney(ts.revenue)"></span>
+                <button @click="impersonateSalon(ts.id)"
+                        class="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-violet-600 text-neutral-200 hover:text-white text-xs font-bold transition-all">
+                  Access
+                </button>
+              </div>
             </div>
           </template>
         </div>
+      </div>
+
+      <!-- Recent Platform Activity Feed -->
+      <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+        <h2 class="text-base font-black text-white">Live Invoicing Stream</h2>
+        <p class="text-xs text-neutral-400">Latest checkout receipts processed across the platform</p>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="text-[10px] uppercase tracking-wider text-neutral-400 border-b border-neutral-800">
+                <th class="py-2.5">Invoice</th>
+                <th class="py-2.5">Salon</th>
+                <th class="py-2.5">Client</th>
+                <th class="py-2.5">Payment</th>
+                <th class="py-2.5 text-right">Amount</th>
+                <th class="py-2.5 text-right">Date</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/40">
+              <template x-for="b in (metrics.recent_bills || [])" :key="b.id">
+                <tr class="hover:bg-neutral-900/30">
+                  <td class="py-2.5 font-mono-num font-semibold text-neutral-300" x-text="b.id"></td>
+                  <td class="py-2.5 font-bold text-neutral-100" x-text="b.salon_name || ('Salon #' + b.account_id)"></td>
+                  <td class="py-2.5 text-neutral-300" x-text="b.client_name || 'Walk-in'"></td>
+                  <td class="py-2.5">
+                    <span class="px-2 py-0.5 rounded-md bg-neutral-800 text-[10px] font-mono-num" x-text="b.payment_mode"></span>
+                  </td>
+                  <td class="py-2.5 text-right font-black font-mono-num text-emerald-400" x-text="fmtMoney(b.grand_total)"></td>
+                  <td class="py-2.5 text-right text-neutral-400 font-mono-num" x-text="fmtDate(b.created_at)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: BROADCAST & OPERATIONS              -->
+    <!-- ========================================== -->
+    <div x-show="activeTab === 'broadcast'" x-cloak class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Global Announcement Broadcast Form -->
+        <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-black text-white">Global Announcement Banner</h2>
+              <p class="text-xs text-neutral-400">Broadcasts an alert banner across all salon owner consoles</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border"
+                  :class="announcement.active ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                              : 'bg-neutral-800 border-neutral-700 text-neutral-400'"
+                  x-text="announcement.active ? 'Active' : 'Inactive'"></span>
+          </div>
+
+          <!-- Banner Preview -->
+          <div class="space-y-1.5">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Live Preview</p>
+            <div class="p-3.5 rounded-2xl border text-xs font-semibold flex items-center gap-2.5 transition-all"
+                 :class="{
+                   'bg-violet-950/50 border-violet-500/40 text-violet-200': announcementForm.type === 'info',
+                   'bg-amber-950/50 border-amber-500/40 text-amber-200': announcementForm.type === 'warning',
+                   'bg-emerald-950/50 border-emerald-500/40 text-emerald-200': announcementForm.type === 'success'
+                 }">
+              <i data-lucide="megaphone" class="w-4 h-4 shrink-0"></i>
+              <span x-text="announcementForm.message || 'Your broadcast message preview will appear here…'"></span>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <label class="block text-xs font-bold text-neutral-300">
+              Announcement Message
+              <textarea x-model="announcementForm.message" rows="3"
+                        placeholder="e.g. Scheduled database maintenance tonight from 2 AM to 3 AM IST. Backups are automatic."
+                        class="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 placeholder-neutral-500 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"></textarea>
+            </label>
+
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block text-xs font-bold text-neutral-300">
+                Banner Style
+                <select x-model="announcementForm.type"
+                        class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-semibold text-neutral-100 outline-none focus:border-violet-500">
+                  <option value="info">Info (Purple / Blue)</option>
+                  <option value="warning">Warning (Amber / Yellow)</option>
+                  <option value="success">Success (Emerald / Green)</option>
+                </select>
+              </label>
+
+              <label class="flex items-center gap-2.5 text-xs font-bold text-neutral-300 cursor-pointer pt-6">
+                <input type="checkbox" x-model="announcementForm.active"
+                       class="w-4 h-4 rounded text-violet-600 bg-neutral-900 border-neutral-700 focus:ring-violet-500">
+                <span>Enable Broadcast</span>
+              </label>
+            </div>
+
+            <div class="pt-2">
+              <button @click="saveAnnouncement()" :disabled="busy"
+                      class="w-full px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/25 active:scale-98 flex items-center justify-center gap-2">
+                <i data-lucide="radio" class="w-3.5 h-3.5"></i>
+                <span>Publish Broadcast Announcement</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Platform Maintenance & Access Controls -->
+        <div class="space-y-6">
+          <!-- Maintenance Mode Control -->
+          <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-base font-black text-white">Platform Maintenance Lock</h2>
+                <p class="text-xs text-neutral-400">Lock non-admin access for platform migrations</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border"
+                    :class="maintenanceForm.active ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                                   : 'bg-neutral-800 border-neutral-700 text-neutral-400'"
+                    x-text="maintenanceForm.active ? 'Active' : 'Disabled'"></span>
+            </div>
+
+            <div class="space-y-3">
+              <label class="flex items-center gap-2.5 text-xs font-bold text-neutral-300 cursor-pointer">
+                <input type="checkbox" x-model="maintenanceForm.active"
+                       class="w-4 h-4 rounded text-rose-600 bg-neutral-900 border-neutral-700 focus:ring-rose-500">
+                <span :class="maintenanceForm.active ? 'text-rose-400' : 'text-neutral-300'">Enable Maintenance Mode</span>
+              </label>
+
+              <label class="block text-xs font-bold text-neutral-300">
+                Maintenance Notice Message
+                <input type="text" x-model="maintenanceForm.message"
+                       placeholder="Platform maintenance in progress. We'll be back shortly."
+                       class="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 placeholder-neutral-500 outline-none focus:border-rose-500">
+              </label>
+
+              <button @click="saveMaintenance()" :disabled="busy"
+                      class="px-4 py-2.5 rounded-xl border text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+                      :class="maintenanceForm.active ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500'
+                                                     : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border-neutral-800'">
+                Save Maintenance Settings
+              </button>
+            </div>
+          </div>
+
+          <!-- Public Signup Switch -->
+          <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-3">
+            <h2 class="text-base font-black text-white">Public Registration Control</h2>
+            <p class="text-xs text-neutral-400">Controls whether new visitors can sign up freely or require an admin invite code.</p>
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-xs font-bold" :class="publicOpen ? 'text-emerald-400' : 'text-amber-400'">
+                Status: <span x-text="publicOpen ? 'Open to Public' : 'Private Beta (Admin Invite Only)'"></span>
+              </span>
+              <button @click="togglePublic()" :disabled="busy"
+                      class="px-4 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95"
+                      :class="publicOpen ? 'bg-rose-950/40 border-rose-800 text-rose-300 hover:bg-rose-900/60'
+                                         : 'bg-emerald-950/40 border-emerald-800 text-emerald-300 hover:bg-emerald-900/60'"
+                      x-text="publicOpen ? 'Close Signups' : 'Open Signups'"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: SYSTEM HEALTH & DATABASE            -->
+    <!-- ========================================== -->
+    <div x-show="activeTab === 'health'" x-cloak class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Telemetry & Latency Ping -->
+        <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+          <h2 class="text-base font-black text-white">Database Telemetry</h2>
+          <p class="text-xs text-neutral-400">Live connectivity diagnostic and engine ping</p>
+
+          <div class="space-y-3 pt-1">
+            <div class="p-3.5 rounded-2xl bg-neutral-900/80 border border-neutral-800">
+              <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500">Active Engine</span>
+              <p class="text-sm font-black text-neutral-100 mt-0.5 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>{{ db_engine }}</span>
+              </p>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-neutral-900/80 border border-neutral-800">
+              <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500">Database Latency</span>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-xl font-black font-mono-num"
+                      :class="pingMs !== null ? (pingMs < 50 ? 'text-emerald-400' : 'text-amber-400') : 'text-neutral-400'"
+                      x-text="pingMs !== null ? (pingMs + ' ms') : 'Not pinged'"></span>
+                <button @click="pingHealth()" :disabled="pinging"
+                        class="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-violet-600/20 active:scale-95">
+                  <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                  <span x-text="pinging ? 'Pinging…' : 'Ping DB'"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table Row Counters -->
+        <div class="lg:col-span-2 bg-[#141210] rounded-3xl border border-neutral-800/80 p-5 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-black text-white">Database Table Row Counts</h2>
+              <p class="text-xs text-neutral-400">Real-time row counters across all schema tables</p>
+            </div>
+            <button @click="pingHealth()" class="text-xs text-violet-400 hover:text-violet-300 font-bold flex items-center gap-1">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <template x-for="(count, tbl) in tableCounts" :key="tbl">
+              <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800/80 hover:border-neutral-700 transition-colors">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 font-mono-num" x-text="tbl"></p>
+                <p class="text-xl font-black font-mono-num text-white mt-1" x-text="count"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 5: SECURITY AUDIT TRAIL                -->
+    <!-- ========================================== -->
+    <div x-show="activeTab === 'audit'" x-cloak class="space-y-4">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-black text-white">SuperAdmin Audit Trail</h2>
+          <p class="text-xs text-neutral-400">Immutable ledger of privileged actions taken on the platform</p>
+        </div>
+
+        <!-- Filter by action -->
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-neutral-400 font-semibold">Filter action:</label>
+          <select x-model="auditFilter"
+                  class="px-3 py-1.5 rounded-xl bg-[#141210] border border-neutral-800 text-xs font-semibold text-neutral-200 outline-none focus:border-violet-500">
+            <option value="ALL">All Actions</option>
+            <option value="IMPERSONATE">IMPERSONATE</option>
+            <option value="GRANT_PLAN">GRANT_PLAN</option>
+            <option value="UPDATE_SALON">UPDATE_SALON</option>
+            <option value="RESET_PASSWORD">RESET_PASSWORD</option>
+            <option value="DELETE_SALON">DELETE_SALON</option>
+            <option value="CREATE_ACCOUNT">CREATE_ACCOUNT</option>
+            <option value="ANNOUNCEMENT">ANNOUNCEMENT</option>
+            <option value="MAINTENANCE_TOGGLE">MAINTENANCE_TOGGLE</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-[#141210] rounded-3xl border border-neutral-800/80 overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="text-[10px] uppercase tracking-wider text-neutral-400 bg-neutral-900/60 border-b border-neutral-800">
+                <th class="px-5 py-3.5">Timestamp</th>
+                <th class="px-4 py-3.5">Action</th>
+                <th class="px-4 py-3.5">Admin Operator</th>
+                <th class="px-4 py-3.5">Target</th>
+                <th class="px-5 py-3.5">Event Details</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-800/60">
+              <template x-for="(log, i) in filteredAuditLogs" :key="i">
+                <tr class="hover:bg-neutral-900/40">
+                  <td class="px-5 py-3 font-mono-num text-neutral-400 whitespace-nowrap" x-text="fmtDateTime(log.timestamp)"></td>
+                  <td class="px-4 py-3">
+                    <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border"
+                          :class="{
+                            'bg-violet-500/10 text-violet-400 border-violet-500/30': log.action === 'GRANT_PLAN' || log.action === 'CREATE_ACCOUNT',
+                            'bg-amber-500/10 text-amber-400 border-amber-500/30': log.action === 'IMPERSONATE' || log.action === 'RESET_PASSWORD',
+                            'bg-rose-500/10 text-rose-400 border-rose-500/30': log.action === 'DELETE_SALON' || log.action === 'MAINTENANCE_TOGGLE',
+                            'bg-cyan-500/10 text-cyan-400 border-cyan-500/30': log.action === 'UPDATE_SALON' || log.action === 'ANNOUNCEMENT',
+                            'bg-emerald-500/10 text-emerald-400 border-emerald-500/30': log.action === 'LOGIN'
+                          }"
+                          x-text="log.action"></span>
+                  </td>
+                  <td class="px-4 py-3 font-semibold text-neutral-200" x-text="log.admin"></td>
+                  <td class="px-4 py-3 font-mono-num text-neutral-300" x-text="log.target"></td>
+                  <td class="px-5 py-3 text-neutral-400" x-text="log.details"></td>
+                </tr>
+              </template>
+              <template x-if="filteredAuditLogs.length === 0">
+                <tr>
+                  <td colspan="5" class="px-5 py-8 text-center text-neutral-500">No audit log entries recorded yet.</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div> <!-- /max-w-7xl -->
+
+  <!-- ======================================================== -->
+  <!-- MODAL 1: SALON DEEP DIVE (INSPECT)                       -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="selectedSalonId" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="selectedSalonId = null">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl">
+      <template x-if="salonDetails">
+        <div class="space-y-6">
+          <!-- Header -->
+          <div class="flex items-start justify-between gap-4 pb-4 border-b border-neutral-800">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-xl font-black text-white" x-text="salonDetails.salon.salon_name"></h2>
+                <span class="text-xs font-mono-num text-neutral-400">#<span x-text="salonDetails.salon.id"></span></span>
+              </div>
+              <p class="text-xs text-neutral-400 mt-0.5">
+                Owner: <strong class="text-neutral-200" x-text="salonDetails.salon.name"></strong> · Joined <span x-text="fmtDate(salonDetails.salon.created_on)"></span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="impersonateSalon(salonDetails.salon.id)"
+                      class="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5">
+                <i data-lucide="key-round" class="w-3.5 h-3.5"></i>
+                <span>Impersonate</span>
+              </button>
+              <button @click="selectedSalonId = null" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Stat Cards -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">All-time Revenue</span>
+              <p class="text-lg font-black font-mono-num text-emerald-400 mt-1" x-text="fmtMoney(salonDetails.revenue_total)"></p>
+              <p class="text-[10px] text-neutral-500 mt-0.5" x-text="salonDetails.bills_count + ' invoices billed'"></p>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Current Plan</span>
+              <p class="text-lg font-black capitalize text-violet-400 mt-1" x-text="salonDetails.salon.plan || 'Free'"></p>
+              <p class="text-[10px] text-neutral-500 mt-0.5" x-text="'Expires ' + fmtDate(salonDetails.salon.expires_on)"></p>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Catalog & Team</span>
+              <p class="text-lg font-black text-white mt-1" x-text="salonDetails.services_count + ' services'"></p>
+              <p class="text-[10px] text-neutral-500 mt-0.5" x-text="(salonDetails.staff ? salonDetails.staff.length : 0) + ' stylists'"></p>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Clients & Appts</span>
+              <p class="text-lg font-black text-white mt-1" x-text="salonDetails.customers_count + ' clients'"></p>
+              <p class="text-[10px] text-neutral-500 mt-0.5" x-text="salonDetails.appointments_count + ' bookings'"></p>
+            </div>
+          </div>
+
+          <!-- Team Accounts -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-black uppercase tracking-wider text-neutral-400">Login Accounts (<span x-text="salonDetails.accounts ? salonDetails.accounts.length : 0"></span>)</h3>
+            <div class="rounded-2xl border border-neutral-800 divide-y divide-neutral-800/60 overflow-hidden bg-neutral-900/40">
+              <template x-for="acc in (salonDetails.accounts || [])" :key="acc.id">
+                <div class="flex items-center justify-between px-4 py-2.5 text-xs">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="user" class="w-3.5 h-3.5 text-neutral-500"></i>
+                    <span class="font-semibold text-neutral-200" x-text="acc.username"></span>
+                  </div>
+                  <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
+                        :class="acc.auth_level === 'admin' ? 'bg-violet-500/10 text-violet-400 border border-violet-500/30' : 'bg-neutral-800 text-neutral-400'"
+                        x-text="acc.auth_level"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Stylists Staff -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-black uppercase tracking-wider text-neutral-400">Staff Members (<span x-text="salonDetails.staff ? salonDetails.staff.length : 0"></span>)</h3>
+            <div class="rounded-2xl border border-neutral-800 divide-y divide-neutral-800/60 overflow-hidden bg-neutral-900/40">
+              <template x-for="st in (salonDetails.staff || [])" :key="st.id">
+                <div class="flex items-center justify-between px-4 py-2.5 text-xs">
+                  <div>
+                    <span class="font-bold text-neutral-200" x-text="st.name"></span>
+                    <span class="text-neutral-400 ml-1.5" x-text="'(' + (st.role || 'Stylist') + ')'"></span>
+                  </div>
+                  <span class="font-mono-num text-neutral-300" x-text="fmtMoney(st.total_revenue) + ' · ' + (st.services_done || 0) + ' services'"></span>
+                </div>
+              </template>
+              <template x-if="!salonDetails.staff || salonDetails.staff.length === 0">
+                <p class="px-4 py-3 text-xs text-neutral-500">No staff members enrolled yet.</p>
+              </template>
+            </div>
+          </div>
+
+          <!-- Subscription History -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-black uppercase tracking-wider text-neutral-400">Subscription Invoices</h3>
+            <div class="rounded-2xl border border-neutral-800 divide-y divide-neutral-800/60 overflow-hidden bg-neutral-900/40">
+              <template x-for="sub in (salonDetails.subscriptions || [])" :key="sub.id">
+                <div class="flex items-center justify-between px-4 py-2.5 text-xs gap-3 font-mono-num">
+                  <span class="truncate text-neutral-300" x-text="sub.id"></span>
+                  <span class="text-violet-400 capitalize" x-text="(sub.plan || 'pro') + ' · ' + (sub.billing_cycle || 'monthly')"></span>
+                  <span class="font-bold text-white" x-text="fmtMoney(sub.amount)"></span>
+                  <span class="text-neutral-500" x-text="fmtDate(sub.created_at)"></span>
+                </div>
+              </template>
+              <template x-if="!salonDetails.subscriptions || salonDetails.subscriptions.length === 0">
+                <p class="px-4 py-3 text-xs text-neutral-500">No subscription transactions recorded.</p>
+              </template>
+            </div>
+          </div>
+        </div>
       </template>
 
-      <template x-if="!details && loadingDetails">
-        <p class="text-sm text-neutral-400 text-center py-8">Loading salon details…</p>
+      <template x-if="!salonDetails && loadingDetails">
+        <div class="py-12 text-center text-neutral-400 space-y-2">
+          <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-violet-400"></i>
+          <p class="text-xs">Loading salon telemetry and history…</p>
+        </div>
       </template>
     </div>
   </div>
 
-  <!-- Create account modal -->
-  <div x-cloak x-show="createOpen" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm grid place-items-center p-4"
-       @click.self="createOpen = false" @keydown.escape.window="createOpen = false">
-    <div class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-4">
-
-      <div class="flex items-start justify-between gap-3">
+  <!-- ======================================================== -->
+  <!-- MODAL 2: QUICK EDIT SALON                                -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="editOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="editOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-lg p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-800">
         <div>
-          <h2 class="text-lg font-black tracking-tight">Create account</h2>
-          <p class="text-[11px] text-neutral-400">Provisions a salon + pre-confirmed owner login with a custom plan validity.</p>
+          <h2 class="text-lg font-black text-white">Edit Salon Profile</h2>
+          <p class="text-xs text-neutral-400">Update salon entity metadata and public booking link</p>
         </div>
-        <button @click="createOpen = false" class="px-3 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold">Close</button>
+        <button @click="editOpen = false" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
-          Owner name
-          <input x-model="newAcc.owner_name" placeholder="Riya Kapoor"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+      <div class="grid grid-cols-2 gap-3.5">
+        <label class="block text-xs font-bold text-neutral-300 col-span-2">
+          Salon Name
+          <input type="text" x-model="editForm.salon_name"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
         </label>
-        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
-          Salon / Studio name
-          <input x-model="newAcc.salon_name" placeholder="Glow Studio"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+
+        <label class="block text-xs font-bold text-neutral-300">
+          Owner Name
+          <input type="text" x-model="editForm.name"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
         </label>
-        <label class="text-[11px] font-semibold text-neutral-400 col-span-2">
-          Owner email (login)
-          <input x-model="newAcc.email" type="email" placeholder="riya@glow.in"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
-        </label>
-        <label class="text-[11px] font-semibold text-neutral-400">
+
+        <label class="block text-xs font-bold text-neutral-300">
           Phone
-          <input x-model="newAcc.phone" inputmode="numeric" placeholder="9876500007" maxlength="10"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 font-mono-num">
+          <input type="text" x-model="editForm.phone" maxlength="10"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono-num text-neutral-100 outline-none focus:border-violet-500">
         </label>
-        <label class="text-[11px] font-semibold text-neutral-400">
-          Password
-          <input x-model="newAcc.password" type="text" placeholder="min 6 characters"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+
+        <label class="block text-xs font-bold text-neutral-300 col-span-2">
+          Contact Email
+          <input type="email" x-model="editForm.email"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
         </label>
-        <label class="text-[11px] font-semibold text-neutral-400">
-          Plan
-          <select x-model="newAcc.plan"
-                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
-            <option value="free">Free (trial)</option>
-            <option value="pro">Pro</option>
-            <option value="studio">Studio</option>
-          </select>
+
+        <label class="block text-xs font-bold text-neutral-300 col-span-2">
+          Public Booking Slug (/b/slug)
+          <input type="text" x-model="editForm.booking_slug"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono-num text-cyan-400 outline-none focus:border-cyan-500">
         </label>
-        <label class="text-[11px] font-semibold text-neutral-400">
-          Default cycle
-          <select x-model="newAcc.cycle"
-                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-bold">
-            <option value="">Auto</option>
-            <option value="monthly">Monthly (30d)</option>
-            <option value="yearly">Yearly (365d)</option>
-            <option value="trial">Trial (14d)</option>
-          </select>
-        </label>
-        <label class="text-[11px] font-semibold text-neutral-400 col-span-2" x-show="newAcc.plan !== 'free'">
-          Custom validity (days)
-          <input x-model="newAcc.days" inputmode="numeric" placeholder="e.g. 90 — leave blank for default cycle"
-                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 font-mono-num">
+
+        <label class="block text-xs font-bold text-neutral-300 col-span-2">
+          Address
+          <textarea x-model="editForm.address" rows="2"
+                    class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500"></textarea>
         </label>
       </div>
 
-      <div class="flex items-center justify-end gap-2 pt-1">
-        <button @click="createOpen = false" class="px-4 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-bold">Cancel</button>
-        <button @click="createAccount()" :disabled="createBusy"
-                class="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-600/25 active:scale-95 transition-all">
-          <span x-text="createBusy ? 'Creating…' : 'Create account'"></span>
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="editOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="saveEdit()" :disabled="busy"
+                class="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/30 active:scale-95">
+          <span x-text="busy ? 'Saving…' : 'Save Changes'"></span>
         </button>
       </div>
     </div>
   </div>
 
+  <!-- ======================================================== -->
+  <!-- MODAL 3: RESET OWNER PASSWORD                            -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="resetOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="resetOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2 border-b border-neutral-800">
+        <div>
+          <h2 class="text-lg font-black text-white">Reset Owner Password</h2>
+          <p class="text-xs text-neutral-400">Sets a new login password for the salon administrator</p>
+        </div>
+        <button @click="resetOpen = false" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-3 rounded-2xl bg-neutral-900/60 border border-neutral-800 text-xs">
+        <p class="text-neutral-400">Target Salon: <strong class="text-white" x-text="resetTarget.salon_name"></strong></p>
+        <p class="text-neutral-400">Owner Email: <span class="text-neutral-300 font-mono-num" x-text="resetTarget.email"></span></p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-neutral-300">
+          New Password
+          <div class="relative mt-1">
+            <input type="text" x-model="newPassword" placeholder="Enter new password (min 6 chars)"
+                   class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-amber-500 font-mono-num">
+            <button @click="generatePassword()" type="button"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-lg bg-neutral-800 text-[10px] font-bold text-neutral-300 hover:text-white">
+              Generate
+            </button>
+          </div>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="resetOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="submitResetPassword()" :disabled="busy || newPassword.length < 6"
+                class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-amber-600/30 active:scale-95">
+          <span x-text="busy ? 'Resetting…' : 'Reset Password'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 4: GRANT / EXTEND PLAN                             -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="grantOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="grantOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-lg p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-800">
+        <div>
+          <h2 class="text-lg font-black text-white">Grant / Extend Plan</h2>
+          <p class="text-xs text-neutral-400">Override subscription tier and apply custom validity days</p>
+        </div>
+        <button @click="grantOpen = false" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-neutral-900/60 border border-neutral-800 text-xs space-y-1">
+        <p class="text-neutral-400">Target: <strong class="text-white" x-text="grantTarget.salon_name"></strong> (#<span x-text="grantTarget.id"></span>)</p>
+        <p class="text-neutral-400">Current Plan: <span class="text-violet-400 uppercase font-bold" x-text="grantTarget.plan"></span> · Expires: <span class="font-mono-num" x-text="grantTarget.expires_str"></span></p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3.5">
+        <label class="block text-xs font-bold text-neutral-300">
+          Target Plan
+          <select x-model="grantForm.plan"
+                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-100 outline-none focus:border-violet-500">
+            <option value="pro">Pro Plan (Standard)</option>
+            <option value="studio">Studio Plan (Multi-chair)</option>
+            <option value="free">Free Trial (Revoke Paid)</option>
+          </select>
+        </label>
+
+        <label class="block text-xs font-bold text-neutral-300" x-show="grantForm.plan !== 'free'">
+          Billing Cycle
+          <select x-model="grantForm.cycle"
+                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-100 outline-none focus:border-violet-500">
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+
+        <!-- Duration Preset Chips -->
+        <div class="col-span-2 space-y-1.5" x-show="grantForm.plan !== 'free'">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Quick Validity Presets</span>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" @click="grantForm.days = 7"
+                    class="px-2.5 py-1 rounded-lg text-xs font-mono-num border transition-all"
+                    :class="grantForm.days == 7 ? 'bg-violet-600 text-white border-violet-500' : 'bg-neutral-900 text-neutral-300 border-neutral-800'">+7 Days</button>
+            <button type="button" @click="grantForm.days = 30"
+                    class="px-2.5 py-1 rounded-lg text-xs font-mono-num border transition-all"
+                    :class="grantForm.days == 30 ? 'bg-violet-600 text-white border-violet-500' : 'bg-neutral-900 text-neutral-300 border-neutral-800'">+30 Days</button>
+            <button type="button" @click="grantForm.days = 90"
+                    class="px-2.5 py-1 rounded-lg text-xs font-mono-num border transition-all"
+                    :class="grantForm.days == 90 ? 'bg-violet-600 text-white border-violet-500' : 'bg-neutral-900 text-neutral-300 border-neutral-800'">+90 Days</button>
+            <button type="button" @click="grantForm.days = 365"
+                    class="px-2.5 py-1 rounded-lg text-xs font-mono-num border transition-all"
+                    :class="grantForm.days == 365 ? 'bg-violet-600 text-white border-violet-500' : 'bg-neutral-900 text-neutral-300 border-neutral-800'">+1 Year</button>
+            <button type="button" @click="grantForm.days = 3650"
+                    class="px-2.5 py-1 rounded-lg text-xs font-mono-num border transition-all"
+                    :class="grantForm.days == 3650 ? 'bg-violet-600 text-white border-violet-500' : 'bg-neutral-900 text-neutral-300 border-neutral-800'">Lifetime (10y)</button>
+          </div>
+        </div>
+
+        <label class="block text-xs font-bold text-neutral-300 col-span-2" x-show="grantForm.plan !== 'free'">
+          Custom Validity Days (from today)
+          <input type="number" x-model="grantForm.days" placeholder="e.g. 60 — leave 0 for default cycle duration"
+                 class="mt-1 w-full px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono-num text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="grantOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="submitGrantPlan()" :disabled="busy"
+                class="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/30 active:scale-95">
+          <span x-text="busy ? 'Applying…' : 'Apply Plan'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 5: PROVISION / CREATE SALON ACCOUNT                -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="createOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="createOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-lg p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-800">
+        <div>
+          <h2 class="text-lg font-black text-white">Provision New Salon Account</h2>
+          <p class="text-xs text-neutral-400">Creates a salon, seeds default catalog, and sets up owner credentials</p>
+        </div>
+        <button @click="createOpen = false" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="text-xs font-bold text-neutral-300 col-span-2">
+          Salon / Studio Name
+          <input x-model="newAcc.salon_name" placeholder="Glow & Glamour Unisex Salon"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300">
+          Owner Name
+          <input x-model="newAcc.owner_name" placeholder="Riya Kapoor"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300">
+          Owner Phone
+          <input x-model="newAcc.phone" maxlength="10" placeholder="9876543210"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono-num text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300 col-span-2">
+          Owner Email (Login ID)
+          <input x-model="newAcc.email" type="email" placeholder="riya@glowsalon.in"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300 col-span-2">
+          Owner Password
+          <input x-model="newAcc.password" type="text" placeholder="Minimum 6 characters"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-violet-500 font-mono-num">
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300">
+          Initial Plan
+          <select x-model="newAcc.plan"
+                  class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-100 outline-none focus:border-violet-500">
+            <option value="pro">Pro Plan</option>
+            <option value="studio">Studio Plan</option>
+            <option value="free">Free Trial (14 days)</option>
+          </select>
+        </label>
+
+        <label class="text-xs font-bold text-neutral-300">
+          Custom Validity Days
+          <input x-model="newAcc.days" type="number" placeholder="e.g. 30 (leave 0 for auto)"
+                 class="mt-1 w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono-num text-neutral-100 outline-none focus:border-violet-500">
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="createOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="submitCreateAccount()" :disabled="busy"
+                class="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/30 active:scale-95">
+          <span x-text="busy ? 'Provisioning…' : 'Provision Salon'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 6: DANGER DELETE CONFIRMATION                      -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="deleteOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="deleteOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-rose-800/80 w-full max-w-md p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center gap-3 text-rose-400">
+        <div class="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/30">
+          <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h2 class="text-base font-black text-white">Permanently Delete Salon</h2>
+          <p class="text-xs text-rose-300/80">This action is irreversible and permanent.</p>
+        </div>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-rose-950/20 border border-rose-900/50 text-xs text-rose-200/90 space-y-2">
+        <p>Deleting <strong class="text-white" x-text="deleteTarget.salon_name"></strong> (#<span x-text="deleteTarget.id"></span>) will cascade purge all associated records:</p>
+        <ul class="list-disc list-inside space-y-0.5 text-[11px] text-neutral-400">
+          <li>All invoices & payment transactions</li>
+          <li>All appointments, customer profiles & stylists</li>
+          <li>Service catalog, categories & settings</li>
+          <li>Owner & staff login accounts</li>
+        </ul>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-neutral-300">
+          Type salon name <code class="text-rose-400" x-text="deleteTarget.salon_name"></code> to confirm:
+          <input type="text" x-model="deleteConfirmName" placeholder="Type exact name here"
+                 class="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-rose-500">
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="deleteOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="submitDeleteSalon()" :disabled="busy || deleteConfirmName !== deleteTarget.salon_name"
+                class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 active:scale-95">
+          <span x-text="busy ? 'Deleting…' : 'Permanently Delete'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application State & Interactive Controller -->
   <script>
-    const ADMIN_BASE = ({{ url_for('admin.admin_home') | tojson }} || '').replace(/\/+$/, '');
+    const ADMIN_DATA = {
+      salons: {{ salons | tojson }},
+      stats: {{ stats | tojson }},
+      metrics: {{ metrics | tojson }},
+      tableCounts: {{ table_counts | tojson }},
+      auditLogs: {{ audit_logs | tojson }},
+      announcement: {{ announcement | tojson }},
+      maintenance: {{ maintenance | tojson }},
+      publicOpen: {{ 'true' if public_open else 'false' }},
+      adminBase: ({{ url_for('admin.admin_home') | tojson }} || '').replace(/\/+$/, '')
+    };
+
+    const ADMIN_BASE = ADMIN_DATA.adminBase;
 
     function adminApp() {
       return {
-        publicOpen: {{ 'true' if public_open else 'false' }},
-        busy: false,
-        selected: null,
-        details: null,
-        loadingDetails: false,
-                grant: { plan: 'pro', cycle: 'monthly' },
-        createOpen: false,
-        createBusy: false,
-        newAcc: { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' },
-        toastMsg: '', toastOk: true, toastShow: false, toastTimer: null,
+        activeTab: 'salons',
+        salonsList: ADMIN_DATA.salons || [],
+        stats: ADMIN_DATA.stats || {},
+        metrics: ADMIN_DATA.metrics || {},
+        tableCounts: ADMIN_DATA.tableCounts || {},
+        auditLogs: ADMIN_DATA.auditLogs || [],
+        announcement: ADMIN_DATA.announcement || { active: false, message: '', type: 'info' },
+        maintenance: ADMIN_DATA.maintenance || { active: false, message: '' },
+        publicOpen: !!ADMIN_DATA.publicOpen,
 
-        toast(msg, ok = true) {
-          this.toastMsg = msg; this.toastOk = ok; this.toastShow = true;
-          clearTimeout(this.toastTimer);
-          this.toastTimer = setTimeout(() => { this.toastShow = false; }, 4500);
+        // Filters
+        tierFilter: 'all',
+        searchQuery: '',
+        auditFilter: 'ALL',
+
+        // Async state
+        busy: false,
+        pinging: false,
+        pingMs: null,
+
+        // Toast feedback
+        toastMsg: '',
+        toastOk: true,
+        toastShow: false,
+        toastTimer: null,
+
+        // Modals state
+        selectedSalonId: null,
+        salonDetails: null,
+        loadingDetails: false,
+
+        editOpen: false,
+        editForm: { id: null, salon_name: '', name: '', email: '', phone: '', address: '', booking_slug: '' },
+
+        resetOpen: false,
+        resetTarget: { id: null, salon_name: '', email: '' },
+        newPassword: '',
+
+        grantOpen: false,
+        grantTarget: { id: null, salon_name: '', plan: '', expires_str: '' },
+        grantForm: { plan: 'pro', cycle: 'monthly', days: 30 },
+
+        createOpen: false,
+        newAcc: { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'pro', cycle: 'monthly', days: 30 },
+
+        deleteOpen: false,
+        deleteTarget: { id: null, salon_name: '' },
+        deleteConfirmName: '',
+
+        announcementForm: {
+          message: ADMIN_DATA.announcement.message || '',
+          type: ADMIN_DATA.announcement.type || 'info',
+          active: !!ADMIN_DATA.announcement.active
         },
 
-        fmtMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); },
+        maintenanceForm: {
+          active: !!ADMIN_DATA.maintenance.active,
+          message: ADMIN_DATA.maintenance.message || 'Platform maintenance in progress. We will be back shortly.'
+        },
+
+        initApp() {
+          this.refreshIcons();
+          if (typeof io === 'function') {
+            try {
+              const socket = io({ transports: ['websocket', 'polling'], reconnectionAttempts: 20 });
+              socket.on('announcement_update', (data) => {
+                if (!data) return;
+                this.announcement = data;
+                this.announcementForm = {
+                  message: data.message || '',
+                  type: data.type || 'info',
+                  active: !!data.active
+                };
+                this.refreshIcons();
+              });
+              socket.on('maintenance_update', (data) => {
+                if (!data) return;
+                this.maintenance = data;
+                this.maintenanceForm = {
+                  active: !!data.active,
+                  message: data.message || ''
+                };
+                this.refreshIcons();
+              });
+            } catch(e) {}
+          }
+        },
+
+        setTab(tab) {
+          this.activeTab = tab;
+          this.refreshIcons();
+        },
+
+        refreshIcons() {
+          this.$nextTick(() => {
+            setTimeout(() => {
+              if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+              }
+            }, 40);
+          });
+        },
+
+        toast(msg, ok = true) {
+          this.toastMsg = msg;
+          this.toastOk = ok;
+          this.toastShow = true;
+          this.refreshIcons();
+          clearTimeout(this.toastTimer);
+          this.toastTimer = setTimeout(() => { this.toastShow = false; }, 4200);
+        },
+
+        closeAllModals() {
+          this.selectedSalonId = null;
+          this.editOpen = false;
+          this.resetOpen = false;
+          this.grantOpen = false;
+          this.createOpen = false;
+          this.deleteOpen = false;
+        },
+
+        fmtMoney(n) {
+          return '₹' + Number(n || 0).toLocaleString('en-IN');
+        },
+
         fmtDate(ts) {
           if (!ts) return '—';
           return new Date(ts * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         },
 
+        fmtDateTime(ts) {
+          if (!ts) return '—';
+          const d = new Date(ts * 1000);
+          return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' +
+                 d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        },
+
+        get filteredSalons() {
+          let list = this.salonsList;
+          if (this.tierFilter === 'pro') list = list.filter(s => (s.plan || '').toLowerCase() === 'pro');
+          else if (this.tierFilter === 'studio') list = list.filter(s => (s.plan || '').toLowerCase() === 'studio');
+          else if (this.tierFilter === 'free') list = list.filter(s => !s.plan || s.plan === 'free');
+          else if (this.tierFilter === 'expired') list = list.filter(s => s.is_expired);
+
+          if (this.searchQuery.trim()) {
+            const q = this.searchQuery.toLowerCase().trim();
+            list = list.filter(s => {
+              const hay = `${s.salon_name || ''} ${s.name || ''} ${s.email || ''} ${s.phone || ''} ${s.id || ''} ${s.booking_slug || ''}`.toLowerCase();
+              return hay.includes(q);
+            });
+          }
+          return list;
+        },
+
+        get filteredAuditLogs() {
+          if (this.auditFilter === 'ALL') return this.auditLogs;
+          return this.auditLogs.filter(l => l.action === this.auditFilter);
+        },
+
+        // --- Impersonation Action ---
+        async impersonateSalon(salonId) {
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/impersonate/${salonId}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success && data.redirect_url) {
+              window.location.href = data.redirect_url;
+            } else {
+              this.toast(data.message || 'Could not start impersonation session.', false);
+              this.busy = false;
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+            this.busy = false;
+          }
+        },
+
+        // --- Salon Details Modal ---
+        async openDetails(id) {
+          this.selectedSalonId = id;
+          this.salonDetails = null;
+          this.loadingDetails = true;
+          this.refreshIcons();
+          try {
+            const res = await fetch(`${ADMIN_BASE}/api/salon/${id}`);
+            const data = await res.json();
+            if (data.success) {
+              this.salonDetails = data;
+              this.refreshIcons();
+            } else {
+              this.toast(data.message || 'Failed to load details.', false);
+              this.selectedSalonId = null;
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+            this.selectedSalonId = null;
+          }
+          this.loadingDetails = false;
+        },
+
+        // --- Edit Modal ---
+        openEditModal(s) {
+          this.editForm = {
+            id: s.id,
+            salon_name: s.salon_name || '',
+            name: s.name || '',
+            email: s.email || '',
+            phone: s.phone || '',
+            address: s.address || '',
+            booking_slug: s.booking_slug || ''
+          };
+          this.editOpen = true;
+          this.refreshIcons();
+        },
+
+        async saveEdit() {
+          if (!this.editForm.id) return;
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/api/salon/${this.editForm.id}/update`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.editForm)
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.editOpen = false;
+              setTimeout(() => window.location.reload(), 1000);
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Reset Password Modal ---
+        openResetModal(s) {
+          this.resetTarget = { id: s.id, salon_name: s.salon_name, email: s.email };
+          this.newPassword = '';
+          this.resetOpen = true;
+          this.refreshIcons();
+        },
+
+        generatePassword() {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+          let pwd = '';
+          for (let i = 0; i < 10; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+          this.newPassword = pwd;
+        },
+
+        async submitResetPassword() {
+          if (!this.resetTarget.id || this.newPassword.length < 6) return;
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/api/salon/${this.resetTarget.id}/reset-password`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password: this.newPassword })
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.resetOpen = false;
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Grant Plan Modal ---
+        openGrantModal(s) {
+          this.grantTarget = { id: s.id, salon_name: s.salon_name, plan: s.plan, expires_str: s.expires_str };
+          this.grantForm = { plan: s.plan === 'studio' ? 'studio' : 'pro', cycle: s.billing_cycle || 'monthly', days: 30 };
+          this.grantOpen = true;
+          this.refreshIcons();
+        },
+
+        async submitGrantPlan() {
+          if (!this.grantTarget.id) return;
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/grant-plan`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                salon_id: this.grantTarget.id,
+                plan: this.grantForm.plan,
+                cycle: this.grantForm.cycle,
+                days: parseInt(this.grantForm.days || 0)
+              })
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.grantOpen = false;
+              setTimeout(() => window.location.reload(), 1100);
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Create Salon Modal ---
+        openCreateModal() {
+          this.newAcc = { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'pro', cycle: 'monthly', days: 30 };
+          this.createOpen = true;
+          this.refreshIcons();
+        },
+
+        async submitCreateAccount() {
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/create-account`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.newAcc)
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.createOpen = false;
+              setTimeout(() => window.location.reload(), 1100);
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Delete Modal ---
+        openDeleteModal(s) {
+          this.deleteTarget = { id: s.id, salon_name: s.salon_name };
+          this.deleteConfirmName = '';
+          this.deleteOpen = true;
+          this.refreshIcons();
+        },
+
+        async submitDeleteSalon() {
+          if (!this.deleteTarget.id || this.deleteConfirmName !== this.deleteTarget.salon_name) return;
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/api/salon/${this.deleteTarget.id}/delete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.deleteOpen = false;
+              setTimeout(() => window.location.reload(), 1100);
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Public Signup Toggle ---
         async togglePublic() {
           this.busy = true;
           try {
-            const res = await fetch(ADMIN_BASE + '/public-toggle', { method: 'POST' });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const res = await fetch(`${ADMIN_BASE}/public-toggle`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
               this.publicOpen = data.accepting_public;
@@ -435,73 +1688,71 @@
             } else {
               this.toast(data.message || 'Toggle failed.', false);
             }
-          } catch (e) { this.toast('Network error: ' + e.message, false); }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
           this.busy = false;
         },
 
-        async openDetails(id) {
-          this.selected = id; this.details = null; this.loadingDetails = true;
-          this.grant = { plan: 'pro', cycle: 'monthly' };
+        // --- Save Announcement ---
+        async saveAnnouncement() {
+          this.busy = true;
           try {
-            const res = await fetch(ADMIN_BASE + '/api/salon/' + id);
-            if (!res.ok) {
-              let msg = `Error ${res.status}: Could not load salon #${id}.`;
-              try {
-                const j = await res.json();
-                if (j.message) msg = j.message;
-              } catch(e) {}
-              this.toast(msg, false);
-              this.selected = null;
-              this.loadingDetails = false;
-              return;
-            }
-            const data = await res.json();
-            if (data.success) { this.details = data; }
-            else { this.toast(data.message || 'Could not load details.', false); this.selected = null; }
-          } catch (e) { this.toast('Network error: ' + e.message, false); this.selected = null; }
-          this.loadingDetails = false;
-        },
-
-        async createAccount() {
-          this.createBusy = true;
-          try {
-            const res = await fetch(ADMIN_BASE + '/create-account', {
+            const res = await fetch(`${ADMIN_BASE}/announcement`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(this.newAcc)
+              body: JSON.stringify(this.announcementForm)
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
             this.toast(data.message, !!data.success);
             if (data.success) {
-              this.createOpen = false;
-              this.newAcc = { owner_name: '', salon_name: '', email: '', phone: '', password: '', plan: 'free', cycle: '', days: '' };
-              setTimeout(() => window.location.reload(), 1100);
+              this.announcement = data.announcement;
             }
           } catch (e) {
             this.toast('Network error: ' + e.message, false);
           }
-          this.createBusy = false;
+          this.busy = false;
         },
 
-        async grantPlan() {
-          if (!this.selected) return;
+        // --- Save Maintenance ---
+        async saveMaintenance() {
           this.busy = true;
           try {
-            const res = await fetch(ADMIN_BASE + '/grant-plan', {
+            const res = await fetch(`${ADMIN_BASE}/maintenance-toggle`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ salon_id: this.selected, plan: this.grant.plan, cycle: this.grant.cycle })
+              body: JSON.stringify(this.maintenanceForm)
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
-            this.toast(data.message || (data.success ? 'Plan applied.' : 'Failed.'), !!data.success);
+            this.toast(data.message, !!data.success);
             if (data.success) {
-              this.selected = null; this.details = null;
-              setTimeout(() => window.location.reload(), 1100);
+              this.maintenance = data.maintenance;
             }
-          } catch (e) { this.toast('Network error: ' + e.message, false); }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
           this.busy = false;
+        },
+
+        // --- System Health Ping ---
+        async pingHealth() {
+          this.pinging = true;
+          try {
+            const start = performance.now();
+            const res = await fetch(`${ADMIN_BASE}/api/health`);
+            const end = performance.now();
+            const data = await res.json();
+            if (data.success) {
+              this.pingMs = Math.round(data.latency_ms || (end - start));
+              this.tableCounts = data.table_counts || this.tableCounts;
+              this.toast(`Database ping healthy (${this.pingMs}ms)`, true);
+            } else {
+              this.toast('Database ping failed: ' + (data.error || 'Unknown error'), false);
+            }
+          } catch (e) {
+            this.toast('Health check error: ' + e.message, false);
+          }
+          this.pinging = false;
         }
       };
     }

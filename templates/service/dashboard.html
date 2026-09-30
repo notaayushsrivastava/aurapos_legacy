@@ -326,7 +326,7 @@
       },
 
       copyBookingLink() {
-        const url = window.location.origin + "/booking/{{ salon.id if salon else 1 }}";
+        const url = window.location.origin + "/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}";
         const done = () => {
           this.copiedLink = true;
           setTimeout(() => { this.copiedLink = false; }, 2500);
