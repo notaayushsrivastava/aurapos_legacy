@@ -8,16 +8,9 @@ class TestSuperAdmin(unittest.TestCase):
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
         self.client = app.test_client()
-        try:
-            adminRepo.set_setting("platform_maintenance", json.dumps({"active": False, "message": ""}))
-        except Exception:
-            pass
 
     def tearDown(self):
-        try:
-            adminRepo.set_setting("platform_maintenance", json.dumps({"active": False, "message": ""}))
-        except Exception:
-            pass
+        pass
 
     def set_admin_session(self):
         with self.client.session_transaction() as sess:
