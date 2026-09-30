@@ -1,3 +1,4 @@
+{% from "_brand.html" import aura_tile, aura_wordmark %}
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -16,8 +17,8 @@
 
   <div class="w-full max-w-sm">
     <div class="flex items-center justify-center gap-2.5 mb-6">
-      <div class="w-9 h-9 rounded-xl brand-gradient grid place-items-center text-white font-black">A</div>
-      <span class="text-lg font-extrabold tracking-tight">AuraPOS <span class="text-neutral-400 font-bold">Admin</span></span>
+      {{ aura_tile('w-9 h-9 rounded-xl', 'w-5 h-5') }}
+      <span class="text-lg font-extrabold tracking-tight flex items-center gap-1.5">{{ aura_wordmark('text-lg') }} <span class="text-neutral-400 font-bold">Admin</span></span>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}

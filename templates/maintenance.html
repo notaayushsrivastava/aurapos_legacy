@@ -1,3 +1,4 @@
+{% from "_brand.html" import aura_tile, aura_wordmark %}
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -25,10 +26,8 @@
   <main class="w-full max-w-lg relative z-10 text-center space-y-6">
     <!-- Brand Mark Header -->
     <div class="flex items-center justify-center gap-3">
-      <div class="w-10 h-10 rounded-2xl brand-gradient grid place-items-center text-white font-black text-lg shadow-lg shadow-violet-600/20 ring-1 ring-white/20">
-        A
-      </div>
-      <span class="text-xl font-black tracking-tight text-white">AuraPOS</span>
+      {{ aura_tile('w-10 h-10 rounded-2xl shadow-lg shadow-violet-600/20 ring-1 ring-white/20', 'w-5 h-5') }}
+      {{ aura_wordmark('text-xl') }}
     </div>
 
     <!-- Maintenance Status Card -->
@@ -95,7 +94,8 @@
     // Initialize Socket.IO connection
     try {
       const socket = io({
-        transports: ['websocket', 'polling'],
+        transports: ['polling'],
+        upgrade: false,
         reconnectionAttempts: 20,
         reconnectionDelay: 1500
       });

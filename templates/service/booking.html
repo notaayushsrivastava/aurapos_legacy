@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "_brand.html" import aura_mark %}
+{% from "_brand.html" import aura_tile, aura_mark %}
 
 {% block title %}Book Salon Appointment — Aura Salon{% endblock %}
 
@@ -29,9 +29,7 @@
             <img src="{{ salon.logo }}" alt="{{ salon.salon_name }}" class="w-full h-full object-cover">
           </div>
           {% else %}
-          <div class="w-10 h-10 rounded-2xl brand-gradient grid place-items-center text-white shadow-md">
-            {{ aura_mark('w-5 h-5') }}
-          </div>
+          {{ aura_tile('w-10 h-10 rounded-2xl shadow-md', 'w-5 h-5') }}
           {% endif %}
           <div>
             <h1 class="text-xl font-extrabold tracking-tight">{{ salon.salon_name if salon else 'Aura Luxury Salon & Studio' }}</h1>

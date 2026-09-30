@@ -43,6 +43,20 @@ TRIAL_DAYS = 14
 # Team seat limit per tier (None = unlimited), including the primary owner account
 TIER_SEAT_LIMITS = {"free": 1, "pro": 2, "studio": None}
 
+# Concurrent active POS billing terminal limit per tier (None = unlimited)
+TIER_TERMINAL_LIMITS = {"free": 1, "pro": 3, "studio": None}
+
+
+def get_terminal_limit(tier):
+    """Return max concurrent active POS billing terminals allowed for a tier (None = unlimited)."""
+    t = (tier or "free").strip().lower()
+    if "studio" in t:
+        return None
+    if "pro" in t:
+        return 3
+    return 1
+
+
 # Purchaseable plan ids accepted by /create-subscription & /verify-subscription.
 # `salons.plan` always stores the pure tier (pro/studio) while `billing_cycle`
 # keeps the billing period (monthly/yearly) separate — this keeps tier gating,
@@ -2172,4 +2186,7 @@ class AdminRepository:
             return logs[:limit]
         except Exception:
             return []
+
+
+from backend import TerminalRepository
 

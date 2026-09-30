@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "_brand.html" import aura_mark %}
+{% from "_brand.html" import aura_tile, aura_wordmark %}
 
 {% block title %}Contact &amp; Support — AuraPOS{% endblock %}
 
@@ -11,10 +11,8 @@
     <div class="lg:col-span-5 p-6 sm:p-8 bg-gradient-to-br from-[#241a12] via-[#141210] to-[#0d0c0a] text-white flex flex-col justify-between relative overflow-hidden">
       <div>
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl brand-gradient grid place-items-center text-white">
-            {{ aura_mark('w-4 h-4') }}
-          </div>
-          <span class="text-base font-extrabold">AuraPOS</span>
+          {{ aura_tile('w-8 h-8 rounded-xl', 'w-4 h-4') }}
+          {{ aura_wordmark('text-base') }}
         </div>
 
         <div class="mt-8">

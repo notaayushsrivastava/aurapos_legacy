@@ -900,6 +900,7 @@
 
             <ul class="mt-8 space-y-3 text-sm text-neutral-300">
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Unlimited POS Invoicing</li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Up to 3 Parallel POS Terminals (Cookie Cached)</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Up to 2 Team Seats</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Online Client Booking Portal</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Automatic GST / Tax Calculations</li>
@@ -942,12 +943,14 @@
 
             <ul class="mt-8 space-y-3 text-sm text-neutral-200">
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> <strong>Everything in Pro, plus:</strong></li>
+              <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> <strong>Unlimited POS Terminals</strong> (Live Cloud Sync)</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Unlimited Team Seats</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Custom Salon Logo Branding</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> Advanced Analytics Reports</li>
               <li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-neon-cyan"></i> CSV Data Import &amp; Export</li>
               <li class="flex items-center gap-3 text-emerald-400"><i data-lucide="gift" class="w-4 h-4"></i> 2 Months Free with Annual billing</li>
             </ul>
+
           </div>
 
           <a href="{{ url_for('register') }}?plan=studio" class="mt-10 block w-full py-3.5 text-center rounded-xl btn-brand text-white font-bold text-sm transition-all hover:opacity-90">
@@ -1009,7 +1012,7 @@
                 <p class="text-xs text-neutral-400 mt-1">Single-chair testing &amp; evaluation. Core POS billing with AuraPOS watermark on printed receipts.</p>
               </div>
               <div class="mt-4 pt-3 border-t border-neutral-800 text-[11px] text-neutral-400">
-                <span class="font-bold text-white">1 Seat</span> · Core billing · Standard booking link
+                <span class="font-bold text-white">1 Terminal</span> · 1 Seat · Standard booking link
               </div>
             </div>
 
@@ -1020,10 +1023,10 @@
                   <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan">Most Popular</span>
                 </div>
                 <h4 class="text-base font-bold text-white">Pro</h4>
-                <p class="text-xs text-neutral-400 mt-1">For growing salons. Watermark-free receipts with salon phone, up to 2 logins, and online booking with map location.</p>
+                <p class="text-xs text-neutral-400 mt-1">For growing salons. Watermark-free receipts with salon phone, up to 3 parallel registers with cookie caching, and online booking with map location.</p>
               </div>
               <div class="mt-4 pt-3 border-t border-neutral-800 text-[11px] text-neutral-400">
-                <span class="font-bold text-white">Up to 2 Seats</span> · Phone on receipt · No watermark
+                <span class="font-bold text-white">3 Terminals</span> (Cookie Cached) · Up to 2 Seats
               </div>
             </div>
 
@@ -1034,10 +1037,10 @@
                   <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Executive Suite</span>
                 </div>
                 <h4 class="text-base font-bold text-white">Studio</h4>
-                <p class="text-xs text-neutral-300 mt-1">Custom salon logo branding, unlimited team logins, automated 15% stylist commissions, and executive revenue trajectory reports.</p>
+                <p class="text-xs text-neutral-300 mt-1">Custom salon logo branding, unlimited parallel terminals with live cloud sync across all devices, automated commissions, and executive revenue reports.</p>
               </div>
               <div class="mt-4 pt-3 border-t border-orange-500/20 text-[11px] text-orange-200">
-                <span class="font-bold text-white">Unlimited Seats</span> · Custom Logo · Advanced Reports
+                <span class="font-bold text-white">Unlimited Terminals</span> (Live Cloud Sync) · Custom Logo
               </div>
             </div>
           </div>
@@ -1062,11 +1065,18 @@
                   <td class="py-3.5 px-3 font-mono-num text-orange-400 font-bold">₹149 / mo</td>
                 </tr>
                 <tr>
+                  <th scope="row" class="py-3.5 pr-4 font-semibold text-white">POS Terminals &amp; Concurrency</th>
+                  <td class="py-3.5 px-3">1 Terminal (Single active counter)</td>
+                  <td class="py-3.5 px-3 text-neon-cyan font-semibold">Up to 3 Parallel (Browser cookie caching)</td>
+                  <td class="py-3.5 px-3 text-orange-400 font-bold">Unlimited Terminals (Server-side cloud sync, resume anywhere)</td>
+                </tr>
+                <tr>
                   <th scope="row" class="py-3.5 pr-4 font-semibold text-white">Team Login Seats</th>
                   <td class="py-3.5 px-3">1 Seat (Owner only)</td>
                   <td class="py-3.5 px-3">Up to 2 seats</td>
                   <td class="py-3.5 px-3 text-orange-400 font-bold">Unlimited team seats</td>
                 </tr>
+
                 <tr>
                   <th scope="row" class="py-3.5 pr-4 font-semibold text-white">Printed Receipt Watermark</th>
                   <td class="py-3.5 px-3 text-neutral-500">AuraPOS watermark displayed</td>

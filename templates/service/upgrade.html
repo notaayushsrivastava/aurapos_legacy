@@ -89,6 +89,12 @@
             <td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td>
           </tr>
           <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
+            <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Concurrent POS Terminals</td>
+            <td class="py-3 px-4 text-neutral-400 font-medium">1 Terminal</td>
+            <td class="py-3 px-4 text-violet-600 dark:text-neon-cyan font-semibold">Up to 3 (Cookie Cached)</td>
+            <td class="py-3 px-4 text-emerald-500 font-bold">Unlimited (Live Cloud Sync)</td>
+          </tr>
+          <tr class="border-b border-neutral-100 dark:border-neutral-800/80">
             <td class="py-3 pr-4 font-semibold text-neutral-900 dark:text-white">Online Client Booking Link</td>
             <td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td><td class="py-3 px-4">{{ yes() }}</td>
           </tr>
@@ -154,6 +160,7 @@
           <span class="text-xs text-neutral-400" x-text="billingCycle === 'yearly' ? '/ year' : '/ month'"></span>
         </div>
         <ul class="mt-4 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Up to 3 concurrent POS terminals</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>2 team seats</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Salon address &amp; map location</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Online client booking link</li>
@@ -183,6 +190,7 @@
           <span class="text-xs text-neutral-400" x-text="billingCycle === 'yearly' ? '/ year' : '/ month'"></span>
         </div>
         <ul class="mt-4 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+          <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Unlimited POS terminals (Live cloud sync)</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Unlimited team seats</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Advanced analytics reports</li>
           <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>Logo branding + data export/import</li>

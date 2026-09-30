@@ -200,6 +200,8 @@ socketio = SocketIO(
     app,
     cors_allowed_origins="*",
     async_mode="threading",
+    transports=["polling"],
+    allow_upgrades=False,
     ping_timeout=25,
     ping_interval=10
 )
@@ -217,6 +219,7 @@ customerRepo = CustomerRepository()
 categoryRepo = CategoryRepository()
 reportRepo = ReportRepository()
 adminRepo = AdminRepository()
+terminalRepo = TerminalRepository()
 
 
 def is_maintenance_active():
@@ -238,12 +241,8 @@ def check_maintenance_mode():
     if not active:
         return None
 
-    # SuperAdmin session is always exempt
-    if session.get("is_admin"):
-        return None
-
     path = request.path or "/"
-    # Admin console paths exempt
+    # Admin console paths are exempt so SuperAdmin can access control center to monitor and toggle settings
     if path.startswith("/admin") or path == "/admin":
         return None
 
@@ -1292,6 +1291,8 @@ def billing():
     service_list = serviceRepo.get_services(salon_id)
     staff_list = staffRepo.get_staff(salon_id)
     billing_staff = [f"{s['name']} ({s['role']})" for s in staff_list] + ["Unassigned"]
+    plan = (salon.plan if salon else "free") or "free"
+    terminal_limit = get_terminal_limit(plan)
     return render_template(
         'service/billing.html',
         salon=salon,
@@ -1299,7 +1300,12 @@ def billing():
         services=service_list,
         staff=staff_list,
         billing_staff=billing_staff,
+        current_tier=plan,
+        terminal_limit=terminal_limit,
+        account_id=session.get("account_id", 0),
+        account_username=session.get("username", "Staff"),
     )
+
 
 
 @app.route('/appointments')
@@ -1517,6 +1523,16 @@ def api_create_bill():
                 qty = int(float(item.get("qty", 1) or 1))
                 staffRepo.record_sale(staff_name, salon_id, price * qty)
 
+    # Auto-clean cloud terminal draft if completed from a terminal
+    terminal_id = data.get("terminal_id")
+    if terminal_id:
+        try:
+            terminalRepo.delete_draft(salon_id, terminal_id)
+            if socketio:
+                socketio.emit("terminal_cleared", {"salon_id": salon_id, "terminal_id": int(terminal_id)})
+        except Exception:
+            pass
+
     return jsonify({"success": True, "bill_id": bill_id})
 
 
@@ -1527,6 +1543,191 @@ def api_get_bills():
     limit = min(max(1, request.args.get("limit", 10, type=int)), 100)
     offset = max(0, request.args.get("offset", 0, type=int))
     return jsonify(billRepo.get_recent_bills(salon_id, limit=limit, offset=offset))
+
+
+# ================= POS TERMINAL MANAGEMENT & MULTI-TERMINAL APIS =================
+
+@app.post('/api/terminals/heartbeat')
+@login_required
+def api_terminal_heartbeat():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "free") or "free"
+    data = request.get_json() or {}
+    terminal_id = data.get("terminal_id", 1)
+    tab_id = str(data.get("tab_id") or "").strip()
+    if not tab_id:
+        return jsonify({"allowed": False, "message": "tab_id is required"}), 400
+
+    account_id = session.get("account_id", 0)
+    account_name = session.get("username", "Staff")
+    open_terminal_ids = data.get("open_terminal_ids")
+
+    res = terminalRepo.heartbeat(
+        salon_id=salon_id,
+        terminal_id=terminal_id,
+        tab_id=tab_id,
+        account_id=account_id,
+        account_name=account_name,
+        plan=plan,
+        open_terminal_ids=open_terminal_ids
+    )
+    return jsonify(res)
+
+
+@app.post('/api/terminals/release')
+@login_required
+def api_terminal_release():
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    tab_id = str(data.get("tab_id") or "").strip()
+    terminal_id = data.get("terminal_id")
+    if tab_id:
+        terminalRepo.release_session(salon_id, tab_id, terminal_id)
+    return jsonify({"success": True})
+
+
+@app.post('/api/terminals/takeover')
+@login_required
+def api_terminal_takeover():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "free") or "free"
+    data = request.get_json() or {}
+    terminal_id = data.get("terminal_id", 1)
+    tab_id = str(data.get("tab_id") or "").strip()
+    if not tab_id:
+        return jsonify({"allowed": False, "message": "tab_id is required"}), 400
+
+    account_id = session.get("account_id", 0)
+    account_name = session.get("username", "Staff")
+
+    res = terminalRepo.takeover_terminal(
+        salon_id=salon_id,
+        terminal_id=terminal_id,
+        tab_id=tab_id,
+        account_id=account_id,
+        account_name=account_name,
+        plan=plan
+    )
+    try:
+        if socketio:
+            socketio.emit("terminal_taken_over", {
+                "salon_id": salon_id,
+                "terminal_id": int(terminal_id),
+                "new_tab_id": tab_id,
+                "account_name": account_name
+            })
+    except Exception:
+        pass
+    return jsonify(res)
+
+
+@app.get('/api/terminals/status')
+@login_required
+def api_terminal_status():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "free") or "free"
+    limit = get_terminal_limit(plan)
+    active = terminalRepo.get_active_sessions(salon_id)
+    return jsonify({
+        "success": True,
+        "tier": plan,
+        "limit": limit,
+        "active_terminals": active,
+    })
+
+
+@app.get('/api/terminals/drafts')
+@login_required
+def api_get_terminal_drafts():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "free") or "free"
+    is_studio = "studio" in plan.lower()
+
+    if not is_studio:
+        return jsonify({
+            "success": True,
+            "cloud_sync": False,
+            "tier": plan,
+            "drafts": [],
+            "message": "Cloud-synced terminal drafts are exclusive to the Studio plan."
+        })
+
+    drafts = terminalRepo.get_drafts(salon_id)
+    return jsonify({
+        "success": True,
+        "cloud_sync": True,
+        "tier": plan,
+        "drafts": drafts
+    })
+
+
+@app.post('/api/terminals/drafts')
+@login_required
+def api_save_terminal_draft():
+    salon_id = session.get("id", 1)
+    salon = authRepo.get_salon(salon_id)
+    plan = (salon.plan if salon else "free") or "free"
+    is_studio = "studio" in plan.lower()
+
+    if not is_studio:
+        return jsonify({
+            "success": False,
+            "cloud_sync": False,
+            "tier": plan,
+            "message": "Draft saving server-side is available only on the Studio plan. Pro uses browser cookie caching."
+        }), 403
+
+    data = request.get_json() or {}
+    terminal_id = data.get("terminal_id", 1)
+    terminal_name = str(data.get("terminal_name") or f"Terminal #{terminal_id}").strip()
+    cart_data = data.get("cart_data", {})
+    account_id = session.get("account_id", 0)
+    account_name = session.get("username", "Staff")
+
+    terminalRepo.save_draft(
+        salon_id=salon_id,
+        terminal_id=terminal_id,
+        terminal_name=terminal_name,
+        cart_data=cart_data,
+        account_id=account_id,
+        account_name=account_name
+    )
+
+    try:
+        if socketio:
+            socketio.emit("terminal_sync", {
+                "salon_id": salon_id,
+                "terminal_id": int(terminal_id),
+                "terminal_name": terminal_name,
+                "cart_data": cart_data,
+                "updated_by": account_name,
+                "updated_at": int(datetime.now().timestamp())
+            })
+    except Exception:
+        pass
+
+    return jsonify({"success": True, "message": "Terminal draft saved to cloud."})
+
+
+@app.delete('/api/terminals/drafts/<int:terminal_id>')
+@login_required
+def api_delete_terminal_draft(terminal_id):
+    salon_id = session.get("id", 1)
+    terminalRepo.delete_draft(salon_id, terminal_id)
+    try:
+        if socketio:
+            socketio.emit("terminal_cleared", {
+                "salon_id": salon_id,
+                "terminal_id": int(terminal_id)
+            })
+    except Exception:
+        pass
+    return jsonify({"success": True})
+
 
 
 @app.get('/api/appointments')

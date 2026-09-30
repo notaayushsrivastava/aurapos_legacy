@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "_brand.html" import aura_mark %}
+{% from "_brand.html" import aura_tile, aura_wordmark %}
 
 {% block title %}Register & Subscribe — AuraPOS{% endblock %}
 
@@ -23,10 +23,8 @@
 
       <div>
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl brand-gradient grid place-items-center text-white">
-            {{ aura_mark('w-4 h-4') }}
-          </div>
-          <span class="text-base font-extrabold tracking-tight">AuraPOS</span>
+          {{ aura_tile('w-8 h-8 rounded-xl', 'w-4 h-4') }}
+          {{ aura_wordmark('text-base') }}
         </div>
 
         <div class="mt-8">
@@ -60,6 +58,10 @@
               <span>Unlimited Billing &amp; Invoices</span>
             </li>
             <li class="flex items-center gap-2">
+              <i data-lucide="monitor" class="w-3.5 h-3.5 text-neon-cyan"></i>
+              <span x-text="selectedPlan === 'studio' ? 'Unlimited POS Terminals (Live Cloud Sync)' : (selectedPlan === 'pro' ? 'Up to 3 Parallel Terminals (Cookie Cached)' : '1 Active POS Terminal')"></span>
+            </li>
+            <li class="flex items-center gap-2">
               <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i>
               <span x-text="selectedPlan === 'studio' ? 'Unlimited Team Seats' : (selectedPlan === 'pro' ? 'Up to 2 Team Seats' : 'Single Team Seat')"></span>
             </li>
@@ -71,6 +73,7 @@
               <i data-lucide="map-pin" class="w-3.5 h-3.5 text-neon-cyan"></i>
               <span>Salon Address &amp; Map Location</span>
             </li>
+
             <li class="flex items-center gap-2" x-show="selectedPlan === 'studio'">
               <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-400"></i>
               <span>Advanced Analytics Reports</span>
@@ -127,7 +130,7 @@
               <span class="text-[9px] bg-emerald-500 text-white font-black px-1.5 py-0.5 rounded">14 DAYS</span>
             </div>
             <div class="text-base font-bold font-mono-num mt-0.5 text-neutral-900 dark:text-white">₹0 <span class="text-[10px] font-normal text-neutral-400">trial</span></div>
-            <div class="text-[10px] text-neutral-400 mt-0.5">1 seat · core POS only</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">1 terminal · 1 seat</div>
           </button>
 
           <button type="button" 
@@ -140,7 +143,7 @@
               <span x-show="!acceptingPublic" x-cloak class="text-[9px] bg-neutral-400 dark:bg-neutral-700 text-white font-black px-1.5 py-0.5 rounded">BETA</span>
             </div>
             <div class="text-base font-bold font-mono-num mt-0.5 text-neutral-900 dark:text-white">₹69 <span class="text-[10px] font-normal text-neutral-400">/mo</span></div>
-            <div class="text-[10px] text-neutral-400 mt-0.5">Up to 2 team seats</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">3 terminals (cached) · 2 seats</div>
           </button>
 
           <button type="button" 
@@ -154,8 +157,9 @@
               <span x-show="acceptingPublic" class="text-[9px] bg-emerald-500 text-white font-black px-1.5 py-0.5 rounded">BEST VALUE</span>
             </div>
             <div class="text-base font-bold font-mono-num mt-0.5 text-neutral-900 dark:text-white">₹149 <span class="text-[10px] font-normal text-neutral-400">/mo</span></div>
-            <div class="text-[10px] text-neutral-400 mt-0.5">Unlimited seats · Logo · Reports</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">Unlimited terminals · Cloud sync</div>
           </button>
+
 
         </div>
 
@@ -236,6 +240,13 @@
                     <td class="py-2.5 px-2.5 font-mono-num font-semibold text-neutral-900 dark:text-white">₹69 / mo</td>
                     <td class="py-2.5 px-2.5 font-mono-num font-bold text-orange-500">₹149 / mo</td>
                   </tr>
+                  <tr>
+                    <th scope="row" class="py-2.5 pr-3 font-semibold text-neutral-900 dark:text-white">POS Terminals</th>
+                    <td class="py-2.5 px-2.5">1 Terminal</td>
+                    <td class="py-2.5 px-2.5 text-violet-600 dark:text-neon-cyan font-semibold">3 Parallel (Cookie Cached)</td>
+                    <td class="py-2.5 px-2.5 text-orange-500 font-bold">Unlimited (Live Cloud Sync)</td>
+                  </tr>
+
                   <tr>
                     <th scope="row" class="py-2.5 pr-3 font-semibold text-neutral-900 dark:text-white">Team Logins</th>
                     <td class="py-2.5 px-2.5">1 seat</td>

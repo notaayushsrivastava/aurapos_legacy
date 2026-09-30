@@ -62,34 +62,23 @@ class TestAllFeatures(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(salon.salon_name.encode(), res.data)
 
-    def test_security_settings_api(self):
+    def test_payment_settings_api(self):
         with self.client.session_transaction() as sess:
             sess['id'] = 1
             sess['username'] = 'admin'
             sess['auth_level'] = 'admin'
 
-        # GET security settings
-        res = self.client.get('/api/settings/security')
+        # GET payment settings
+        res = self.client.get('/api/settings/payment-methods')
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
-        self.assertIn('session_timeout', data)
-        self.assertIn('token_display', data)
+        self.assertIn('methods', data)
 
-        # POST security settings update
-        res = self.client.post('/api/settings/security', json={'session_timeout': '24h'})
+        # POST payment settings update
+        res = self.client.post('/api/settings/payment-methods', json={'methods': {'upi': 'salon@upi', 'card_terminal': 'EDC-123'}})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertTrue(data['success'])
-        self.assertEqual(data['session_timeout'], '24h')
-
-        # Verify updated
-        res = self.client.get('/api/settings/security')
-        self.assertEqual(res.get_json()['session_timeout'], '24h')
-
-        # Revoke sessions
-        res = self.client.post('/api/settings/security/revoke')
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.get_json()['success'])
 
     def test_billing_with_split_payments(self):
         with self.client.session_transaction() as sess:
@@ -137,9 +126,9 @@ class TestAllFeatures(unittest.TestCase):
         # Settings page
         res = self.client.get('/settings')
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Security & Auth", res.data)
-        self.assertIn(b"Session Security", res.data)
-        self.assertIn(b"Vanity Online Booking Portal Link", res.data)
+        self.assertIn(b"Salon Profile", res.data)
+        self.assertIn(b"Team Accounts", res.data)
+        self.assertIn(b"Booking Link", res.data)
 
     def test_pricing_links_and_learn_more_tiers(self):
         # /pricing and /prices routes

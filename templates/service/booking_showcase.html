@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "_brand.html" import aura_mark %}
+{% from "_brand.html" import aura_tile, aura_mark %}
 
 {% block title %}Client Online Booking Portal — AuraPOS{% endblock %}
 {% block meta_description %}AuraPOS Client Booking: 24/7 frictionless salon scheduling with real-time stylist availability, automated notifications, and vanity links at /b/<ID>.{% endblock %}
@@ -27,9 +27,7 @@
     <div class="mt-6 p-4 rounded-2xl bg-gradient-to-r from-violet-950/40 via-amber-950/20 to-neutral-900 border border-violet-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 max-w-2xl mx-auto shadow-xl"
          x-data="{ copied: false }">
       <div class="flex items-center gap-3 text-left">
-        <div class="w-10 h-10 rounded-xl brand-gradient grid place-items-center text-white shrink-0 shadow-md">
-          {{ aura_mark('w-5 h-5') }}
-        </div>
+        {{ aura_tile('w-10 h-10 rounded-xl shadow-md', 'w-5 h-5') }}
         <div>
           <p class="text-xs font-bold text-white">{{ user_salon.salon_name }} Live Booking Link</p>
           <p class="text-[11px] font-mono text-neutral-300">{{ request.host_url.rstrip('/') }}/b/<span class="text-neon-cyan font-bold">{{ user_salon.booking_slug }}</span></p>

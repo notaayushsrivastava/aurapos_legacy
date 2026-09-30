@@ -27,6 +27,20 @@ TRIAL_DAYS = 14
 # Team seat limit per tier (None = unlimited), including the primary owner account
 TIER_SEAT_LIMITS = {"free": 1, "pro": 2, "studio": None}
 
+# Concurrent active POS billing terminal limit per tier (None = unlimited)
+TIER_TERMINAL_LIMITS = {"free": 1, "pro": 3, "studio": None}
+
+
+def get_terminal_limit(tier):
+    """Return max concurrent active POS billing terminals allowed for a tier (None = unlimited)."""
+    t = (tier or "free").strip().lower()
+    if "studio" in t:
+        return None
+    if "pro" in t:
+        return 3
+    return 1
+
+
 # Purchaseable plan ids accepted by /create-subscription & /verify-subscription.
 # `salons.plan` always stores the pure tier (pro/studio) while `billing_cycle`
 # keeps the billing period (monthly/yearly) separate — this keeps tier gating,
@@ -251,8 +265,33 @@ def ensure_schema_upgrades():
     subs_columns = {r["name"] for r in cur.execute("PRAGMA table_info(subscriptions)").fetchall()}
     if subs_columns and "billing_cycle" not in subs_columns:
         cur.execute("ALTER TABLE subscriptions ADD COLUMN billing_cycle TEXT NOT NULL DEFAULT 'monthly'")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS terminal_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salon_id INTEGER NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            tab_id TEXT NOT NULL,
+            account_id INTEGER DEFAULT 0,
+            account_name TEXT DEFAULT '',
+            last_heartbeat INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS terminal_drafts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            salon_id INTEGER NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            terminal_name TEXT DEFAULT '',
+            cart_data TEXT NOT NULL DEFAULT '{}',
+            updated_by_account_id INTEGER DEFAULT 0,
+            updated_by_name TEXT DEFAULT '',
+            updated_at INTEGER NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
+
 
 
 import secrets
@@ -1498,6 +1537,321 @@ class BillRepository:
     def seed_defaults_if_empty(self, account_id):
         # Cleared placeholder bills per user specification
         pass
+
+
+class TerminalRepository:
+    def __init__(self):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS terminal_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salon_id INTEGER NOT NULL,
+                terminal_id INTEGER NOT NULL,
+                tab_id TEXT NOT NULL,
+                account_id INTEGER DEFAULT 0,
+                account_name TEXT DEFAULT '',
+                last_heartbeat INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS terminal_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salon_id INTEGER NOT NULL,
+                terminal_id INTEGER NOT NULL,
+                terminal_name TEXT DEFAULT '',
+                cart_data TEXT NOT NULL DEFAULT '{}',
+                updated_by_account_id INTEGER DEFAULT 0,
+                updated_by_name TEXT DEFAULT '',
+                updated_at INTEGER NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+
+    def clean_stale_sessions(self, timeout_seconds=18):
+        """Purge terminal sessions that haven't sent a heartbeat within timeout."""
+        threshold = int(datetime.now().timestamp()) - timeout_seconds
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM terminal_sessions WHERE last_heartbeat < ?", (threshold,))
+        conn.commit()
+        conn.close()
+
+    def get_active_sessions(self, salon_id):
+        self.clean_stale_sessions()
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT terminal_id, tab_id, account_id, account_name, last_heartbeat, created_at "
+            "FROM terminal_sessions WHERE salon_id = ? ORDER BY terminal_id ASC",
+            (salon_id,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def heartbeat(self, salon_id, terminal_id, tab_id, account_id=0, account_name="", plan="free", open_terminal_ids=None):
+        self.clean_stale_sessions()
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        limit = get_terminal_limit(plan)
+
+        # Normalize open_terminal_ids
+        clean_open_ids = set()
+        if open_terminal_ids and isinstance(open_terminal_ids, (list, set, tuple)):
+            for oid in open_terminal_ids:
+                try:
+                    clean_open_ids.add(int(oid))
+                except (ValueError, TypeError):
+                    pass
+        clean_open_ids.add(terminal_id)
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        # 1. Check if another active tab already holds this specific active terminal_id
+        other_holder = cur.execute(
+            "SELECT tab_id, account_name FROM terminal_sessions WHERE salon_id = ? AND terminal_id = ? AND tab_id != ?",
+            (salon_id, terminal_id, tab_id)
+        ).fetchone()
+
+        if other_holder:
+            conn.close()
+            active = self.get_active_sessions(salon_id)
+            return {
+                "allowed": False,
+                "reason": "in_use",
+                "limit": limit,
+                "tier": plan,
+                "terminal_id": terminal_id,
+                "holder_tab": other_holder["tab_id"],
+                "holder_name": other_holder["account_name"] or "Another window",
+                "active_terminals": active,
+                "message": f"Terminal #{terminal_id} is currently active in another browser tab."
+            }
+
+        # 2. Check total distinct terminals held by OTHER tabs
+        other_terms = cur.execute(
+            "SELECT DISTINCT terminal_id FROM terminal_sessions WHERE salon_id = ? AND tab_id != ?",
+            (salon_id, tab_id)
+        ).fetchall()
+        other_terminal_ids = {r["terminal_id"] for r in other_terms}
+
+        # If another tab holds any of this tab's secondary open_terminal_ids, remove them from this tab
+        clean_open_ids = {oid for oid in clean_open_ids if oid not in other_terminal_ids}
+        clean_open_ids.add(terminal_id)
+
+        # 3. Check if total distinct terminals would exceed limit
+        if limit is not None:
+            tier_label = "Free Tier" if limit == 1 else f"Pro Tier (Max {limit})"
+            # If other tabs already consume all available slots:
+            if len(other_terminal_ids) >= limit:
+                conn.close()
+                active = self.get_active_sessions(salon_id)
+                return {
+                    "allowed": False,
+                    "reason": "limit_reached",
+                    "limit": limit,
+                    "tier": plan,
+                    "terminal_id": terminal_id,
+                    "active_terminals": active,
+                    "message": f"{tier_label} limit reached ({len(other_terminal_ids)}/{limit} active terminals across tabs). Upgrade your plan to open more terminals in parallel."
+                }
+
+            # If this tab requested more terminals than remaining capacity, trim to fit
+            allowed_slots = limit - len(other_terminal_ids)
+            if len(clean_open_ids) > allowed_slots:
+                trimmed = {terminal_id}
+                for oid in sorted(clean_open_ids):
+                    if len(trimmed) >= allowed_slots:
+                        break
+                    trimmed.add(oid)
+                clean_open_ids = trimmed
+
+        # 4. Synchronize terminal_sessions for this tab_id
+        # Delete any terminal sessions for this tab that are no longer in clean_open_ids
+        cur.execute(
+            f"DELETE FROM terminal_sessions WHERE salon_id = ? AND tab_id = ? AND terminal_id NOT IN ({','.join(['?']*len(clean_open_ids))})",
+            [salon_id, tab_id] + list(clean_open_ids)
+        )
+
+        # Insert or update each terminal in clean_open_ids
+        for oid in clean_open_ids:
+            existing = cur.execute(
+                "SELECT id FROM terminal_sessions WHERE salon_id = ? AND tab_id = ? AND terminal_id = ?",
+                (salon_id, tab_id, oid)
+            ).fetchone()
+            if existing:
+                cur.execute(
+                    "UPDATE terminal_sessions SET last_heartbeat = ?, account_id = ?, account_name = ? WHERE id = ?",
+                    (now, account_id, account_name, existing["id"])
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO terminal_sessions (salon_id, terminal_id, tab_id, account_id, account_name, last_heartbeat, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (salon_id, oid, tab_id, account_id, account_name, now, now)
+                )
+
+        conn.commit()
+        conn.close()
+        active = self.get_active_sessions(salon_id)
+        return {
+            "allowed": True,
+            "limit": limit,
+            "terminal_id": terminal_id,
+            "open_terminals": sorted(list(clean_open_ids)),
+            "active_terminals": active
+        }
+
+    def takeover_terminal(self, salon_id, terminal_id, tab_id, account_id=0, account_name="", plan="free"):
+        """Forcibly reassign terminal_id to this tab_id, releasing any prior holder."""
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        limit = get_terminal_limit(plan)
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM terminal_sessions WHERE salon_id = ? AND terminal_id = ?",
+            (salon_id, terminal_id)
+        )
+        cur.execute(
+            "DELETE FROM terminal_sessions WHERE salon_id = ? AND tab_id = ?",
+            (salon_id, tab_id)
+        )
+        cur.execute(
+            "INSERT INTO terminal_sessions (salon_id, terminal_id, tab_id, account_id, account_name, last_heartbeat, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (salon_id, terminal_id, tab_id, account_id, account_name, now, now)
+        )
+        conn.commit()
+        conn.close()
+        active = self.get_active_sessions(salon_id)
+        return {"allowed": True, "limit": limit, "terminal_id": terminal_id, "active_terminals": active}
+
+    def release_session(self, salon_id, tab_id, terminal_id=None):
+        conn = get_db()
+        cur = conn.cursor()
+        if terminal_id:
+            try:
+                t_id = int(terminal_id)
+            except (ValueError, TypeError):
+                t_id = 1
+            cur.execute(
+                "DELETE FROM terminal_sessions WHERE salon_id = ? AND tab_id = ? AND terminal_id = ?",
+                (salon_id, tab_id, t_id)
+            )
+        else:
+            cur.execute(
+                "DELETE FROM terminal_sessions WHERE salon_id = ? AND tab_id = ?",
+                (salon_id, tab_id)
+            )
+        conn.commit()
+        conn.close()
+        return True
+
+    # --- Studio Draft Cloud Sync Methods ---
+    def save_draft(self, salon_id, terminal_id, terminal_name, cart_data, account_id=0, account_name=""):
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        if isinstance(cart_data, (dict, list)):
+            cart_json = json.dumps(cart_data)
+        else:
+            cart_json = str(cart_data)
+
+        conn = get_db()
+        cur = conn.cursor()
+        existing = cur.execute(
+            "SELECT id FROM terminal_drafts WHERE salon_id = ? AND terminal_id = ?",
+            (salon_id, terminal_id)
+        ).fetchone()
+
+        if existing:
+            cur.execute(
+                "UPDATE terminal_drafts SET terminal_name = ?, cart_data = ?, updated_by_account_id = ?, updated_by_name = ?, updated_at = ? "
+                "WHERE salon_id = ? AND terminal_id = ?",
+                (terminal_name, cart_json, account_id, account_name, now, salon_id, terminal_id)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO terminal_drafts (salon_id, terminal_id, terminal_name, cart_data, updated_by_account_id, updated_by_name, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (salon_id, terminal_id, terminal_name, cart_json, account_id, account_name, now)
+            )
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_drafts(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT terminal_id, terminal_name, cart_data, updated_by_account_id, updated_by_name, updated_at "
+            "FROM terminal_drafts WHERE salon_id = ? ORDER BY terminal_id ASC",
+            (salon_id,)
+        ).fetchall()
+        conn.close()
+        drafts = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["cart_data"] = json.loads(d["cart_data"])
+            except Exception:
+                d["cart_data"] = {}
+            drafts.append(d)
+        return drafts
+
+    def get_draft(self, salon_id, terminal_id):
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            t_id = int(terminal_id)
+        except (ValueError, TypeError):
+            t_id = 1
+        row = cur.execute(
+            "SELECT terminal_id, terminal_name, cart_data, updated_by_account_id, updated_by_name, updated_at "
+            "FROM terminal_drafts WHERE salon_id = ? AND terminal_id = ?",
+            (salon_id, t_id)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["cart_data"] = json.loads(d["cart_data"])
+        except Exception:
+            d["cart_data"] = {}
+        return d
+
+    def delete_draft(self, salon_id, terminal_id):
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            t_id = int(terminal_id)
+        except (ValueError, TypeError):
+            t_id = 1
+        cur.execute(
+            "DELETE FROM terminal_drafts WHERE salon_id = ? AND terminal_id = ?",
+            (salon_id, t_id)
+        )
+        conn.commit()
+        conn.close()
+        return True
 
 
 class CustomerRepository:

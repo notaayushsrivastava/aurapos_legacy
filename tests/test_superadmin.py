@@ -1,12 +1,22 @@
 import unittest
 import json
-from app import app, ADMIN_USER, ADMIN_PASSWORD
+from app import app, ADMIN_USER, ADMIN_PASSWORD, adminRepo
 
 class TestSuperAdmin(unittest.TestCase):
     def setUp(self):
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
         self.client = app.test_client()
+        try:
+            adminRepo.set_setting("platform_maintenance", json.dumps({"active": False, "message": ""}))
+        except Exception:
+            pass
+
+    def tearDown(self):
+        try:
+            adminRepo.set_setting("platform_maintenance", json.dumps({"active": False, "message": ""}))
+        except Exception:
+            pass
 
     def set_admin_session(self):
         with self.client.session_transaction() as sess:

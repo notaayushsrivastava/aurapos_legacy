@@ -36,3 +36,13 @@
   {{ aura_mark(mark_cls) }}
 </span>
 {%- endmacro %}
+
+
+{# Full brand mark + wordmark lockup #}
+{% macro aura_brand(tile_cls='w-9 h-9', mark_cls='w-5 h-5', wordmark_size='text-lg', accent_cls='text-neon-cyan', gap_cls='gap-2.5') -%}
+<span class="inline-flex items-center {{ gap_cls }}">
+  {{ aura_tile(tile_cls, mark_cls) }}
+  {{ aura_wordmark(wordmark_size, accent_cls) }}
+</span>
+{%- endmacro %}
+
