@@ -1,5 +1,6 @@
 import unittest
 import json
+from unittest.mock import patch
 from app import app, ADMIN_USER, ADMIN_PASSWORD, adminRepo
 
 class TestSuperAdmin(unittest.TestCase):
@@ -96,7 +97,6 @@ class TestSuperAdmin(unittest.TestCase):
         self.assertTrue(data.get('success'))
         self.assertEqual(data.get('redirect_url'), '/dashboard')
 
-        # Test Exit Impersonation
         res_exit = self.client.get('/admin/exit-impersonation', follow_redirects=False)
         self.assertEqual(res_exit.status_code, 302)
         self.assertEqual(res_exit.headers.get('Location'), '/admin/')
@@ -111,6 +111,7 @@ class TestSuperAdmin(unittest.TestCase):
         })
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
+
     def test_admin_public_toggle(self):
         self.set_admin_session()
         res = self.client.post('/admin/public-toggle')
@@ -119,44 +120,55 @@ class TestSuperAdmin(unittest.TestCase):
         self.assertTrue(data.get('success'))
         self.assertIn('accepting_public', data)
 
-    def test_platform_status_and_maintenance_lockdown(self):
+    @patch.object(adminRepo, "add_audit_log")
+    @patch.object(adminRepo, "set_setting")
+    @patch.object(adminRepo, "get_setting")
+    def test_platform_status_and_maintenance_lockdown(self, mock_get_setting, mock_set_setting, mock_audit_log):
         self.set_admin_session()
-        # Enable maintenance mode
+        state = {"active": False, "message": ""}
+
+        def fake_get_setting(key, default=None):
+            if key == "platform_maintenance":
+                return json.dumps(state)
+            return default
+
+        def fake_set_setting(key, value):
+            if key == "platform_maintenance":
+                state.clear()
+                state.update(json.loads(value))
+            return True
+
+        mock_get_setting.side_effect = fake_get_setting
+        mock_set_setting.side_effect = fake_set_setting
+
         res_maint = self.client.post('/admin/maintenance-toggle', json={
             'active': True,
             'message': 'Scheduled database upgrades in progress.'
         })
         self.assertEqual(res_maint.status_code, 200)
 
-        # Check platform status API
         res_status = self.client.get('/api/platform-status')
         self.assertEqual(res_status.status_code, 200)
         self.assertTrue(res_status.get_json()['maintenance']['active'])
 
-        # Regular unauthenticated client gets 503 maintenance page
         reg_client = app.test_client()
         res_reg = reg_client.get('/dashboard')
         self.assertEqual(res_reg.status_code, 503)
         self.assertIn(b"System Under Maintenance", res_reg.data)
 
-        # Regular client API request gets 503 JSON
         res_reg_api = reg_client.get('/api/bills')
         self.assertEqual(res_reg_api.status_code, 503)
         self.assertTrue(res_reg_api.get_json().get('maintenance'))
 
-        # SuperAdmin is exempt and can access console
         res_admin = self.client.get('/admin/')
         self.assertEqual(res_admin.status_code, 200)
 
-        # Disable maintenance mode
         res_off = self.client.post('/admin/maintenance-toggle', json={'active': False, 'message': ''})
         self.assertEqual(res_off.status_code, 200)
 
-        # Regular client access restored
         res_restored = reg_client.get('/api/platform-status')
         self.assertEqual(res_restored.status_code, 200)
         self.assertFalse(res_restored.get_json()['maintenance']['active'])
 
 if __name__ == '__main__':
     unittest.main()
-
