@@ -377,6 +377,180 @@ def delete_logo_from_storage(salon_id):
         _warn(f"storage: logo delete for salon {salon_id} failed: {exc}")
 
 
+class TerminalRepository:
+    """Persistent multi-terminal state backed by Supabase Data API.
+
+    Vercel functions do not have a writable persistent project filesystem, so
+    terminal sessions and Studio drafts are stored in Supabase.
+    """
+
+    def __init__(self):
+        # Tables are provisioned by Supabase migrations.
+        pass
+
+    def clean_stale_sessions(self, timeout_seconds=18):
+        threshold = int(datetime.now().timestamp()) - timeout_seconds
+        _sb().table("terminal_sessions").delete().lt("last_heartbeat", threshold).execute()
+
+    def get_active_sessions(self, salon_id):
+        self.clean_stale_sessions()
+        res = (_sb().table("terminal_sessions")
+               .select("terminal_id,tab_id,account_id,account_name,last_heartbeat,created_at")
+               .eq("salon_id", salon_id).order("terminal_id").execute())
+        return list(res.data or [])
+
+    def heartbeat(self, salon_id, terminal_id, tab_id, account_id=0, account_name="", plan="free", open_terminal_ids=None):
+        self.clean_stale_sessions()
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        limit = get_terminal_limit(plan)
+
+        clean_open_ids = set()
+        if isinstance(open_terminal_ids, (list, set, tuple)):
+            for oid in open_terminal_ids:
+                try:
+                    clean_open_ids.add(int(oid))
+                except (ValueError, TypeError):
+                    pass
+        clean_open_ids.add(terminal_id)
+
+        sb = _sb()
+        holder = (sb.table("terminal_sessions").select("tab_id,account_name")
+                  .eq("salon_id", salon_id).eq("terminal_id", terminal_id)
+                  .neq("tab_id", tab_id).limit(1).execute())
+        other_holder = (holder.data or [None])[0]
+        if other_holder:
+            return {
+                "allowed": False, "reason": "in_use", "limit": limit, "tier": plan,
+                "terminal_id": terminal_id, "holder_tab": other_holder.get("tab_id"),
+                "holder_name": other_holder.get("account_name") or "Another window",
+                "active_terminals": self.get_active_sessions(salon_id),
+                "message": f"Terminal #{terminal_id} is currently active in another browser tab."
+            }
+
+        other_rows = (sb.table("terminal_sessions").select("terminal_id")
+                      .eq("salon_id", salon_id).neq("tab_id", tab_id).execute())
+        other_terminal_ids = {int(r["terminal_id"]) for r in (other_rows.data or [])}
+        clean_open_ids = {oid for oid in clean_open_ids if oid not in other_terminal_ids}
+        clean_open_ids.add(terminal_id)
+
+        if limit is not None:
+            tier_label = "Free Tier" if limit == 1 else f"Pro Tier (Max {limit})"
+            if len(other_terminal_ids) >= limit:
+                return {
+                    "allowed": False, "reason": "limit_reached", "limit": limit,
+                    "tier": plan, "terminal_id": terminal_id,
+                    "active_terminals": self.get_active_sessions(salon_id),
+                    "message": f"{tier_label} limit reached ({len(other_terminal_ids)}/{limit} active terminals across tabs). Upgrade your plan to open more terminals in parallel."
+                }
+            allowed_slots = limit - len(other_terminal_ids)
+            if len(clean_open_ids) > allowed_slots:
+                trimmed = {terminal_id}
+                for oid in sorted(clean_open_ids):
+                    if len(trimmed) >= allowed_slots:
+                        break
+                    trimmed.add(oid)
+                clean_open_ids = trimmed
+
+        existing_res = (sb.table("terminal_sessions").select("id,terminal_id")
+                        .eq("salon_id", salon_id).eq("tab_id", tab_id).execute())
+        desired = set(clean_open_ids)
+        for row in (existing_res.data or []):
+            if int(row["terminal_id"]) not in desired:
+                sb.table("terminal_sessions").delete().eq("id", row["id"]).execute()
+
+        for oid in desired:
+            existing = (sb.table("terminal_sessions").select("id")
+                        .eq("salon_id", salon_id).eq("tab_id", tab_id)
+                        .eq("terminal_id", oid).limit(1).execute())
+            if existing.data:
+                sb.table("terminal_sessions").update({
+                    "last_heartbeat": now, "account_id": account_id, "account_name": account_name,
+                }).eq("id", existing.data[0]["id"]).execute()
+            else:
+                sb.table("terminal_sessions").insert({
+                    "salon_id": salon_id, "terminal_id": oid, "tab_id": tab_id,
+                    "account_id": account_id, "account_name": account_name,
+                    "last_heartbeat": now, "created_at": now,
+                }).execute()
+
+        return {
+            "allowed": True, "limit": limit, "terminal_id": terminal_id,
+            "open_terminals": sorted(clean_open_ids),
+            "active_terminals": self.get_active_sessions(salon_id)
+        }
+
+    def takeover_terminal(self, salon_id, terminal_id, tab_id, account_id=0, account_name="", plan="free"):
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        limit = get_terminal_limit(plan)
+        sb = _sb()
+        sb.table("terminal_sessions").delete().eq("salon_id", salon_id).eq("terminal_id", terminal_id).execute()
+        sb.table("terminal_sessions").delete().eq("salon_id", salon_id).eq("tab_id", tab_id).execute()
+        sb.table("terminal_sessions").insert({
+            "salon_id": salon_id, "terminal_id": terminal_id, "tab_id": tab_id,
+            "account_id": account_id, "account_name": account_name,
+            "last_heartbeat": now, "created_at": now,
+        }).execute()
+        return {"allowed": True, "limit": limit, "terminal_id": terminal_id,
+                "active_terminals": self.get_active_sessions(salon_id)}
+
+    def release_session(self, salon_id, tab_id, terminal_id=None):
+        q = _sb().table("terminal_sessions").delete().eq("salon_id", salon_id).eq("tab_id", tab_id)
+        if terminal_id:
+            try:
+                terminal_id = int(terminal_id)
+            except (ValueError, TypeError):
+                terminal_id = 1
+            q = q.eq("terminal_id", terminal_id)
+        q.execute()
+        return True
+
+    def save_draft(self, salon_id, terminal_id, terminal_name, cart_data, account_id=0, account_name=""):
+        now = int(datetime.now().timestamp())
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        payload = {
+            "salon_id": salon_id, "terminal_id": terminal_id, "terminal_name": terminal_name,
+            "cart_data": cart_data if isinstance(cart_data, (dict, list)) else str(cart_data),
+            "updated_by_account_id": account_id, "updated_by_name": account_name, "updated_at": now,
+        }
+        _sb().table("terminal_drafts").upsert(payload, on_conflict="salon_id,terminal_id").execute()
+        return True
+
+    def get_drafts(self, salon_id):
+        res = (_sb().table("terminal_drafts")
+               .select("terminal_id,terminal_name,cart_data,updated_by_account_id,updated_by_name,updated_at")
+               .eq("salon_id", salon_id).order("terminal_id").execute())
+        return list(res.data or [])
+
+    def get_draft(self, salon_id, terminal_id):
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        res = (_sb().table("terminal_drafts")
+               .select("terminal_id,terminal_name,cart_data,updated_by_account_id,updated_by_name,updated_at")
+               .eq("salon_id", salon_id).eq("terminal_id", terminal_id).limit(1).execute())
+        return (res.data or [None])[0]
+
+    def delete_draft(self, salon_id, terminal_id):
+        try:
+            terminal_id = int(terminal_id)
+        except (ValueError, TypeError):
+            terminal_id = 1
+        _sb().table("terminal_drafts").delete().eq("salon_id", salon_id).eq("terminal_id", terminal_id).execute()
+        return True
+
+
 # ================= REPOSITORIES =================
 
 class AuthorizationRepository:
