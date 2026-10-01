@@ -61,9 +61,6 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
-  <!-- Socket.IO Client for Real-time Events -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
   {% set is_auth_app_page = request.path.rstrip('/') in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports', '/upgrade'] or request.path.startswith('/admin') %}
   {% set is_auth_session = (session.get('id') is not none) or (session.get('is_admin') is not none) %}
   {% set allow_platform_broadcast = is_auth_app_page and is_auth_session %}
@@ -794,98 +791,61 @@
         },
 
         initRealtime() {
-          if (window.__IS_AUTH_PAGE__) {
-            this.calculateTimeAgo();
+          if (!window.__IS_AUTH_PAGE__) return;
 
-            // Show announcement if active and not previously dismissed for this specific timestamp
-            if (this.announcement.active && this.announcement.message) {
-              const dismissedKey = 'aurapos_announcement_' + this.announcement.updated_at;
-              if (sessionStorage.getItem(dismissedKey) !== 'dismissed') {
-                setTimeout(() => {
-                  this.announcement.visible = true;
-                  this.playNotificationChime();
-                  this.refreshIcons();
-                }, 600);
-              }
+          this.calculateTimeAgo();
+
+          // Show an announcement if active and not previously dismissed for this timestamp.
+          if (this.announcement.active && this.announcement.message) {
+            const dismissedKey = 'aurapos_announcement_' + this.announcement.updated_at;
+            if (sessionStorage.getItem(dismissedKey) !== 'dismissed') {
+              setTimeout(() => {
+                this.announcement.visible = true;
+                this.playNotificationChime();
+                this.refreshIcons();
+              }, 600);
             }
           }
 
-          // Initialize Socket.IO connection for real-time maintenance and announcements
-          this.initSocket();
+          // Vercel serverless functions do not benefit from a persistent Socket.IO
+          // connection. Poll infrequently instead, avoiding a connection + heartbeat
+          // on every authenticated browser tab.
+          this.refreshPlatformStatus();
+          this.platformStatusTimer = setInterval(() => {
+            this.refreshPlatformStatus();
+          }, 60000);
         },
 
-        initSocket() {
-          if (typeof io !== 'function') return;
-
+        async refreshPlatformStatus() {
           try {
-            const socket = io({
-              transports: ['polling'],
-              upgrade: false,
-              reconnectionAttempts: 20,
-              reconnectionDelay: 2000
+            const res = await fetch('/api/platform-status', {
+              headers: { 'Accept': 'application/json' },
+              cache: 'no-store'
             });
+            if (!res.ok) return;
+            const json = await res.json();
 
-            socket.on('connect', () => {
-              // Socket connection established
-            });
-
-            socket.on('maintenance_update', (data) => {
-              if (!data) return;
-              this.maintenance.active = !!data.active;
-              if (data.message) this.maintenance.message = data.message;
-              this.refreshIcons();
-            });
-
-            if (window.__IS_AUTH_PAGE__) {
-              socket.on('announcement_update', (data) => {
-                if (!data) return;
-                this.announcement.message = data.message || '';
-                this.announcement.type = data.type || 'info';
-                this.announcement.active = !!data.active;
-                this.announcement.updated_at = data.updated_at || Math.floor(Date.now() / 1000);
-                this.calculateTimeAgo();
-
-                if (this.announcement.active && this.announcement.message) {
-                  // Instantly pop notification from right of the screen
-                  this.announcement.visible = true;
-                  this.playNotificationChime();
-                  this.refreshIcons();
-                } else {
-                  // Slide out to the right
-                  this.announcement.visible = false;
-                }
-              });
+            if (json.maintenance) {
+              this.maintenance.active = !!json.maintenance.active;
+              if (json.maintenance.message) this.maintenance.message = json.maintenance.message;
             }
-          } catch (err) {
-            console.warn('Socket connection fallback:', err);
-          }
 
-          // Background fallback polling every 25 seconds
-          setInterval(async () => {
-            try {
-              const res = await fetch('/api/platform-status');
-              if (res.ok) {
-                const json = await res.json();
-                if (json.maintenance) {
-                  this.maintenance.active = !!json.maintenance.active;
-                  if (json.maintenance.message) this.maintenance.message = json.maintenance.message;
-                }
-                if (window.__IS_AUTH_PAGE__ && json.announcement && json.announcement.updated_at !== this.announcement.updated_at) {
-                  this.announcement.message = json.announcement.message || '';
-                  this.announcement.type = json.announcement.type || 'info';
-                  this.announcement.active = !!json.announcement.active;
-                  this.announcement.updated_at = json.announcement.updated_at;
-                  this.calculateTimeAgo();
-                  if (this.announcement.active && this.announcement.message) {
-                    this.announcement.visible = true;
-                    this.refreshIcons();
-                  } else {
-                    this.announcement.visible = false;
-                  }
-                }
+            if (json.announcement && json.announcement.updated_at !== this.announcement.updated_at) {
+              this.announcement.message = json.announcement.message || '';
+              this.announcement.type = json.announcement.type || 'info';
+              this.announcement.active = !!json.announcement.active;
+              this.announcement.updated_at = json.announcement.updated_at;
+              this.calculateTimeAgo();
+
+              if (this.announcement.active && this.announcement.message) {
+                this.announcement.visible = true;
+                this.playNotificationChime();
+                this.refreshIcons();
+              } else {
+                this.announcement.visible = false;
               }
-            } catch(e) {}
-          }, 25000);
+            }
+          } catch (e) {}
         },
 
         dismissAnnouncement() {
