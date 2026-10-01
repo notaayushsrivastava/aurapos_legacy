@@ -45,8 +45,9 @@
         </div>
       </template>
 
-      <!-- + New Terminal Button -->
+      <!-- + New Terminal Button (Limit 3 terminals per tab) -->
       <button type="button"
+              x-show="terminals.length < 3"
               @click="requestNewTerminal()"
               class="px-3 py-2 rounded-xl border border-dashed border-neutral-300 dark:border-neutral-700 hover:border-violet-500 dark:hover:border-neon-cyan hover:bg-violet-50/50 dark:hover:bg-violet-950/20 text-neutral-600 dark:text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer">
         <i data-lucide="plus" class="w-3.5 h-3.5"></i>
@@ -268,7 +269,7 @@
               <template x-if="customerSearching">
                 <p class="px-3 py-2.5 text-[11px] text-neutral-400">Searching customers…</p>
               </template>
-              <template x-for="c in customerResults" :key="c.id">
+              <template x-for="(c, idx) in customerResults" :key="c.id || idx">
                 <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
                   <span class="min-w-0">
                     <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
@@ -1221,6 +1222,11 @@
       },
 
       async requestNewTerminal() {
+        if (this.terminals.length >= 3) {
+          if (window.uiToast) window.uiToast("Maximum of 3 concurrent terminals allowed per browser tab.", "warning");
+          return;
+        }
+
         if (this.tier === 'free') {
           this.upgradeModalTitle = "Free Plan: 1 Terminal Limit";
           this.upgradeModalMessage = "The Free Plan allows only 1 active POS terminal across your salon. Upgrade to Pro for up to 3 parallel terminals with device cookie caching, or Studio for unlimited cloud-synced registers.";
@@ -1489,6 +1495,7 @@
                 const cart = d.cart_data || {};
                 let term = this.terminals.find(t => t.id === tId);
                 if (!term) {
+                  if (this.terminals.length >= 3) continue;
                   term = {
                     id: tId,
                     name: d.terminal_name || `Terminal #${String(tId).padStart(2, '0')}`,
@@ -1616,75 +1623,16 @@
           } catch (e) {}
         });
 
-        // Socket.IO for Studio real-time multi-device sync
-        if (window.io && this.tier === 'studio') {
-          try {
-            const socket = io({
-              transports: ['polling'],
-              upgrade: false
-            });
-            socket.on('terminal_sync', (payload) => {
-              if (payload && payload.terminal_id) {
-                const tId = Number(payload.terminal_id);
-                let term = this.terminals.find(t => t.id === tId);
-                if (!term) {
-                  term = {
-                    id: tId,
-                    name: payload.terminal_name || `Terminal #${String(tId).padStart(2, '0')}`,
-                    billItems: [],
-                    customer: { name: '', phone: '' },
-                    customerQuery: '',
-                    discountType: 'percent',
-                    discountValue: 0,
-                    selectedPaymentMode: 'UPI',
-                    isSplitMode: false,
-                    splitRows: []
-                  };
-                  this.terminals.push(term);
-                }
-                if (payload.cart_data) {
-                  term.billItems = payload.cart_data.items || [];
-                  term.customer = payload.cart_data.customer || { name: '', phone: '' };
-                  term.customerQuery = payload.cart_data.customerQuery || (term.customer && term.customer.name) || '';
-                  term.discountType = payload.cart_data.discountType || 'percent';
-                  term.discountValue = payload.cart_data.discountValue || 0;
-                  term.selectedPaymentMode = payload.cart_data.selectedPaymentMode || 'UPI';
-                  term.isSplitMode = payload.cart_data.isSplitMode || false;
-                  term.splitRows = payload.cart_data.splitRows || [];
-                  if (this.activeTerminalId === tId) {
-                    this.restoreActiveTerminalState();
-                  }
-                }
-              }
-            });
-            socket.on('terminal_cleared', (payload) => {
-              if (payload && payload.terminal_id) {
-                const tId = Number(payload.terminal_id);
-                const term = this.terminals.find(t => t.id === tId);
-                if (term) {
-                  term.billItems = [];
-                  term.customer = { name: '', phone: '' };
-                  term.customerQuery = '';
-                  term.discountValue = 0;
-                  if (this.activeTerminalId === tId) {
-                    this.restoreActiveTerminalState();
-                  }
-                }
-              }
-            });
-          } catch (e) {}
-        }
-
         // Send immediate heartbeat
         await this.sendHeartbeat();
 
-        // Send recurring heartbeat every 6 seconds
+        // Send recurring heartbeat every 15 seconds (reduced compute overhead)
         clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = setInterval(() => {
           if (!this.tabBlocked) {
             this.sendHeartbeat();
           }
-        }, 6000);
+        }, 15000);
       },
 
       async sendHeartbeat() {
@@ -1876,7 +1824,12 @@
         this.customerSearchTimer = setTimeout(async () => {
           try {
             const res = await fetch('/api/customers/search?q=' + encodeURIComponent(q));
-            this.customerResults = res.ok ? await res.json() : [];
+            if (res.ok) {
+              const data = await res.json();
+              this.customerResults = Array.isArray(data) ? data : (Array.isArray(data.customers) ? data.customers : []);
+            } else {
+              this.customerResults = [];
+            }
           } catch (e) {
             console.log('Customer search failed:', e);
             this.customerResults = [];
