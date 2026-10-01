@@ -1626,13 +1626,13 @@
         // Send immediate heartbeat
         await this.sendHeartbeat();
 
-        // Send recurring heartbeat every 15 seconds (reduced compute overhead)
+        // Send recurring heartbeat every 30 seconds; the server keeps a 45s lease.
         clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = setInterval(() => {
           if (!this.tabBlocked) {
             this.sendHeartbeat();
           }
-        }, 15000);
+        }, 30000);
       },
 
       async sendHeartbeat() {
