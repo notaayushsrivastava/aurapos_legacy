@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 try:
     from dotenv import load_dotenv
@@ -225,11 +226,44 @@ reportRepo = ReportRepository()
 adminRepo = AdminRepository()
 terminalRepo = TerminalRepository()
 
+# Short-lived per-instance cache for settings/salon metadata. Vercel may reuse a
+# function instance across requests, so this avoids repeated Supabase round-trips
+# without making admin changes effectively stale.
+_SETTING_CACHE = {}
+_SALON_CACHE = {}
+_METADATA_CACHE_TTL = 10.0
+
+
+def _cached_setting(key, default=None):
+    now = time.monotonic()
+    hit = _SETTING_CACHE.get(key)
+    if hit and now - hit[0] < _METADATA_CACHE_TTL:
+        return hit[1]
+    try:
+        value = adminRepo.get_setting(key, default)
+    except Exception:
+        return default
+    _SETTING_CACHE[key] = (now, value)
+    return value
+
+
+def _cached_salon(salon_id):
+    now = time.monotonic()
+    hit = _SALON_CACHE.get(salon_id)
+    if hit and now - hit[0] < _METADATA_CACHE_TTL:
+        return hit[1]
+    try:
+        salon = authRepo.get_salon(salon_id)
+    except Exception:
+        return None
+    _SALON_CACHE[salon_id] = (now, salon)
+    return salon
+
 
 def is_maintenance_active():
     """Returns (active: bool, message: str) for the platform maintenance lock."""
     try:
-        maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        maint_raw = _cached_setting("platform_maintenance", "{}")
         if not maint_raw:
             return False, ""
         data = json.loads(maint_raw)
@@ -282,7 +316,7 @@ def public_signup_state():
     the ACCEPTING_PUBLIC environment default; if the setting cannot be read,
     the env default is used (fail-safe).
     """
-    val = adminRepo.get_setting(AdminRepository.SETTING_ACCEPTING_PUBLIC)
+    val = _cached_setting(AdminRepository.SETTING_ACCEPTING_PUBLIC)
     if val is None:
         return ACCEPTING_PUBLIC
     return str(val).strip().lower() == "true"
@@ -302,7 +336,7 @@ app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'false').lower() in 
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'salonbillingsoftware@gmail.com')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'ifqrgmhhvnaiqhto')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'salonbillingsoftware@gmail.com')
-app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+app.config["SESSION_REFRESH_EACH_REQUEST"] = False
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 mailer = Mail(app)
@@ -388,14 +422,14 @@ def inject_salon():
     """Expose current salon, tier helpers, impersonation state, global announcement and maintenance state."""
     announcement = {}
     try:
-        ann_raw = adminRepo.get_setting("platform_announcement", "{}")
+        ann_raw = _cached_setting("platform_announcement", "{}")
         announcement = json.loads(ann_raw) if ann_raw else {}
     except Exception:
         pass
 
     maintenance = {}
     try:
-        maint_raw = adminRepo.get_setting("platform_maintenance", "{}")
+        maint_raw = _cached_setting("platform_maintenance", "{}")
         maintenance = json.loads(maint_raw) if maint_raw else {}
     except Exception:
         pass
@@ -407,7 +441,7 @@ def inject_salon():
         "is_superadmin": bool(session.get("is_admin")),
     }
     if "id" in session:
-        salon = authRepo.get_salon(session["id"])
+        salon = _cached_salon(session["id"])
         plan = (salon.plan if salon else "") or ""
         tier = plan if plan in TIER_PLANS else "pro"
         res.update(dict(
