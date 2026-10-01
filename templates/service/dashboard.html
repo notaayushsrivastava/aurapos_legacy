@@ -54,16 +54,26 @@
           <i data-lucide="trending-up" class="w-4 h-4"></i>
         </div>
       </div>
-      <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.today_sales }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.today_sales) }}</span>
-        {% if dashboard_data.sales_delta is not none %}
-        <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.sales_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
-          {% if dashboard_data.sales_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
-          <span x-text="Math.abs({{ dashboard_data.sales_delta }}) + '%'"></span>
-        </span>
-        {% endif %}
+      
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="mt-3 space-y-2" x-cloak>
+        <div class="h-8 w-28 rounded-lg skeleton-box"></div>
+        <div class="h-3 w-40 rounded skeleton-box"></div>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">From {{ dashboard_data.today_bills }} closed invoices today</p>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading">
+        <div class="mt-3 flex items-baseline gap-2">
+          <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.today_sales }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.today_sales) }}</span>
+          {% if dashboard_data.sales_delta is not none %}
+          <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.sales_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
+            {% if dashboard_data.sales_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
+            <span x-text="Math.abs({{ dashboard_data.sales_delta }}) + '%'"></span>
+          </span>
+          {% endif %}
+        </div>
+        <p class="text-[11px] text-neutral-400 mt-1">From {{ dashboard_data.today_bills }} closed invoices today</p>
+      </div>
     </div>
     {% endif %}
 
@@ -75,11 +85,21 @@
           <i data-lucide="calendar-check" class="w-4 h-4"></i>
         </div>
       </div>
-      <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ appointments|length }}">{{ appointments|length }}</span>
-        <span class="text-[11px] font-medium text-violet-600 dark:text-neon-cyan">{{ appointments|selectattr('status', 'equalto', 'In Service')|list|length }} in service</span>
+
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="mt-3 space-y-2" x-cloak>
+        <div class="h-8 w-24 rounded-lg skeleton-box"></div>
+        <div class="h-3 w-36 rounded skeleton-box"></div>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">Live queue for {{ today_label }}</p>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading">
+        <div class="mt-3 flex items-baseline gap-2">
+          <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ appointments|length }}">{{ appointments|length }}</span>
+          <span class="text-[11px] font-medium text-violet-600 dark:text-neon-cyan">{{ appointments|selectattr('status', 'equalto', 'In Service')|list|length }} in service</span>
+        </div>
+        <p class="text-[11px] text-neutral-400 mt-1">Live queue for {{ today_label }}</p>
+      </div>
     </div>
 
     <!-- KPI 3: Avg Ticket Size (hidden for Billing Desk) -->
@@ -91,16 +111,26 @@
           <i data-lucide="receipt" class="w-4 h-4"></i>
         </div>
       </div>
-      <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.avg_ticket }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.avg_ticket) }}</span>
-        {% if dashboard_data.ticket_delta is not none %}
-        <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.ticket_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
-          {% if dashboard_data.ticket_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
-          <span x-text="Math.abs({{ dashboard_data.ticket_delta }}) + '%'"></span>
-        </span>
-        {% endif %}
+
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="mt-3 space-y-2" x-cloak>
+        <div class="h-8 w-28 rounded-lg skeleton-box"></div>
+        <div class="h-3 w-44 rounded skeleton-box"></div>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">Across {{ dashboard_data.today_bills }} closed invoice{{ 's' if dashboard_data.today_bills != 1 else '' }} today</p>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading">
+        <div class="mt-3 flex items-baseline gap-2">
+          <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.avg_ticket }}" data-prefix="₹">₹{{ "{:,}".format(dashboard_data.avg_ticket) }}</span>
+          {% if dashboard_data.ticket_delta is not none %}
+          <span class="text-[11px] font-bold flex items-center {{ 'text-emerald-600 dark:text-emerald-400' if dashboard_data.ticket_delta >= 0 else 'text-rose-500 dark:text-rose-400' }}">
+            {% if dashboard_data.ticket_delta >= 0 %}<i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i>{% else %}<i data-lucide="trending-down" class="w-3 h-3 mr-0.5"></i>{% endif %}
+            <span x-text="Math.abs({{ dashboard_data.ticket_delta }}) + '%'"></span>
+          </span>
+          {% endif %}
+        </div>
+        <p class="text-[11px] text-neutral-400 mt-1">Across {{ dashboard_data.today_bills }} closed invoice{{ 's' if dashboard_data.today_bills != 1 else '' }} today</p>
+      </div>
     </div>
     {% endif %}
 
@@ -112,11 +142,21 @@
           <i data-lucide="scissors" class="w-4 h-4"></i>
         </div>
       </div>
-      <div class="mt-3 flex items-baseline gap-2">
-        <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.active_staff }}">{{ dashboard_data.active_staff }}</span>
-        <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400" x-text="staffBookedToday() + ' booked today'"></span>
+
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="mt-3 space-y-2" x-cloak>
+        <div class="h-8 w-20 rounded-lg skeleton-box"></div>
+        <div class="h-3 w-40 rounded skeleton-box"></div>
       </div>
-      <p class="text-[11px] text-neutral-400 mt-1">Team members on the active roster</p>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading">
+        <div class="mt-3 flex items-baseline gap-2">
+          <span class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white" data-count="{{ dashboard_data.active_staff }}">{{ dashboard_data.active_staff }}</span>
+          <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400" x-text="staffBookedToday() + ' booked today'"></span>
+        </div>
+        <p class="text-[11px] text-neutral-400 mt-1">Team members on the active roster</p>
+      </div>
     </div>
 
   </div>
@@ -179,7 +219,24 @@
         </a>
       </div>
 
-      <div class="space-y-3">
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="space-y-3" x-cloak>
+        <template x-for="i in 3" :key="i">
+          <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl skeleton-box shrink-0"></div>
+              <div class="space-y-1.5">
+                <div class="h-3.5 w-28 rounded skeleton-box"></div>
+                <div class="h-2.5 w-44 rounded skeleton-box"></div>
+              </div>
+            </div>
+            <div class="w-16 h-7 rounded-lg skeleton-box shrink-0"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading" class="space-y-3">
         <template x-for="apt in todayAppointments" :key="apt.id">
           <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between gap-3">
             
@@ -210,6 +267,11 @@
 
           </div>
         </template>
+        <template x-if="todayAppointments.length === 0">
+          <div class="p-6 text-center text-xs text-neutral-400">
+            No appointments scheduled for today yet.
+          </div>
+        </template>
       </div>
     </div>
 
@@ -223,7 +285,24 @@
         <span class="text-xs font-mono-num text-emerald-500 font-bold">Live Sync</span>
       </div>
 
-      <div class="space-y-3">
+      <!-- Skeleton State -->
+      <div x-show="isPageLoading" class="space-y-3" x-cloak>
+        <template x-for="i in 3" :key="i">
+          <div class="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-7 h-7 rounded-lg skeleton-box shrink-0"></div>
+              <div class="space-y-1.5">
+                <div class="h-3 w-24 rounded skeleton-box"></div>
+                <div class="h-2 w-16 rounded skeleton-box"></div>
+              </div>
+            </div>
+            <div class="w-12 h-5 rounded skeleton-box shrink-0"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Real Data State -->
+      <div x-show="!isPageLoading" class="space-y-3">
         <template x-for="(staff, idx) in staffLeaderboard" :key="staff.name">
           <div class="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3 min-w-0">
@@ -276,7 +355,23 @@
             <th class="py-2.5 px-3 text-right">Receipt</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium">
+        <!-- Skeleton Rows -->
+        <tbody x-show="isPageLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/60" x-cloak>
+          <template x-for="i in 4" :key="i">
+            <tr>
+              <td class="py-3 px-3"><div class="h-3.5 w-16 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3"><div class="h-3.5 w-28 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3"><div class="h-3.5 w-36 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3"><div class="h-3.5 w-16 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3"><div class="h-4 w-12 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3"><div class="h-3.5 w-14 rounded skeleton-box"></div></td>
+              <td class="py-3 px-3 text-right"><div class="h-3.5 w-10 ml-auto rounded skeleton-box"></div></td>
+            </tr>
+          </template>
+        </tbody>
+
+        <!-- Real Data Rows -->
+        <tbody x-show="!isPageLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium">
           <template x-for="inv in recentInvoices" :key="inv.id">
             <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition-colors">
               <td class="py-3 px-3 font-mono-num font-bold text-neutral-900 dark:text-white" x-text="inv.id"></td>
@@ -309,11 +404,22 @@
 <script>
   function dashboardApp(dashData) {
     return {
+      isPageLoading: true,
       copiedLink: false,
 
       todayAppointments: (dashData && dashData.today_appointments) || [],
       staffLeaderboard: (dashData && dashData.staff_leaderboard) || [],
       recentInvoices: (dashData && dashData.recent_invoices) || [],
+
+      init() {
+        // Fast transition after layout mounts
+        setTimeout(() => {
+          this.isPageLoading = false;
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons();
+          });
+        }, 120);
+      },
 
       // Real count of staff who actually have bookings today
       staffBookedToday() {

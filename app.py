@@ -412,6 +412,7 @@ def inject_salon():
         tier = plan if plan in TIER_PLANS else "pro"
         res.update(dict(
             current_salon=salon,
+            salon=salon,
             tier=tier,
             is_studio=(tier == "studio"),
             is_pro=(tier == "pro"),
@@ -419,7 +420,7 @@ def inject_salon():
             TIER_PLANS=TIER_PLANS,
         ))
         return res
-    res.update(dict(current_salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS))
+    res.update(dict(current_salon=None, salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS))
     return res
 
 
@@ -650,7 +651,15 @@ def vanity_booking(slug):
 @app.route('/booking', methods=["GET"])
 @app.route('/booking/', methods=["GET"])
 def booking():
-    """Showcase demo salon booking page with features."""
+    """Showcase demo salon booking page with features, or redirect to vanity portal if salon_id is provided."""
+    salon_id = request.args.get("salon_id")
+    if salon_id:
+        try:
+            target_salon = authRepo.get_salon(int(salon_id))
+            if target_salon and target_salon.booking_slug:
+                return redirect(url_for('vanity_booking', slug=target_salon.booking_slug))
+        except (ValueError, TypeError):
+            pass
     user_salon = None
     if "id" in session:
         user_salon = authRepo.get_salon(session["id"])

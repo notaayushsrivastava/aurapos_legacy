@@ -19,7 +19,7 @@
 
     <!-- Actions -->
     <div class="flex items-center gap-2.5">
-      <a href="{{ url_for('booking') }}" target="_blank" 
+      <a href="/b/{{ (current_salon.booking_slug if (current_salon and current_salon.booking_slug) else (salon.booking_slug if (salon and salon.booking_slug) else 'demo')) }}" target="_blank" 
          class="px-3.5 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-colors">
         <i data-lucide="globe" class="w-3.5 h-3.5 text-violet-500"></i>
         <span>Client Booking Portal</span>
@@ -75,7 +75,35 @@
     <!-- Timeline Stream (8 Cols) -->
     <div class="lg:col-span-8 min-w-0 space-y-4">
       
-      <template x-for="apt in filteredAppointments" :key="apt.id">
+      <!-- Skeleton Stream Loader State -->
+      <div x-show="loading" class="space-y-4" x-cloak>
+        <template x-for="i in 4" :key="i">
+          <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 overflow-hidden relative">
+            <div class="flex items-start gap-4 flex-1">
+              <div class="w-14 h-14 rounded-2xl skeleton-box shrink-0"></div>
+              <div class="space-y-2 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="h-4 w-32 rounded skeleton-box"></div>
+                  <div class="h-4 w-16 rounded skeleton-box"></div>
+                </div>
+                <div class="h-3 w-44 rounded skeleton-box"></div>
+                <div class="flex items-center gap-4 mt-2">
+                  <div class="h-2.5 w-24 rounded skeleton-box"></div>
+                  <div class="h-2.5 w-20 rounded skeleton-box"></div>
+                </div>
+              </div>
+            </div>
+            <div class="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
+              <div class="h-8 w-24 rounded-xl skeleton-box"></div>
+              <div class="h-7 w-20 rounded-lg skeleton-box"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Real Appointments Stream -->
+      <div x-show="!loading" class="space-y-4">
+        <template x-for="apt in filteredAppointments" :key="apt.id">
         <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm hover:border-violet-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           
           <!-- Left: Time & Client Details -->
@@ -149,6 +177,7 @@
           <p class="text-xs text-neutral-400 mt-1">Select another status filter or book a new client.</p>
         </div>
       </template>
+      </div>
 
     </div>
 
@@ -159,7 +188,14 @@
       <div class="p-5 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-4">
         <h3 class="text-sm font-bold text-neutral-900 dark:text-white">Day Summary</h3>
         
-        <div class="space-y-2.5 text-xs">
+        <!-- Skeleton State -->
+        <div x-show="loading" class="space-y-2.5" x-cloak>
+          <div class="flex justify-between items-center"><div class="h-3.5 w-24 rounded skeleton-box"></div><div class="h-3.5 w-8 rounded skeleton-box"></div></div>
+          <div class="flex justify-between items-center"><div class="h-3.5 w-32 rounded skeleton-box"></div><div class="h-3.5 w-8 rounded skeleton-box"></div></div>
+          <div class="flex justify-between items-center"><div class="h-3.5 w-28 rounded skeleton-box"></div><div class="h-3.5 w-14 rounded skeleton-box"></div></div>
+        </div>
+
+        <div x-show="!loading" class="space-y-2.5 text-xs">
           <div class="flex justify-between text-neutral-500 dark:text-neutral-400">
             <span>Total Bookings:</span>
             <span class="font-bold text-neutral-900 dark:text-white" x-text="dayAppointments.length"></span>
@@ -175,7 +211,7 @@
         </div>
 
         <div class="pt-3 border-t border-neutral-100 dark:border-neutral-800">
-          <a href="{{ url_for('booking') }}" target="_blank" class="block w-full py-2.5 text-center rounded-xl bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-colors">
+          <a href="/b/{{ (current_salon.booking_slug if (current_salon and current_salon.booking_slug) else (salon.booking_slug if (salon and salon.booking_slug) else 'demo')) }}" target="_blank" class="block w-full py-2.5 text-center rounded-xl bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-colors">
             Preview Client Booking View &rarr;
           </a>
         </div>

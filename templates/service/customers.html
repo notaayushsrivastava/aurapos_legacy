@@ -75,7 +75,11 @@
             <i data-lucide="activity" class="w-4 h-4"></i>
           </div>
         </div>
-        <div class="space-y-0.5">
+        <div x-show="isPageLoading" class="space-y-1.5" x-cloak>
+          <div class="h-8 w-20 rounded skeleton-box"></div>
+          <div class="h-3 w-28 rounded skeleton-box"></div>
+        </div>
+        <div x-show="!isPageLoading" class="space-y-0.5">
           <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
             <span x-text="analytics.retention_rate"></span><span>%</span>
           </p>
@@ -94,7 +98,11 @@
             <i data-lucide="alert-triangle" class="w-4 h-4"></i>
           </div>
         </div>
-        <div class="space-y-0.5">
+        <div x-show="isPageLoading" class="space-y-1.5" x-cloak>
+          <div class="h-8 w-16 rounded skeleton-box"></div>
+          <div class="h-3 w-28 rounded skeleton-box"></div>
+        </div>
+        <div x-show="!isPageLoading" class="space-y-0.5">
           <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
              x-text="analytics.churning_count"></p>
           <p class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
@@ -112,7 +120,11 @@
             <i data-lucide="user-x" class="w-4 h-4"></i>
           </div>
         </div>
-        <div class="space-y-0.5">
+        <div x-show="isPageLoading" class="space-y-1.5" x-cloak>
+          <div class="h-8 w-16 rounded skeleton-box"></div>
+          <div class="h-3 w-28 rounded skeleton-box"></div>
+        </div>
+        <div x-show="!isPageLoading" class="space-y-0.5">
           <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
              x-text="analytics.churned_count"></p>
           <p class="text-[11px] text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
@@ -130,7 +142,11 @@
             <i data-lucide="wallet" class="w-4 h-4"></i>
           </div>
         </div>
-        <div class="space-y-0.5">
+        <div x-show="isPageLoading" class="space-y-1.5" x-cloak>
+          <div class="h-8 w-24 rounded skeleton-box"></div>
+          <div class="h-3 w-32 rounded skeleton-box"></div>
+        </div>
+        <div x-show="!isPageLoading" class="space-y-0.5">
           <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
             <span>₹</span><span x-text="analytics.avg_spend.toLocaleString('en-IN')"></span>
           </p>
@@ -246,7 +262,45 @@
             <th class="px-5 py-3.5 text-right">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/80">
+        <!-- Skeleton Table Rows -->
+        <tbody x-show="isPageLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/80" x-cloak>
+          <template x-for="i in 5" :key="i">
+            <tr>
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl skeleton-box shrink-0"></div>
+                  <div class="space-y-1.5 flex-1">
+                    <div class="h-4 w-28 rounded skeleton-box"></div>
+                    <div class="h-2.5 w-20 rounded skeleton-box"></div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-5 py-4">
+                <div class="space-y-1.5">
+                  <div class="h-3.5 w-24 rounded skeleton-box"></div>
+                  <div class="h-2.5 w-32 rounded skeleton-box"></div>
+                </div>
+              </td>
+              {% if is_studio %}
+              <td class="px-5 py-4">
+                <div class="h-5 w-20 rounded-full skeleton-box"></div>
+              </td>
+              <td class="px-5 py-4">
+                <div class="h-4 w-16 rounded skeleton-box"></div>
+              </td>
+              {% endif %}
+              <td class="px-5 py-4">
+                <div class="h-3.5 w-28 rounded skeleton-box"></div>
+              </td>
+              <td class="px-5 py-4 text-right">
+                <div class="h-8 w-16 ml-auto rounded-xl skeleton-box"></div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+
+        <!-- Real Customer Rows -->
+        <tbody x-show="!isPageLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/80">
           <template x-for="(c, idx) in filteredCustomers" :key="c.id">
             <tr @click="openCustomerDetails(c)" class="hover:bg-violet-50/40 dark:hover:bg-neutral-900/60 transition-colors cursor-pointer group">
               <!-- Customer Profile -->
@@ -461,6 +515,98 @@
     </div>
   </div>
 
+  <!-- ================= MASS UPLOAD CUSTOMERS MODAL ================= -->
+  <div x-show="showMassUploadModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#141210] w-full max-w-lg rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+         @click.away="if (!uploadingMass) showMassUploadModal = false">
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+            <i data-lucide="upload" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-neutral-900 dark:text-white">Mass Upload Customers</h3>
+            <p class="text-xs text-neutral-400">Import your client records in bulk via CSV</p>
+          </div>
+        </div>
+        <button @click="showMassUploadModal = false" :disabled="uploadingMass" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Field Badges / Instructions -->
+      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Accepted CSV Columns:</span>
+          <a href="/api/settings/export/template/customers" class="px-2 py-0.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:bg-violet-100 dark:hover:bg-violet-900/50 border border-violet-500/20 flex items-center gap-1 transition-colors">
+            <i data-lucide="download" class="w-3 h-3"></i> Sample CSV
+          </a>
+        </div>
+        <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Mandatory column">
+            <span>name</span>
+            <span class="text-[9px] text-rose-500 font-bold">*</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="10-digit phone number (duplicates skipped)">
+            <span>phone</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="Client email address">
+            <span>email</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-neon-cyan font-bold" title="Male, Female, or Other">
+            <span>gender</span>
+            <span class="text-[9px] text-neutral-400 font-sans font-normal">(M/F/Other)</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="Client preferences or remarks">
+            <span>notes</span>
+          </span>
+        </div>
+        <p class="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
+          Only <strong class="text-neutral-800 dark:text-neutral-200">name</strong> is required. Existing phone numbers in your database are automatically skipped.
+        </p>
+      </div>
+
+      <!-- File Picker -->
+      <div class="space-y-3">
+        <label class="block cursor-pointer">
+          <input type="file" accept=".csv" class="hidden" @change="onMassUploadFileChange($event)" :disabled="uploadingMass">
+          <div class="p-6 rounded-2xl border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-violet-500 dark:hover:border-neon-cyan transition-all text-center space-y-2 bg-neutral-50/50 dark:bg-neutral-900/30">
+            <div class="w-10 h-10 mx-auto rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+              <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-neutral-800 dark:text-neutral-200" x-text="massUploadFileName || 'Click or drag a CSV file here'"></p>
+              <p class="text-[10px] text-neutral-400 mt-0.5">Supports UTF-8 encoded .csv files</p>
+            </div>
+          </div>
+        </label>
+
+        <p x-show="uploadError" x-cloak class="text-xs font-semibold text-rose-500" x-text="uploadError"></p>
+        <p x-show="uploadSuccess" x-cloak class="text-xs font-semibold text-emerald-600 dark:text-emerald-400" x-text="uploadSuccess"></p>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+        <button type="button" @click="showMassUploadModal = false" :disabled="uploadingMass"
+                class="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors">
+          Cancel
+        </button>
+        <button type="button" @click="submitMassUpload()" :disabled="!massUploadFile || uploadingMass"
+                class="px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center gap-2 hover:opacity-95 transition-all disabled:opacity-50 active:scale-95">
+          <i data-lucide="upload-cloud" class="w-4 h-4" :class="uploadingMass ? 'animate-bounce' : ''"></i>
+          <span x-text="uploadingMass ? 'Importing…' : 'Start Upload'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= CLIENT DETAILS & BILL HISTORY MODAL ================= -->
   <div x-show="showDetailsModal" x-cloak
        class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm"
@@ -518,10 +664,49 @@
       <!-- Modal Body (Scrollable) -->
       <div class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
         
-        <!-- Loading Spinner -->
-        <div x-show="loadingDetails" class="p-8 text-center space-y-3">
-          <div class="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p class="text-xs text-neutral-400">Loading client history &amp; billing records…</p>
+        <!-- Skeleton State for Client Details Modal -->
+        <div x-show="loadingDetails" class="space-y-6" x-cloak>
+          <!-- Skeleton Stats 4-card grid -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="h-3 w-32 rounded skeleton-box"></div>
+              <div class="h-3 w-20 rounded skeleton-box"></div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <template x-for="i in 4" :key="i">
+                <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80 space-y-2">
+                  <div class="h-2.5 w-16 rounded skeleton-box"></div>
+                  <div class="h-6 w-20 rounded skeleton-box"></div>
+                  <div class="h-2 w-14 rounded skeleton-box"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Skeleton Bill History list -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="h-3 w-24 rounded skeleton-box"></div>
+              <div class="h-2.5 w-36 rounded skeleton-box"></div>
+            </div>
+            <div class="rounded-2xl border border-neutral-200/80 dark:border-neutral-800/80 overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/80">
+              <template x-for="i in 3" :key="i">
+                <div class="p-3.5 sm:p-4 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl skeleton-box shrink-0"></div>
+                    <div class="space-y-1.5">
+                      <div class="h-3.5 w-24 rounded skeleton-box"></div>
+                      <div class="h-2.5 w-32 rounded skeleton-box"></div>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5 text-right">
+                    <div class="h-4 w-16 ml-auto rounded skeleton-box"></div>
+                    <div class="h-2.5 w-12 ml-auto rounded skeleton-box"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
 
         <template x-if="!loadingDetails">
@@ -799,6 +984,7 @@
         avg_spend: 0,
         repeat_rate: 0
       },
+      isPageLoading: true,
       searchQuery: '',
       statusFilter: 'all',
       showModal: false,
@@ -828,9 +1014,12 @@
       showBillDetailModal: false,
 
       init() {
-        if (window.lucide) {
-          this.$nextTick(() => window.lucide.createIcons());
-        }
+        setTimeout(() => {
+          this.isPageLoading = false;
+          this.$nextTick(() => {
+            if (window.lucide) window.lucide.createIcons();
+          });
+        }, 120);
       },
 
       get filteredCustomers() {
@@ -850,14 +1039,65 @@
         });
       },
 
+      showMassUploadModal: false,
+      massUploadFile: null,
+      massUploadFileName: '',
+      uploadingMass: false,
+      uploadError: '',
+      uploadSuccess: '',
+
       handleMassUpload() {
         if (isStudioTier) {
-          // Navigate to the settings data import tool directly
-          window.location.href = "{{ url_for('settings') }}#data";
+          this.showMassUploadModal = true;
+          this.massUploadFile = null;
+          this.massUploadFileName = '';
+          this.uploadError = '';
+          this.uploadSuccess = '';
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
         } else {
           this.upgradeModalTitle = "Mass Upload is a Studio feature";
           this.upgradeModalDescription = "You're on the {{ 'Free Trial' if is_free else 'Pro' }} plan. Upgrade to Studio to mass-import your entire customer list via CSV.";
           this.showUpgradeModal = true;
+        }
+      },
+
+      onMassUploadFileChange(event) {
+        const file = event.target.files && event.target.files[0];
+        if (file) {
+          this.massUploadFile = file;
+          this.massUploadFileName = file.name;
+          this.uploadError = '';
+          this.uploadSuccess = '';
+        }
+      },
+
+      async submitMassUpload() {
+        if (!this.massUploadFile) return;
+        this.uploadingMass = true;
+        this.uploadError = '';
+        this.uploadSuccess = '';
+        const formData = new FormData();
+        formData.append('file', this.massUploadFile);
+        try {
+          const res = await fetch('/api/settings/import/customers', {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            this.uploadSuccess = data.message || 'Import completed!';
+            if (window.uiToast) window.uiToast(this.uploadSuccess, 'success');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1200);
+          } else {
+            this.uploadError = data.message || 'Import failed. Please check the file formatting.';
+          }
+        } catch (e) {
+          this.uploadError = 'Network error while uploading. Please try again.';
+        } finally {
+          this.uploadingMass = false;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
         }
       },
 

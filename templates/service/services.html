@@ -37,22 +37,26 @@
     
     <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800">
       <span class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Total Services</span>
-      <div class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-1" x-text="services.length"></div>
+      <div x-show="isLoading" class="h-7 w-12 rounded mt-1 skeleton-box" x-cloak></div>
+      <div x-show="!isLoading" class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-1" x-text="services.length"></div>
     </div>
 
     <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800">
       <span class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Active Categories</span>
-      <div class="text-xl sm:text-2xl font-black font-mono-num text-emerald-600 dark:text-emerald-400 mt-1" x-text="categoryCount"></div>
+      <div x-show="isLoading" class="h-7 w-10 rounded mt-1 skeleton-box" x-cloak></div>
+      <div x-show="!isLoading" class="text-xl sm:text-2xl font-black font-mono-num text-emerald-600 dark:text-emerald-400 mt-1" x-text="categoryCount"></div>
     </div>
 
     <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800">
       <span class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Average Price</span>
-      <div class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-1">₹<span x-text="averagePrice"></span></div>
+      <div x-show="isLoading" class="h-7 w-16 rounded mt-1 skeleton-box" x-cloak></div>
+      <div x-show="!isLoading" class="text-xl sm:text-2xl font-black font-mono-num text-neutral-900 dark:text-white mt-1">₹<span x-text="averagePrice"></span></div>
     </div>
 
     <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800">
       <span class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Online Bookable</span>
-      <div class="text-xl sm:text-2xl font-black font-mono-num text-violet-600 dark:text-neon-cyan mt-1" x-text="services.filter(s => s.active).length"></div>
+      <div x-show="isLoading" class="h-7 w-12 rounded mt-1 skeleton-box" x-cloak></div>
+      <div x-show="!isLoading" class="text-xl sm:text-2xl font-black font-mono-num text-violet-600 dark:text-neon-cyan mt-1" x-text="services.filter(s => s.active).length"></div>
     </div>
 
   </div>
@@ -102,8 +106,28 @@
           </tr>
         </thead>
 
-        <!-- Table Body -->
-        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium text-neutral-800 dark:text-neutral-200">
+        <!-- Skeleton Rows -->
+        <tbody x-show="isLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/60" x-cloak>
+          <template x-for="i in 5" :key="i">
+            <tr>
+              <td class="py-4 px-4 sm:px-6">
+                <div class="space-y-1.5">
+                  <div class="h-4 w-36 rounded skeleton-box"></div>
+                  <div class="h-2.5 w-48 rounded skeleton-box"></div>
+                </div>
+              </td>
+              <td class="py-4 px-4"><div class="h-5 w-20 rounded-md skeleton-box"></div></td>
+              <td class="py-4 px-4"><div class="h-4 w-14 rounded skeleton-box"></div></td>
+              <td class="py-4 px-4"><div class="h-3.5 w-16 rounded skeleton-box"></div></td>
+              <td class="py-4 px-4"><div class="h-3.5 w-28 rounded skeleton-box"></div></td>
+              <td class="py-4 px-4 text-center"><div class="h-5 w-16 mx-auto rounded-full skeleton-box"></div></td>
+              <td class="py-4 px-4 sm:px-6 text-right"><div class="h-7 w-14 ml-auto rounded-lg skeleton-box"></div></td>
+            </tr>
+          </template>
+        </tbody>
+
+        <!-- Table Body Real Data -->
+        <tbody x-show="!isLoading" class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium text-neutral-800 dark:text-neutral-200">
           <template x-for="service in filteredServices" :key="service.id">
             <tr class="hover:bg-neutral-50/60 dark:hover:bg-neutral-900/40 transition-colors">
               
@@ -359,6 +383,7 @@
 <script>
   function servicesApp() {
     return {
+      isLoading: true,
       searchQuery: '',
       selectedCategory: 'All',
       showModal: false,
@@ -386,16 +411,7 @@
         return this.backendCategories.map(c => c.name);
       },
 
-      services: [
-        { id: 1, name: "Executive Men's Haircut", category: "Haircuts", price: 400, duration: 30, staff: "Marcus Vance (Stylist)", description: "Includes shampoo, hair wash, precision taper, and styling.", active: true },
-        { id: 2, name: "Women's Signature Layer Cut", category: "Haircuts", price: 750, duration: 45, staff: "Alex Rivera (Senior)", description: "Custom consultation, wash, blowdry, and texture finish.", active: true },
-        { id: 3, name: "Hydra-Dew Glow Facial", category: "Spa & Facial", price: 1500, duration: 60, staff: "Sarah Jenkins (Skin)", description: "Deep ultrasonic pore cleansing and serum infusion.", active: true },
-        { id: 4, name: "Luxury Organic Hair Spa", category: "Treatments", price: 1200, duration: 50, staff: "Alex Rivera (Senior)", description: "Argan oil mask, steam therapy, and scalp massage.", active: true },
-        { id: 5, name: "Full Balayage & Toning", category: "Color & Hair", price: 3200, duration: 120, staff: "Priya Nair (Colorist)", description: "Hand-painted highlights with gloss finish & bond repair.", active: true },
-        { id: 6, name: "Root Touch-up (Ammonia-Free)", category: "Color & Hair", price: 1100, duration: 45, staff: "Priya Nair (Colorist)", description: "100% grey coverage with nourishing oils.", active: true },
-        { id: 7, name: "Beard Styling & Razor Shave", category: "Grooming", price: 250, duration: 20, staff: "Marcus Vance (Stylist)", description: "Hot towel wrap, beard oil, and precision razor outline.", active: true },
-        { id: 8, name: "Keratin Smooth Treatment", category: "Treatments", price: 4500, duration: 150, staff: "Priya Nair (Colorist)", description: "Frizz-free silky smooth keratin infusion lasts 4 months.", active: true },
-      ],
+      services: [],
 
       async init() {
         try {
@@ -415,6 +431,8 @@
           }
         } catch (e) {
           console.log("Using cached services fallback:", e);
+        } finally {
+          this.isLoading = false;
         }
         this.syncCategories();
         this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
