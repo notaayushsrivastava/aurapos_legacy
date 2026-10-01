@@ -4,7 +4,7 @@
 {% block page_title %}Point of Sale (POS) Billing{% endblock %}
 
 {% block content %}
-{% set current_tier = (salon.subscription_tier or 'free') | lower %}
+{% set current_tier = (current_tier or (salon.plan if salon else 'free') or 'free') | lower %}
 {% set is_studio = 'studio' in current_tier %}
 {% set is_pro = 'pro' in current_tier and not is_studio %}
 {% set is_free = not is_studio and not is_pro %}
@@ -416,9 +416,9 @@
             <div class="grid grid-cols-3 gap-2">
               <button @click="openPaymentModal()" 
                       :disabled="billItems.length === 0"
-                      class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5 active:scale-98">
+                      class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-orange-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
                 <i data-lucide="check-circle" class="w-4 h-4"></i>
-                <span>Collect Payment</span>
+                <span class="font-bold tracking-wide">Collect Payment</span>
               </button>
 
               <button @click="printReceipt()" 

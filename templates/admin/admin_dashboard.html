@@ -4,6 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="shortcut icon" href="/favicon.ico">
   <title>SuperAdmin Control Center — AuraPOS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,15 +17,15 @@
   <style>
     [x-cloak] { display: none !important; }
     .font-mono-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
-    .brand-gradient { background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%); }
-    .neon-border { border-color: rgba(124, 58, 237, 0.3); }
+    .brand-gradient { background: linear-gradient(112deg, #f97316 0%, #ea580c 46%, #b45309 100%); }
+    .neon-border { border-color: rgba(249, 115, 22, 0.3); }
     /* Custom scrollbar for tables & modals */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 
-    /* Broadcast Announcement Styles (Blue outline & styling for Info type) */
+    /* Broadcast Announcement Styles (Blue outline for Info, Green for Success) */
     .announcement-info-preview {
       background-color: rgba(30, 58, 138, 0.25) !important;
       border: 1px solid #3b82f6 !important;
@@ -33,6 +35,16 @@
       background-color: rgba(30, 58, 138, 0.3) !important;
       border: 1px solid #3b82f6 !important;
       color: #93c5fd !important;
+    }
+    .announcement-success-preview {
+      background-color: rgba(6, 78, 59, 0.25) !important;
+      border: 1px solid #10b981 !important;
+      color: #a7f3d0 !important;
+    }
+    .announcement-success-indicator {
+      background-color: rgba(6, 78, 59, 0.3) !important;
+      border: 1px solid #10b981 !important;
+      color: #a7f3d0 !important;
     }
   </style>
 </head>
@@ -63,7 +75,7 @@
     <!-- Top Navigation / Header -->
     <header class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-neutral-800/80">
       <div class="flex items-center gap-3.5">
-        {{ aura_tile('w-11 h-11 rounded-2xl shadow-lg shadow-violet-600/30 ring-1 ring-white/20', 'w-6 h-6') }}
+        {{ aura_tile('w-11 h-11 rounded-2xl shadow-lg shadow-orange-500/30 ring-1 ring-white/20', 'w-6 h-6') }}
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-xl font-black tracking-tight text-white flex items-center gap-1.5">{{ aura_wordmark('text-xl') }} <span>SuperAdmin</span></h1>
@@ -143,7 +155,7 @@
            :class="{
              'announcement-info-indicator': announcement.type === 'info',
              'bg-amber-950/40 border-amber-500/40 text-amber-200': announcement.type === 'warning',
-             'bg-emerald-950/40 border-emerald-500/40 text-emerald-200': announcement.type === 'success'
+             'announcement-success-indicator': announcement.type === 'success'
            }">
         <div class="flex items-center gap-2">
           <i data-lucide="megaphone" class="w-4 h-4 shrink-0" :class="announcement.type === 'info' ? 'text-blue-400' : (announcement.type === 'warning' ? 'text-amber-400' : 'text-emerald-400')"></i>
@@ -645,9 +657,9 @@
                  :class="{
                    'announcement-info-preview': announcementForm.type === 'info',
                    'bg-amber-950/50 border-amber-500/40 text-amber-200': announcementForm.type === 'warning',
-                   'bg-emerald-950/50 border-emerald-500/40 text-emerald-200': announcementForm.type === 'success'
+                   'announcement-success-preview': announcementForm.type === 'success'
                  }">
-              <i data-lucide="megaphone" class="w-4 h-4 shrink-0" :class="announcementForm.type === 'info' ? 'text-blue-400' : ''"></i>
+              <i data-lucide="megaphone" class="w-4 h-4 shrink-0" :class="announcementForm.type === 'info' ? 'text-blue-400' : (announcementForm.type === 'warning' ? 'text-amber-400' : 'text-emerald-400')"></i>
               <span x-text="announcementForm.message || 'Your broadcast message preview will appear here…'"></span>
             </div>
           </div>

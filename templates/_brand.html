@@ -30,9 +30,8 @@
 {%- endmacro %}
 
 
-{# Gradient tile wrapper — used for the app-shell / navbar brand lock-ups. #}
 {% macro aura_tile(tile_cls='w-9 h-9', mark_cls='w-5 h-5') -%}
-<span class="{{ tile_cls }} rounded-xl brand-gradient grid place-items-center text-white shadow-md shadow-neon-magenta/25">
+<span class="{{ tile_cls }} rounded-xl brand-gradient grid place-items-center text-white shadow-md shadow-orange-500/25">
   {{ aura_mark(mark_cls) }}
 </span>
 {%- endmacro %}

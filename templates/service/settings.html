@@ -716,8 +716,9 @@
                     <span>name</span>
                     <span class="text-[9px] text-rose-500 font-bold">*</span>
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="10-digit phone number (duplicates skipped)">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Mandatory 10-digit phone number">
                     <span>phone</span>
+                    <span class="text-[9px] text-rose-500 font-bold">*</span>
                   </span>
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="Client email address">
                     <span>email</span>
@@ -731,15 +732,29 @@
                   </span>
                 </div>
                 <p class="text-[10px] text-neutral-400 leading-relaxed pt-0.5">
-                  Only <span class="font-semibold text-neutral-700 dark:text-neutral-300">name</span> is mandatory. Rows with a phone number that already exists in the system are skipped automatically.
+                  Both <strong class="text-neutral-700 dark:text-neutral-300">name</strong> and <strong class="text-neutral-700 dark:text-neutral-300">phone</strong> are required fields.
                 </p>
+
+                <!-- Mode selection for customers -->
+                <div class="pt-2">
+                  <div class="flex items-center gap-3 text-xs">
+                    <label class="flex items-center gap-1.5 cursor-pointer font-medium text-neutral-700 dark:text-neutral-300">
+                      <input type="radio" value="conservative" x-model="customerImportMode" class="text-violet-600 focus:ring-violet-500">
+                      <span>Conservative (Append)</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer font-medium text-rose-600 dark:text-rose-400">
+                      <input type="radio" value="destructive" x-model="customerImportMode" class="text-rose-600 focus:ring-rose-500">
+                      <span>Destructive (Wipe &amp; Replace)</span>
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <label class="block cursor-pointer pt-1">
                 <input type="file" accept=".csv" class="hidden" @change="uploadCsv('customers', $event)">
                 <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all">
                   <i data-lucide="upload" class="w-3.5 h-3.5 text-violet-500"></i>
-                  <span x-text="importing === 'customers' ? 'Uploading...' : 'Choose CSV File'"></span>
+                  <span x-text="importing === 'customers' ? 'Uploading...' : (customerImportMode === 'destructive' ? 'Upload CSV (Wipe & Replace)' : 'Choose CSV File')"></span>
                 </span>
               </label>
               <p x-show="importResult && importResult.dataset === 'customers'" class="text-[11px] font-semibold" :class="importResult && importResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" x-text="importResult && importResult.dataset === 'customers' ? importResult.message : ''"></p>
@@ -1458,14 +1473,32 @@
       // ---------- Data: Import / Export ----------
       importing: null,
       importResult: null,
+      customerImportMode: 'conservative',
 
       async uploadCsv(dataset, event) {
         const file = event.target.files[0];
         if (!file) return;
+
+        if (dataset === 'customers' && this.customerImportMode === 'destructive') {
+          const ok = await window.uiConfirm({
+            title: 'Destructive Import: Wipe & Replace All Customers?',
+            message: 'All existing customers currently in your database will be permanently deleted and replaced with the rows from this CSV file. This cannot be undone.',
+            confirmText: 'Yes, Wipe & Replace',
+            danger: true
+          });
+          if (!ok) {
+            event.target.value = '';
+            return;
+          }
+        }
+
         this.importing = dataset;
         this.importResult = null;
         const formData = new FormData();
         formData.append('file', file);
+        if (dataset === 'customers') {
+          formData.append('mode', this.customerImportMode);
+        }
         try {
           const res = await fetch('/api/settings/import/' + dataset, { method: 'POST', body: formData });
           const data = await res.json();

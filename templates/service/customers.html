@@ -554,8 +554,9 @@
             <span>name</span>
             <span class="text-[9px] text-rose-500 font-bold">*</span>
           </span>
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="10-digit phone number (duplicates skipped)">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Mandatory 10-digit phone number">
             <span>phone</span>
+            <span class="text-[9px] text-rose-500 font-bold">*</span>
           </span>
           <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="Client email address">
             <span>email</span>
@@ -569,8 +570,42 @@
           </span>
         </div>
         <p class="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-          Only <strong class="text-neutral-800 dark:text-neutral-200">name</strong> is required. Existing phone numbers in your database are automatically skipped.
+          Both <strong class="text-neutral-800 dark:text-neutral-200">name</strong> and <strong class="text-neutral-800 dark:text-neutral-200">phone</strong> are required fields.
         </p>
+
+        <!-- Import Strategy: Conservative vs Destructive -->
+        <div class="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800/80">
+          <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">Import Mode</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <label class="p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5"
+                   :class="massUploadMode === 'conservative' ? 'bg-violet-50/60 dark:bg-violet-950/30 border-violet-500 dark:border-neon-cyan ring-1 ring-violet-500/30' : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'">
+              <input type="radio" value="conservative" x-model="massUploadMode" class="mt-0.5 text-violet-600 focus:ring-violet-500">
+              <div>
+                <p class="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                  <span>Conservative</span>
+                  <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Safe</span>
+                </p>
+                <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
+                  Appends new clients. Skips existing phone numbers in your database.
+                </p>
+              </div>
+            </label>
+
+            <label class="p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5"
+                   :class="massUploadMode === 'destructive' ? 'bg-rose-50/60 dark:bg-rose-950/30 border-rose-500 ring-1 ring-rose-500/30' : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'">
+              <input type="radio" value="destructive" x-model="massUploadMode" class="mt-0.5 text-rose-600 focus:ring-rose-500">
+              <div>
+                <p class="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                  <span class="text-rose-600 dark:text-rose-400">Destructive</span>
+                  <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400">Wipe &amp; Replace</span>
+                </p>
+                <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
+                  Deletes all existing customers and replaces them with this file.
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- File Picker -->
@@ -599,9 +634,9 @@
           Cancel
         </button>
         <button type="button" @click="submitMassUpload()" :disabled="!massUploadFile || uploadingMass"
-                class="px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center gap-2 hover:opacity-95 transition-all disabled:opacity-50 active:scale-95">
+                class="px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-2 hover:opacity-95 transition-all disabled:opacity-50 active:scale-95">
           <i data-lucide="upload-cloud" class="w-4 h-4" :class="uploadingMass ? 'animate-bounce' : ''"></i>
-          <span x-text="uploadingMass ? 'Importing…' : 'Start Upload'"></span>
+          <span x-text="uploadingMass ? 'Importing…' : (massUploadMode === 'destructive' ? 'Replace All Customers' : 'Start Upload')"></span>
         </button>
       </div>
     </div>
@@ -1042,6 +1077,7 @@
       showMassUploadModal: false,
       massUploadFile: null,
       massUploadFileName: '',
+      massUploadMode: 'conservative',
       uploadingMass: false,
       uploadError: '',
       uploadSuccess: '',
@@ -1051,6 +1087,7 @@
           this.showMassUploadModal = true;
           this.massUploadFile = null;
           this.massUploadFileName = '';
+          this.massUploadMode = 'conservative';
           this.uploadError = '';
           this.uploadSuccess = '';
           this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
@@ -1073,11 +1110,22 @@
 
       async submitMassUpload() {
         if (!this.massUploadFile) return;
+        if (this.massUploadMode === 'destructive') {
+          const ok = await window.uiConfirm({
+            title: 'Destructive Import: Wipe & Replace All Customers?',
+            message: 'All existing customers currently in your database will be permanently deleted and replaced with the rows from this CSV file. This cannot be undone.',
+            confirmText: 'Yes, Wipe & Replace',
+            danger: true
+          });
+          if (!ok) return;
+        }
+
         this.uploadingMass = true;
         this.uploadError = '';
         this.uploadSuccess = '';
         const formData = new FormData();
         formData.append('file', this.massUploadFile);
+        formData.append('mode', this.massUploadMode);
         try {
           const res = await fetch('/api/settings/import/customers', {
             method: 'POST',

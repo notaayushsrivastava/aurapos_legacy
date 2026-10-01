@@ -1747,18 +1747,28 @@ class CustomerRepository:
         )
         return res.data[0]["id"]
 
-    def bulk_add_customers(self, account_id, rows):
-        """Mass-insert customers from uploaded rows. Duplicates (same phone) are skipped."""
+    def bulk_add_customers(self, account_id, rows, mode="conservative"):
+        """Mass-insert customers from uploaded rows. Phone is required.
+        mode='destructive': deletes all existing customers for this salon and replaces them.
+        mode='conservative': preserves existing customers and skips duplicate phone numbers.
+        """
         added, skipped, errors = 0, 0, []
-        existing_rows = (
-            _sb().table("customers")
-            .select("phone")
-            .eq("account_id", account_id)
-            .execute()
-        ).data or []
-        existing = {
-            str(r["phone"]).strip() for r in existing_rows if str(r["phone"]).strip()
-        }
+        if mode == "destructive":
+            try:
+                _sb().table("customers").delete().eq("account_id", account_id).execute()
+            except Exception as e:
+                errors.append(f"Destructive wipe error: {e}")
+            existing = set()
+        else:
+            existing_rows = (
+                _sb().table("customers")
+                .select("phone")
+                .eq("account_id", account_id)
+                .execute()
+            ).data or []
+            existing = {
+                str(r["phone"]).strip() for r in existing_rows if str(r["phone"]).strip()
+            }
         to_insert = []
         for idx, row in enumerate(rows, start=2):  # row 1 is the CSV header
             name = str(row.get("name", "") or "").strip()
@@ -1766,10 +1776,12 @@ class CustomerRepository:
             email = str(row.get("email", "") or "").strip()
             notes = str(row.get("notes", "") or "").strip()
             gender = str(row.get("gender", "") or "").strip()
-            if not name:
+            if not name or not phone:
                 skipped += 1
+                if not phone:
+                    errors.append(f"Row {idx}: Missing mandatory phone number for '{name or 'Unknown'}'.")
                 continue
-            if phone and phone in existing:
+            if phone in existing:
                 skipped += 1
                 continue
             to_insert.append({
@@ -1781,8 +1793,7 @@ class CustomerRepository:
                 "gender": gender,
                 "created_at": int(datetime.now().timestamp()),
             })
-            if phone:
-                existing.add(phone)
+            existing.add(phone)
         if to_insert:
             try:
                 _sb().table("customers").insert(to_insert).execute()

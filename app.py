@@ -677,6 +677,11 @@ def pricing_redirect():
 
 
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/x-icon')
+
+
 @app.route('/robots.txt')
 def robots_txt():
     return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
@@ -2429,13 +2434,18 @@ def api_import_data(dataset):
         {(k or "").strip().lower(): (v or "") for k, v in row.items() if k is not None}
         for row in raw_rows
     ]
+    upload_mode = (request.form.get("mode") or "conservative").strip().lower()
+    if upload_mode not in ("conservative", "destructive"):
+        upload_mode = "conservative"
+
     if dataset == "customers":
-        result = customerRepo.bulk_add_customers(salon_id, rows)
+        result = customerRepo.bulk_add_customers(salon_id, rows, mode=upload_mode)
     elif dataset == "services":
         result = serviceRepo.bulk_add_services(salon_id, rows)
     else:
         return jsonify({"success": False, "message": "Unknown dataset."}), 404
-    message = f"Import complete — {result['added']} added, {result['skipped']} skipped."
+    mode_text = " (all previous customers replaced)" if (dataset == "customers" and upload_mode == "destructive") else ""
+    message = f"Import complete{mode_text} — {result['added']} added, {result['skipped']} skipped."
     if result.get("categories_registered"):
         message += f" {result['categories_registered']} new service category(ies) registered."
     if result["errors"]:

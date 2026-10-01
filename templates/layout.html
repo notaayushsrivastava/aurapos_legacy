@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0d0c0a">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="shortcut icon" href="/favicon.ico">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2410c'/%3E%3Cg fill='none' stroke='%23ffffff' stroke-linecap='round'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke-width='1.7' opacity='.45' pathLength='100' stroke-dasharray='17 8'/%3E%3Cpath d='M10 23.2 16 7.2l6 16' stroke-width='2.7' stroke-linejoin='round'/%3E%3Cpath d='M12.3 17h7.4' stroke-width='2.7'/%3E%3C/g%3E%3C/svg%3E">
   <title>{% block title %}AuraPOS - Salon Billing & Management Software{% endblock %}</title>
   
@@ -88,7 +89,7 @@
     .glow-magenta { box-shadow: 0 0 35px -5px rgba(251, 146, 60, 0.4); }
     .glow-violet { box-shadow: 0 0 35px -5px rgba(194, 65, 12, 0.4); }
 
-    /* Broadcast Announcement Styles (Blue outline & glow for Info type) */
+    /* Broadcast Announcement Styles (Blue outline & glow for Info type, Green for Success type) */
     .announcement-info-card {
       background-color: rgba(20, 18, 16, 0.96) !important;
       border: 1px solid #3b82f6 !important;
@@ -109,6 +110,28 @@
     }
     .announcement-info-glow {
       background-color: #3b82f6 !important;
+    }
+
+    .announcement-success-card {
+      background-color: rgba(20, 18, 16, 0.96) !important;
+      border: 1px solid #10b981 !important;
+      box-shadow: 0 25px 50px -12px rgba(6, 78, 59, 0.7), 0 0 20px -3px rgba(16, 185, 129, 0.35) !important;
+    }
+    .announcement-success-preview {
+      background-color: rgba(6, 78, 59, 0.25) !important;
+      border: 1px solid #10b981 !important;
+      color: #a7f3d0 !important;
+    }
+    .announcement-success-icon {
+      background-color: rgba(16, 185, 129, 0.15) !important;
+      border: 1px solid rgba(16, 185, 129, 0.4) !important;
+      color: #34d399 !important;
+    }
+    .announcement-success-strip {
+      background: linear-gradient(to right, #059669, #10b981, #34d399) !important;
+    }
+    .announcement-success-glow {
+      background-color: #10b981 !important;
     }
 
     /* Cross-browser Custom Select without native OS chevron */
@@ -1132,7 +1155,7 @@
          :class="{
            'announcement-info-card ring-blue-500/30': announcement.type === 'info',
            'bg-[#141210]/95 border border-amber-500/40 ring-amber-500/20 shadow-amber-950/50': announcement.type === 'warning',
-           'bg-[#141210]/95 border border-emerald-500/40 ring-emerald-500/20 shadow-emerald-950/50': announcement.type === 'success'
+           'announcement-success-card ring-emerald-500/30': announcement.type === 'success'
          }">
 
       <!-- Ambient Glow Behind Card -->
@@ -1140,7 +1163,7 @@
            :class="{
              'announcement-info-glow': announcement.type === 'info',
              'bg-amber-500': announcement.type === 'warning',
-             'bg-emerald-500': announcement.type === 'success'
+             'announcement-success-glow': announcement.type === 'success'
            }"></div>
 
       <!-- Top Strip Indicator -->
@@ -1148,7 +1171,7 @@
            :class="{
              'announcement-info-strip': announcement.type === 'info',
              'bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500': announcement.type === 'warning',
-             'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400': announcement.type === 'success'
+             'announcement-success-strip': announcement.type === 'success'
            }"></div>
 
       <!-- Header -->
@@ -1158,11 +1181,11 @@
                :class="{
                  'announcement-info-icon': announcement.type === 'info',
                  'bg-amber-500/10 border-amber-500/30 text-amber-400': announcement.type === 'warning',
-                 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': announcement.type === 'success'
+                 'announcement-success-icon': announcement.type === 'success'
                }">
             <i data-lucide="megaphone" class="w-4 h-4 text-blue-400" x-show="announcement.type === 'info'"></i>
-            <i data-lucide="alert-triangle" class="w-4 h-4" x-show="announcement.type === 'warning'"></i>
-            <i data-lucide="check-circle-2" class="w-4 h-4" x-show="announcement.type === 'success'"></i>
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400" x-show="announcement.type === 'warning'"></i>
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400" x-show="announcement.type === 'success'"></i>
           </div>
           <div>
             <div class="flex items-center gap-2">
