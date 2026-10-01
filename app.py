@@ -363,6 +363,13 @@ def apply_security_and_cache_headers(response):
     elif path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
 
+    # The public landing page is not personalized. Let Vercel's CDN serve a
+    # short-lived copy while keeping browser caching conservative.
+    if request.method == "GET" and path == "/" and response.status_code == 200:
+        response.headers["CDN-Cache-Control"] = (
+            "public, max-age=30, stale-while-revalidate=120, stale-if-error=300"
+        )
+
     return response
 
 
