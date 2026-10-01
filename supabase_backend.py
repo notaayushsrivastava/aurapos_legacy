@@ -387,11 +387,19 @@ class TerminalRepository:
 
     def __init__(self):
         # Tables are provisioned by Supabase migrations.
-        pass
+        # Throttle stale-session cleanup because heartbeats are frequent.
+        self._last_cleanup_at = 0.0
 
-    def clean_stale_sessions(self, timeout_seconds=18):
+    def clean_stale_sessions(self, timeout_seconds=45):
+        now = time.monotonic()
+        if now - self._last_cleanup_at < 30:
+            return
+        self._last_cleanup_at = now
         threshold = int(datetime.now().timestamp()) - timeout_seconds
-        _sb().table("terminal_sessions").delete().lt("last_heartbeat", threshold).execute()
+        try:
+            _sb().table("terminal_sessions").delete().lt("last_heartbeat", threshold).execute()
+        except Exception as exc:
+            _warn(f"terminal cleanup failed: {exc}")
 
     def get_active_sessions(self, salon_id):
         self.clean_stale_sessions()
@@ -419,22 +427,30 @@ class TerminalRepository:
         clean_open_ids.add(terminal_id)
 
         sb = _sb()
-        holder = (sb.table("terminal_sessions").select("tab_id,account_name")
-                  .eq("salon_id", salon_id).eq("terminal_id", terminal_id)
-                  .neq("tab_id", tab_id).limit(1).execute())
-        other_holder = (holder.data or [None])[0]
+        # One read replaces the previous sequence of holder + terminal-list +
+        # per-terminal existence queries.
+        res = (sb.table("terminal_sessions")
+               .select("id,terminal_id,tab_id,account_id,account_name,last_heartbeat,created_at")
+               .eq("salon_id", salon_id).execute())
+        rows = list(res.data or [])
+
+        other_holder = next(
+            (row for row in rows
+             if int(row.get("terminal_id", 0)) == terminal_id and row.get("tab_id") != tab_id),
+            None,
+        )
         if other_holder:
             return {
                 "allowed": False, "reason": "in_use", "limit": limit, "tier": plan,
                 "terminal_id": terminal_id, "holder_tab": other_holder.get("tab_id"),
                 "holder_name": other_holder.get("account_name") or "Another window",
-                "active_terminals": self.get_active_sessions(salon_id),
+                "active_terminals": rows,
                 "message": f"Terminal #{terminal_id} is currently active in another browser tab."
             }
 
-        other_rows = (sb.table("terminal_sessions").select("terminal_id")
-                      .eq("salon_id", salon_id).neq("tab_id", tab_id).execute())
-        other_terminal_ids = {int(r["terminal_id"]) for r in (other_rows.data or [])}
+        other_terminal_ids = {
+            int(row["terminal_id"]) for row in rows if row.get("tab_id") != tab_id
+        }
         clean_open_ids = {oid for oid in clean_open_ids if oid not in other_terminal_ids}
         clean_open_ids.add(terminal_id)
 
@@ -444,7 +460,7 @@ class TerminalRepository:
                 return {
                     "allowed": False, "reason": "limit_reached", "limit": limit,
                     "tier": plan, "terminal_id": terminal_id,
-                    "active_terminals": self.get_active_sessions(salon_id),
+                    "active_terminals": rows,
                     "message": f"{tier_label} limit reached ({len(other_terminal_ids)}/{limit} active terminals across tabs). Upgrade your plan to open more terminals in parallel."
                 }
             allowed_slots = limit - len(other_terminal_ids)
@@ -456,32 +472,60 @@ class TerminalRepository:
                     trimmed.add(oid)
                 clean_open_ids = trimmed
 
-        existing_res = (sb.table("terminal_sessions").select("id,terminal_id")
-                        .eq("salon_id", salon_id).eq("tab_id", tab_id).execute())
+        existing_for_tab = [
+            row for row in rows if row.get("tab_id") == tab_id
+        ]
         desired = set(clean_open_ids)
-        for row in (existing_res.data or []):
+
+        # Remove terminals this tab no longer has open.
+        for row in existing_for_tab:
             if int(row["terminal_id"]) not in desired:
                 sb.table("terminal_sessions").delete().eq("id", row["id"]).execute()
 
-        for oid in desired:
-            existing = (sb.table("terminal_sessions").select("id")
-                        .eq("salon_id", salon_id).eq("tab_id", tab_id)
-                        .eq("terminal_id", oid).limit(1).execute())
-            if existing.data:
-                sb.table("terminal_sessions").update({
-                    "last_heartbeat": now, "account_id": account_id, "account_name": account_name,
-                }).eq("id", existing.data[0]["id"]).execute()
-            else:
-                sb.table("terminal_sessions").insert({
-                    "salon_id": salon_id, "terminal_id": oid, "tab_id": tab_id,
-                    "account_id": account_id, "account_name": account_name,
-                    "last_heartbeat": now, "created_at": now,
-                }).execute()
+        # One bulk upsert replaces one SELECT + one INSERT/UPDATE per terminal.
+        payload = [{
+            "salon_id": salon_id,
+            "terminal_id": oid,
+            "tab_id": tab_id,
+            "account_id": account_id,
+            "account_name": account_name,
+            "last_heartbeat": now,
+            "created_at": next(
+                (row.get("created_at", now) for row in existing_for_tab
+                 if int(row["terminal_id"]) == oid),
+                now,
+            ),
+        } for oid in sorted(desired)]
+        if payload:
+            sb.table("terminal_sessions").upsert(
+                payload,
+                on_conflict="salon_id,tab_id,terminal_id",
+            ).execute()
 
+        # Return the already-fetched state, updated locally for this tab.
+        active = [
+            row for row in rows
+            if row.get("tab_id") != tab_id or int(row["terminal_id"]) in desired
+        ]
+        by_key = {(row.get("tab_id"), int(row["terminal_id"])): row for row in active}
+        for item in payload:
+            key = (tab_id, item["terminal_id"])
+            row = dict(by_key.get(key, {}))
+            row.update({
+                "terminal_id": item["terminal_id"],
+                "tab_id": tab_id,
+                "account_id": account_id,
+                "account_name": account_name,
+                "last_heartbeat": now,
+                "created_at": item["created_at"],
+            })
+            by_key[key] = row
+
+        active = sorted(by_key.values(), key=lambda row: int(row.get("terminal_id", 0)))
         return {
             "allowed": True, "limit": limit, "terminal_id": terminal_id,
-            "open_terminals": sorted(clean_open_ids),
-            "active_terminals": self.get_active_sessions(salon_id)
+            "open_terminals": sorted(desired),
+            "active_terminals": active
         }
 
     def takeover_terminal(self, salon_id, terminal_id, tab_id, account_id=0, account_name="", plan="free"):
