@@ -88,6 +88,29 @@
     .glow-magenta { box-shadow: 0 0 35px -5px rgba(251, 146, 60, 0.4); }
     .glow-violet { box-shadow: 0 0 35px -5px rgba(194, 65, 12, 0.4); }
 
+    /* Broadcast Announcement Styles (Blue outline & glow for Info type) */
+    .announcement-info-card {
+      background-color: rgba(20, 18, 16, 0.96) !important;
+      border: 1px solid #3b82f6 !important;
+      box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.7), 0 0 20px -3px rgba(59, 130, 246, 0.35) !important;
+    }
+    .announcement-info-preview {
+      background-color: rgba(30, 58, 138, 0.25) !important;
+      border: 1px solid #3b82f6 !important;
+      color: #93c5fd !important;
+    }
+    .announcement-info-icon {
+      background-color: rgba(59, 130, 246, 0.15) !important;
+      border: 1px solid rgba(59, 130, 246, 0.4) !important;
+      color: #60a5fa !important;
+    }
+    .announcement-info-strip {
+      background: linear-gradient(to right, #2563eb, #06b6d4, #3b82f6) !important;
+    }
+    .announcement-info-glow {
+      background-color: #3b82f6 !important;
+    }
+
     /* Cross-browser Custom Select without native OS chevron */
     select.custom-select {
       -webkit-appearance: none !important;
@@ -158,91 +181,6 @@
     <a href="/admin/exit-impersonation" class="px-3.5 py-1 bg-black text-amber-300 hover:text-white rounded-lg text-xs font-black shadow transition-all active:scale-95 flex items-center gap-1.5">
       <span>Exit Impersonation</span> &rarr;
     </a>
-  </div>
-  {% endif %}
-
-  {% if allow_platform_broadcast %}
-  <!-- Real-time Right-Side Announcement Notification Pop-up (only on authenticated app pages) -->
-  <div x-cloak
-       x-show="announcement.visible"
-       x-transition:enter="transition-all transform ease-out duration-500"
-       x-transition:enter-start="translate-x-[120%] opacity-0 scale-95"
-       x-transition:enter-end="translate-x-0 opacity-100 scale-100"
-       x-transition:leave="transition-all transform ease-in duration-300"
-       x-transition:leave-start="translate-x-0 opacity-100 scale-100"
-       x-transition:leave-end="translate-x-[120%] opacity-0 scale-95"
-       class="fixed top-20 sm:top-24 right-4 sm:right-6 aurapos-topmost max-w-sm sm:max-w-md w-[calc(100vw-2rem)] pointer-events-auto"
-       style="z-index: 2147483647 !important;">
-
-    <div class="relative overflow-hidden rounded-3xl p-5 shadow-2xl backdrop-blur-2xl ring-1 transition-all duration-300"
-         :class="{
-           'bg-[#141210]/95 border border-violet-500/40 ring-violet-500/20 shadow-violet-950/50': announcement.type === 'info',
-           'bg-[#141210]/95 border border-amber-500/40 ring-amber-500/20 shadow-amber-950/50': announcement.type === 'warning',
-           'bg-[#141210]/95 border border-emerald-500/40 ring-emerald-500/20 shadow-emerald-950/50': announcement.type === 'success'
-         }">
-
-      <!-- Ambient Glow Behind Card -->
-      <div class="absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl pointer-events-none opacity-30"
-           :class="{
-             'bg-violet-500': announcement.type === 'info',
-             'bg-amber-500': announcement.type === 'warning',
-             'bg-emerald-500': announcement.type === 'success'
-           }"></div>
-
-      <!-- Top Strip Indicator -->
-      <div class="absolute top-0 left-0 right-0 h-1"
-           :class="{
-             'bg-gradient-to-r from-violet-600 via-pink-600 to-violet-500': announcement.type === 'info',
-             'bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500': announcement.type === 'warning',
-             'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400': announcement.type === 'success'
-           }"></div>
-
-      <!-- Header -->
-      <div class="flex items-start justify-between gap-3 pb-3 border-b border-white/5">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl grid place-items-center shrink-0 border shadow-sm"
-               :class="{
-                 'bg-violet-500/10 border-violet-500/30 text-violet-400': announcement.type === 'info',
-                 'bg-amber-500/10 border-amber-500/30 text-amber-400': announcement.type === 'warning',
-                 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': announcement.type === 'success'
-               }">
-            <i data-lucide="megaphone" class="w-4 h-4" x-show="announcement.type === 'info'"></i>
-            <i data-lucide="alert-triangle" class="w-4 h-4" x-show="announcement.type === 'warning'"></i>
-            <i data-lucide="check-circle-2" class="w-4 h-4" x-show="announcement.type === 'success'"></i>
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] font-black uppercase tracking-wider text-neutral-400">Platform Broadcast</span>
-              <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Live
-              </span>
-            </div>
-            <p class="text-[11px] text-neutral-400 font-mono-num" x-text="announcement.timeAgo || 'Broadcast notice'"></p>
-          </div>
-        </div>
-
-        <button @click="dismissAnnouncement()"
-                class="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-                title="Dismiss notification">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <!-- Body Message -->
-      <div class="py-3">
-        <p class="text-xs sm:text-sm font-semibold text-neutral-100 leading-relaxed" x-text="announcement.message"></p>
-      </div>
-
-      <!-- Footer Action -->
-      <div class="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
-        <span class="text-neutral-500">Official SuperAdmin Notice</span>
-        <button @click="dismissAnnouncement()"
-                class="px-3 py-1 rounded-lg text-xs font-bold text-neutral-300 hover:text-white hover:bg-white/10 transition-colors">
-          Dismiss
-        </button>
-      </div>
-    </div>
   </div>
   {% endif %}
 
@@ -343,7 +281,7 @@
     {% endwith %}
   </div>
 
-  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports', '/upgrade'] %}
+  {% set is_auth_app = request.path in ['/dashboard', '/billing', '/services', '/appointments', '/customers', '/settings', '/staff', '/reports', '/upgrade'] %}
 
   {% if is_auth_app %}
     <!-- ================= AUTHENTICATED APP LAYOUT ================= -->
@@ -443,6 +381,19 @@
             <i data-lucide="receipt" class="w-4 h-4 transition-colors {% if request.path == '/billing' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>POS Billing</span>
           </a>
+
+          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          <a href="{{ url_for('customers_page') }}" 
+             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
+               {% if request.path == '/customers' %}
+                 bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold
+               {% else %}
+                 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white
+               {% endif %}">
+            <i data-lucide="user-check" class="w-4 h-4 transition-colors {% if request.path == '/customers' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
+            <span>Customers</span>
+          </a>
+          {% endif %}
 
           {% if session.get('auth_level', 'admin') != 'cashier' %}
           <a href="{{ url_for('services') }}" 
@@ -1121,7 +1072,90 @@
     </div>
 
   </div>
-  <!-- ===== End Shared UI Kit markup ===== -->
+  {% if allow_platform_broadcast %}
+  <!-- Real-time Right-Side Announcement Notification Pop-up (Rendered at bottom of body for topmost stacking) -->
+  <div x-cloak
+       x-show="announcement.visible"
+       x-transition:enter="transition-all transform ease-out duration-500"
+       x-transition:enter-start="translate-x-[120%] opacity-0 scale-95"
+       x-transition:enter-end="translate-x-0 opacity-100 scale-100"
+       x-transition:leave="transition-all transform ease-in duration-300"
+       x-transition:leave-start="translate-x-0 opacity-100 scale-100"
+       x-transition:leave-end="translate-x-[120%] opacity-0 scale-95"
+       class="fixed top-20 sm:top-24 right-4 sm:right-6 aurapos-topmost max-w-sm sm:max-w-md w-[calc(100vw-2rem)] pointer-events-auto"
+       style="z-index: 2147483647 !important;">
+
+    <div class="relative overflow-hidden rounded-3xl p-5 shadow-2xl backdrop-blur-2xl ring-1 transition-all duration-300"
+         :class="{
+           'announcement-info-card ring-blue-500/30': announcement.type === 'info',
+           'bg-[#141210]/95 border border-amber-500/40 ring-amber-500/20 shadow-amber-950/50': announcement.type === 'warning',
+           'bg-[#141210]/95 border border-emerald-500/40 ring-emerald-500/20 shadow-emerald-950/50': announcement.type === 'success'
+         }">
+
+      <!-- Ambient Glow Behind Card -->
+      <div class="absolute -top-12 -right-12 w-32 h-32 rounded-full blur-3xl pointer-events-none opacity-30"
+           :class="{
+             'announcement-info-glow': announcement.type === 'info',
+             'bg-amber-500': announcement.type === 'warning',
+             'bg-emerald-500': announcement.type === 'success'
+           }"></div>
+
+      <!-- Top Strip Indicator -->
+      <div class="absolute top-0 left-0 right-0 h-1"
+           :class="{
+             'announcement-info-strip': announcement.type === 'info',
+             'bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500': announcement.type === 'warning',
+             'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400': announcement.type === 'success'
+           }"></div>
+
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-3 pb-3 border-b border-white/5">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl grid place-items-center shrink-0 border shadow-sm"
+               :class="{
+                 'announcement-info-icon': announcement.type === 'info',
+                 'bg-amber-500/10 border-amber-500/30 text-amber-400': announcement.type === 'warning',
+                 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': announcement.type === 'success'
+               }">
+            <i data-lucide="megaphone" class="w-4 h-4 text-blue-400" x-show="announcement.type === 'info'"></i>
+            <i data-lucide="alert-triangle" class="w-4 h-4" x-show="announcement.type === 'warning'"></i>
+            <i data-lucide="check-circle-2" class="w-4 h-4" x-show="announcement.type === 'success'"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-black uppercase tracking-wider text-neutral-400">Platform Broadcast</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live
+              </span>
+            </div>
+            <p class="text-[11px] text-neutral-400 font-mono-num" x-text="announcement.timeAgo || 'Broadcast notice'"></p>
+          </div>
+        </div>
+
+        <button @click="dismissAnnouncement()"
+                class="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Dismiss notification">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Body Message -->
+      <div class="py-3">
+        <p class="text-xs sm:text-sm font-semibold text-neutral-100 leading-relaxed" x-text="announcement.message"></p>
+      </div>
+
+      <!-- Footer Action -->
+      <div class="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
+        <span class="text-neutral-500">Official SuperAdmin Notice</span>
+        <button @click="dismissAnnouncement()"
+                class="px-3 py-1 rounded-lg text-xs font-bold text-neutral-300 hover:text-white hover:bg-white/10 transition-colors">
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {% block scripts %}{% endblock %}
 </body>

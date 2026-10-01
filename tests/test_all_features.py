@@ -157,6 +157,41 @@ class TestAllFeatures(unittest.TestCase):
         self.assertIn(b'Difference between Free, Pro &amp; Studio Tiers', res.data)
         self.assertIn(b'Tier &amp; Feature Comparison', res.data)
 
+    def test_customers_directory_rbac_and_api(self):
+        # 1. Unauthenticated redirect
+        res = self.client.get('/customers')
+        self.assertEqual(res.status_code, 302)
+
+        # 2. Cashier role forbidden / redirected to /billing
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'cashier_user'
+            sess['auth_level'] = 'cashier'
+
+        res = self.client.get('/customers')
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get('Location'), '/billing')
+
+        res = self.client.get('/api/customers')
+        self.assertEqual(res.status_code, 403)
+
+        # 3. Admin / Manager role allowed
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        res = self.client.get('/customers')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Customer Directory", res.data)
+        self.assertIn(b"Mass Upload", res.data)
+
+        # 4. API endpoints
+        res = self.client.get('/api/customers')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json()['success'])
+
 if __name__ == '__main__':
     unittest.main()
+
 

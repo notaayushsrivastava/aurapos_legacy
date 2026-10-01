@@ -1,0 +1,1052 @@
+{% extends "layout.html" %}
+
+{% block title %}Customers — AuraPOS{% endblock %}
+{% block page_title %}Customer Directory & Analytics{% endblock %}
+
+{% block content %}
+<script id="customer-data-json" type="application/json">
+  {{ (analytics.customers_with_metrics if is_studio else customers) | tojson | safe }}
+</script>
+<script id="analytics-data-json" type="application/json">
+  {{ analytics | tojson | safe }}
+</script>
+
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="customerDirectoryApp()">
+
+  <!-- ================= TOP HEADER BAR ================= -->
+  <div data-anim="up" class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2.5">
+        <h2 class="text-xl sm:text-2xl font-black tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
+          <span>Customer Directory</span>
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 dark:text-neon-cyan border border-violet-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+            <span x-text="customers.length + ' clients'"></span>
+          </span>
+        </h2>
+      </div>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+        Centralized client profiles, booking history, lifetime value and churn risk intelligence.
+      </p>
+    </div>
+
+    <!-- Actions Toolbar -->
+    <div class="flex items-center flex-wrap gap-2.5">
+      <!-- Mass Upload CTA Button -->
+      <button @click="handleMassUpload()"
+              class="px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#141210] hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 border border-neutral-200/80 dark:border-neutral-800 text-xs font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
+        <i data-lucide="upload" class="w-4 h-4 text-violet-500 dark:text-neon-cyan"></i>
+        <span>Mass Upload</span>
+        {% if not is_studio %}
+        <span class="text-[9px] font-black px-1.5 py-0.5 rounded btn-brand text-white uppercase tracking-wider">Studio</span>
+        {% endif %}
+      </button>
+
+      <!-- Add Customer CTA Button -->
+      <button @click="openAddModal()"
+              class="px-4 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center gap-2 transition-all hover:shadow-lg active:scale-95">
+        <i data-lucide="user-plus" class="w-4 h-4"></i>
+        <span>Add Customer</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= ANALYTICS SECTION ================= -->
+  {% if is_studio %}
+  <!-- STUDIO UNLOCKED: LIVE CHURN & RETENTION METRICS -->
+  <div data-anim="up" data-delay="80" class="space-y-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-black uppercase tracking-wider text-neutral-400">Churn &amp; Retention Analytics</span>
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Studio Intelligence
+        </span>
+      </div>
+      <p class="text-[11px] text-neutral-500 font-mono-num">Real-time cohort tracking</p>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Active Retention Rate -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Active Retention</span>
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="space-y-0.5">
+          <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
+            <span x-text="analytics.retention_rate"></span><span>%</span>
+          </p>
+          <p class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+            <i data-lucide="user-check" class="w-3 h-3"></i>
+            <span x-text="analytics.active_count"></span> visited in last 30d
+          </p>
+        </div>
+      </div>
+
+      <!-- At-Risk / Churning -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">At-Risk Clients</span>
+          <div class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="space-y-0.5">
+          <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
+             x-text="analytics.churning_count"></p>
+          <p class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+            <i data-lucide="clock" class="w-3 h-3"></i>
+            Inactive 31–75 days
+          </p>
+        </div>
+      </div>
+
+      <!-- Churned Clients -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group hover:border-rose-500/40 transition-all">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Lapsed / Churned</span>
+          <div class="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <i data-lucide="user-x" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="space-y-0.5">
+          <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight"
+             x-text="analytics.churned_count"></p>
+          <p class="text-[11px] text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
+            <i data-lucide="calendar-x" class="w-3 h-3"></i>
+            Inactive &gt; 75 days
+          </p>
+        </div>
+      </div>
+
+      <!-- Average Customer Spend / LTV -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">Average LTV</span>
+          <div class="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="space-y-0.5">
+          <p class="text-2xl sm:text-3xl font-black font-mono-num text-neutral-900 dark:text-white tracking-tight flex items-baseline">
+            <span>₹</span><span x-text="analytics.avg_spend.toLocaleString('en-IN')"></span>
+          </p>
+          <p class="text-[11px] text-violet-600 dark:text-neon-cyan font-semibold flex items-center gap-1">
+            <i data-lucide="repeat" class="w-3 h-3"></i>
+            <span x-text="analytics.repeat_rate"></span>% repeat visit rate
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <!-- FREE / PRO TIER: STUDIO TEASER GATE WITH UPGRADE CTA -->
+  <div data-anim="up" data-delay="80" class="relative overflow-hidden rounded-3xl border border-violet-500/30 bg-gradient-to-br from-violet-950/40 via-[#181512] to-[#12100e] p-6 shadow-xl">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-2xl brand-gradient text-white flex items-center justify-center shadow-lg shadow-neon-magenta/30 shrink-0">
+          <i data-lucide="crown" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base sm:text-lg font-black text-white">Unlock Customer Churn &amp; Cohort Intelligence</h3>
+            <span class="text-[9px] font-black px-2 py-0.5 rounded btn-brand text-white uppercase tracking-wider">Studio Exclusive</span>
+          </div>
+          <p class="text-xs text-neutral-400 mt-1 max-w-xl">
+            Identify at-risk clients before they stop visiting, analyze lifetime spending distributions, calculate visit recency cohorts, and automate repeat booking workflows.
+          </p>
+          <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-neutral-300">
+            <span class="flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i> 30d / 75d Churn Indicators</span>
+            <span class="flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i> Lifetime Value (LTV) Distribution</span>
+            <span class="flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan"></i> CSV Mass Client Import Tool</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="shrink-0 flex items-center gap-3">
+        <button @click="showUpgradeModal = true"
+                class="px-5 py-3 rounded-xl btn-brand text-white text-xs font-bold shadow-lg shadow-neon-magenta/30 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Upgrade to Studio</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ================= DIRECTORY CONTROLS (SEARCH & STATUS TABS) ================= -->
+  <div data-anim="up" data-delay="100" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <!-- Search Box -->
+    <div class="relative flex-1 max-w-md">
+      <i data-lucide="search" class="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+      <input type="text" x-model="searchQuery" placeholder="Search by name, phone or email..."
+             class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs sm:text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+      <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white">
+        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+
+    <!-- Status Segmented Control Filter (Studio enriched) -->
+    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+      <button @click="statusFilter = 'all'"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0"
+              :class="statusFilter === 'all'
+                ? 'btn-brand text-white shadow-sm'
+                : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'">
+        <span>All</span> (<span x-text="customers.length"></span>)
+      </button>
+
+      {% if is_studio %}
+      <button @click="statusFilter = 'active'"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+              :class="statusFilter === 'active'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-neutral-100 dark:bg-neutral-900 text-emerald-600 dark:text-emerald-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span>Active</span> (<span x-text="analytics.active_count"></span>)
+      </button>
+
+      <button @click="statusFilter = 'churning'"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+              :class="statusFilter === 'churning'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-neutral-100 dark:bg-neutral-900 text-amber-600 dark:text-amber-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+        <span>At-Risk</span> (<span x-text="analytics.churning_count"></span>)
+      </button>
+
+      <button @click="statusFilter = 'churned'"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+              :class="statusFilter === 'churned'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-neutral-100 dark:bg-neutral-900 text-rose-600 dark:text-rose-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'">
+        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+        <span>Lapsed</span> (<span x-text="analytics.churned_count"></span>)
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ================= CUSTOMER LIST TABLE ================= -->
+  <div data-anim="up" data-delay="140" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs sm:text-sm">
+        <thead class="bg-neutral-50 dark:bg-neutral-900/60 border-b border-neutral-200/80 dark:border-neutral-800 text-[10px] font-black uppercase tracking-wider text-neutral-400">
+          <tr>
+            <th class="px-5 py-3.5">Customer</th>
+            <th class="px-5 py-3.5">Phone &amp; Email</th>
+            {% if is_studio %}
+            <th class="px-5 py-3.5">Cohort Status</th>
+            <th class="px-5 py-3.5">Total Spend / Bills</th>
+            {% endif %}
+            <th class="px-5 py-3.5">Notes</th>
+            <th class="px-5 py-3.5 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/80">
+          <template x-for="(c, idx) in filteredCustomers" :key="c.id">
+            <tr @click="openCustomerDetails(c)" class="hover:bg-violet-50/40 dark:hover:bg-neutral-900/60 transition-colors cursor-pointer group">
+              <!-- Customer Profile -->
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl font-black text-xs text-white flex items-center justify-center shadow-md shrink-0 transition-transform group-hover:scale-105"
+                       :class="avatarClass(idx)">
+                    <span x-text="initials(c.name)"></span>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <p class="font-bold text-neutral-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-neon-cyan transition-colors" x-text="c.name"></p>
+                      <span x-show="c.gender" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200/60 dark:border-neutral-700/60" x-text="c.gender"></span>
+                    </div>
+                    <p class="text-[10px] text-neutral-400 font-mono-num" x-text="'Joined ' + formatDate(c.created_at)"></p>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Phone & Email -->
+              <td class="px-5 py-4">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-1.5 text-neutral-800 dark:text-neutral-200 font-mono-num font-semibold">
+                    <i data-lucide="phone" class="w-3.5 h-3.5 text-neutral-400 shrink-0"></i>
+                    <span x-text="c.phone || '—'"></span>
+                  </div>
+                  <div x-show="c.email" class="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 text-xs truncate max-w-[200px]">
+                    <i data-lucide="mail" class="w-3.5 h-3.5 text-neutral-400 shrink-0"></i>
+                    <span x-text="c.email"></span>
+                  </div>
+                </div>
+              </td>
+
+              {% if is_studio %}
+              <!-- Status Badge -->
+              <td class="px-5 py-4">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border"
+                      :class="{
+                        'bg-emerald-500/10 border-emerald-500/30 text-emerald-500': c.status === 'active',
+                        'bg-amber-500/10 border-amber-500/30 text-amber-500': c.status === 'churning',
+                        'bg-rose-500/10 border-rose-500/30 text-rose-500': c.status === 'churned'
+                      }">
+                  <span class="w-1.5 h-1.5 rounded-full"
+                        :class="{
+                          'bg-emerald-500 animate-pulse': c.status === 'active',
+                          'bg-amber-500': c.status === 'churning',
+                          'bg-rose-500': c.status === 'churned'
+                        }"></span>
+                  <span x-text="c.status === 'active' ? 'Active' : (c.status === 'churning' ? 'At-Risk' : 'Lapsed')"></span>
+                </span>
+                <p class="text-[10px] text-neutral-400 mt-1 font-mono-num" x-text="c.last_visit_ts ? 'Last: ' + formatDate(c.last_visit_ts) : 'No bill visits yet'"></p>
+              </td>
+
+              <!-- Total Spend -->
+              <td class="px-5 py-4">
+                <p class="font-black font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="(c.total_spend || 0).toLocaleString('en-IN')"></span>
+                </p>
+                <p class="text-[10px] text-neutral-400 font-medium font-mono-num" x-text="(c.visit_count || 0) + ' bill(s) paid'"></p>
+              </td>
+              {% endif %}
+
+              <!-- Notes -->
+              <td class="px-5 py-4">
+                <p class="text-xs text-neutral-600 dark:text-neutral-400 max-w-xs line-clamp-2" x-text="c.notes || '—'"></p>
+              </td>
+
+              <!-- Actions -->
+              <td class="px-5 py-4 text-right">
+                <div class="flex items-center justify-end gap-1.5" @click.stop>
+                  <button @click.stop="openEditModal(c)" title="Edit Customer"
+                          class="p-2 rounded-xl text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </button>
+                  <button @click.stop="deleteCustomer(c)" title="Delete Customer"
+                          class="p-2 rounded-xl text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
+      <!-- Empty State -->
+      <div x-show="filteredCustomers.length === 0" class="p-12 text-center space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400 flex items-center justify-center mx-auto">
+          <i data-lucide="users" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-sm font-bold text-neutral-900 dark:text-white">No customers match your criteria</h4>
+        <p class="text-xs text-neutral-500 max-w-xs mx-auto">Try clearing your search query or add a new customer to get started.</p>
+        <button @click="searchQuery = ''; statusFilter = 'all'"
+                class="px-4 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200">
+          Reset Filter
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ADD / EDIT CUSTOMER MODAL ================= -->
+  <div x-show="showModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+         @click.away="showModal = false">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-neutral-900 dark:text-white" x-text="editingId ? 'Edit Customer Profile' : 'Add New Customer'"></h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Customer will immediately be searchable across POS billing.</p>
+        </div>
+        <button @click="showModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full Name <span class="text-rose-500">*</span></label>
+          <input type="text" x-model="form.name" placeholder="e.g. Priya Sen"
+                 class="w-full px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Phone Number <span class="text-rose-500">*</span></label>
+            <input type="tel" inputmode="numeric" x-model="form.phone" maxlength="10" @input="sanitizePhone()"
+                   placeholder="10-digit mobile number"
+                   class="w-full px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+            <p class="text-[10px] text-neutral-400 mt-1"><span class="font-mono-num" x-text="form.phone.length"></span>/10 digits required.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Gender</label>
+            <select x-model="form.gender"
+                    class="w-full px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <option value="">Select gender</option>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email Address</label>
+          <input type="email" x-model="form.email" placeholder="client@example.com"
+                 class="w-full px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Preferences &amp; Notes</label>
+          <textarea x-model="form.notes" rows="3" placeholder="e.g. Likes chamomile tea, allergic to ammonia dyes, prefers weekend slots"
+                    class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs sm:text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50"></textarea>
+        </div>
+
+        <p x-show="formError" x-cloak class="text-[11px] font-semibold text-rose-500" x-text="formError"></p>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button @click="showModal = false"
+                class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          Cancel
+        </button>
+        <button @click="saveCustomer()" :disabled="saving"
+                class="flex-1 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span x-text="saving ? 'Saving…' : (editingId ? 'Save Changes' : 'Create Customer')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STUDIO UPGRADE MODAL ================= -->
+  <div x-show="showUpgradeModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 sm:p-8 text-center space-y-4"
+         @click.away="showUpgradeModal = false">
+      <div class="w-12 h-12 mx-auto rounded-2xl brand-gradient text-white flex items-center justify-center shadow-lg shadow-neon-magenta/30">
+        <i data-lucide="crown" class="w-6 h-6"></i>
+      </div>
+      <div class="space-y-1.5">
+        <h3 class="text-lg font-black text-neutral-900 dark:text-white" x-text="upgradeModalTitle"></h3>
+        <p class="text-xs text-neutral-500 dark:text-neutral-400" x-text="upgradeModalDescription"></p>
+      </div>
+      <ul class="text-left space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+        <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Bulk mass CSV upload &amp; exports</li>
+        <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Customer churn analytics &amp; recency tracking</li>
+        <li class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-neon-cyan shrink-0"></i>Unlimited POS billing terminals across devices</li>
+      </ul>
+      <div class="flex flex-col gap-2 pt-2">
+        <a href="{{ url_for('upgrade') }}"
+           class="w-full px-4 py-3 rounded-xl btn-brand text-white text-xs font-bold shadow-lg shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Upgrade to Studio Plan</span>
+        </a>
+        <button @click="showUpgradeModal = false" class="text-xs font-semibold text-neutral-400 hover:text-white py-1">
+          Maybe later
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CLIENT DETAILS & BILL HISTORY MODAL ================= -->
+  <div x-show="showDetailsModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden"
+         @click.away="showDetailsModal = false">
+      
+      <!-- Modal Header -->
+      <div class="p-5 sm:p-6 border-b border-neutral-200/80 dark:border-neutral-800/80 flex items-start justify-between gap-4 shrink-0 bg-neutral-50/60 dark:bg-neutral-900/40">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-violet-500/20 shrink-0">
+            <span x-text="initials(customerDetails ? customerDetails.name : '')"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-lg font-black text-neutral-900 dark:text-white" x-text="customerDetails ? customerDetails.name : 'Client Profile'"></h3>
+              <span x-show="customerDetails && customerDetails.gender"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-neon-cyan border border-violet-500/20"
+                    x-text="customerDetails ? customerDetails.gender : ''"></span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-neutral-500 dark:text-neutral-400 mt-1 flex-wrap font-mono-num">
+              <span class="flex items-center gap-1">
+                <i data-lucide="phone" class="w-3.5 h-3.5 text-neutral-400"></i>
+                <span x-text="(customerDetails && customerDetails.phone) ? customerDetails.phone : 'No phone'"></span>
+              </span>
+              <span x-show="customerDetails && customerDetails.email" class="flex items-center gap-1">
+                <i data-lucide="mail" class="w-3.5 h-3.5 text-neutral-400"></i>
+                <span x-text="customerDetails ? customerDetails.email : ''"></span>
+              </span>
+              <span class="flex items-center gap-1 text-[11px] text-neutral-400">
+                <i data-lucide="calendar" class="w-3.5 h-3.5 text-neutral-400"></i>
+                <span x-text="'Joined ' + formatDate(customerDetails ? customerDetails.created_at : null)"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button @click="openEditModal(customerDetails)"
+                  class="p-2 rounded-xl text-neutral-500 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  title="Edit Customer Details">
+            <i data-lucide="pencil" class="w-4 h-4"></i>
+          </button>
+          <button @click="showDetailsModal = false"
+                  class="p-2 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        
+        <!-- Loading Spinner -->
+        <div x-show="loadingDetails" class="p-8 text-center space-y-3">
+          <div class="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p class="text-xs text-neutral-400">Loading client history &amp; billing records…</p>
+        </div>
+
+        <template x-if="!loadingDetails">
+          <div class="space-y-6">
+
+            <!-- Preferences / Notes (if available) -->
+            <div x-show="customerDetails && customerDetails.notes" class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/70 text-xs">
+              <span class="font-bold text-neutral-700 dark:text-neutral-300 block mb-0.5 flex items-center gap-1.5">
+                <i data-lucide="file-text" class="w-3.5 h-3.5 text-violet-500 dark:text-neon-cyan"></i> Client Notes &amp; Preferences:
+              </span>
+              <p class="text-neutral-600 dark:text-neutral-400 italic" x-text="customerDetails.notes"></p>
+            </div>
+
+            <!-- ================= RBAC-GATED STATS SECTION ================= -->
+            <template x-if="canViewStats && clientStats">
+              <!-- Admin / Owner: Full Financial & Visit Analytics -->
+              <div class="space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-black uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-violet-500 dark:text-neon-cyan"></i>
+                    Client Lifetime Analytics
+                  </span>
+                  <span class="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Admin Verified
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <!-- Total Revenue -->
+                  <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Total Revenue</p>
+                    <p class="text-lg font-black font-mono-num text-neutral-900 dark:text-white">
+                      ₹<span x-text="Number(clientStats.total_revenue || 0).toLocaleString('en-IN')"></span>
+                    </p>
+                    <p class="text-[10px] text-neutral-400 mt-0.5">Lifetime gross</p>
+                  </div>
+
+                  <!-- Visit Frequency -->
+                  <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Visit Frequency</p>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="clientStats.visit_frequency || '—'"></p>
+                    <p class="text-[10px] text-neutral-400 mt-0.5 font-mono-num" x-text="(clientStats.visit_count || 0) + ' total visits'"></p>
+                  </div>
+
+                  <!-- Average Ticket -->
+                  <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Avg Ticket</p>
+                    <p class="text-lg font-black font-mono-num text-neutral-900 dark:text-white">
+                      ₹<span x-text="Number(clientStats.avg_ticket || 0).toLocaleString('en-IN')"></span>
+                    </p>
+                    <p class="text-[10px] text-neutral-400 mt-0.5">Per bill average</p>
+                  </div>
+
+                  <!-- Last Visit -->
+                  <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Last Visit</p>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white" x-text="formatDate(clientStats.last_visit_ts)"></p>
+                    <p class="text-[10px] text-neutral-400 mt-0.5">Most recent</p>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Manager Notice: RBAC Enforced Privacy Notice -->
+            <template x-if="!canViewStats">
+              <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-200/70 dark:border-neutral-800/70 flex items-center justify-between text-xs text-neutral-500">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="shield-check" class="w-4 h-4 text-violet-500 dark:text-neon-cyan"></i>
+                  <span>Manager Access Level: Full Bill History Visible</span>
+                </div>
+                <span class="text-[10px] font-semibold text-neutral-400 italic">Financial totals restricted to Owner/Admin</span>
+              </div>
+            </template>
+
+            <!-- ================= BILL HISTORY SECTION ================= -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-black uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                  <i data-lucide="receipt" class="w-3.5 h-3.5 text-violet-500 dark:text-neon-cyan"></i>
+                  Bill History (<span x-text="billsHistory.length"></span>)
+                </span>
+                <span class="text-[10px] text-neutral-400">Click any invoice to view line items &amp; breakdown</span>
+              </div>
+
+              <!-- Bill List Table/Cards -->
+              <template x-if="billsHistory.length === 0">
+                <div class="p-8 text-center rounded-2xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800/60 space-y-2">
+                  <i data-lucide="inbox" class="w-8 h-8 mx-auto text-neutral-400 opacity-60"></i>
+                  <p class="text-xs font-bold text-neutral-700 dark:text-neutral-300">No Billing Records Found</p>
+                  <p class="text-[11px] text-neutral-400">No invoices have been saved under this client's phone number yet.</p>
+                </div>
+              </template>
+
+              <div x-show="billsHistory.length > 0" class="rounded-2xl border border-neutral-200/80 dark:border-neutral-800/80 overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/80">
+                <template x-for="bill in billsHistory" :key="bill.id || bill.bill_id">
+                  <div @click="openBillDetail(bill)"
+                       class="p-3.5 sm:p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900/60 transition-colors flex items-center justify-between gap-3 cursor-pointer group">
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <i data-lucide="file-text" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="font-mono-num font-bold text-xs text-neutral-900 dark:text-white" x-text="bill.bill_id"></span>
+                          <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
+                                :class="bill.payment_mode === 'Cash' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'"
+                                x-text="bill.payment_mode"></span>
+                        </div>
+                        <p class="text-[10px] text-neutral-400 font-mono-num mt-0.5" x-text="formatDateTime(bill.created_at)"></p>
+                      </div>
+                    </div>
+
+                    <div class="text-right flex items-center gap-3">
+                      <div>
+                        <p class="font-mono-num font-black text-sm text-neutral-900 dark:text-white">
+                          ₹<span x-text="Number(bill.grand_total || 0).toLocaleString('en-IN')"></span>
+                        </p>
+                        <p class="text-[10px] text-neutral-400" x-text="(bill.items ? bill.items.length : 0) + ' item(s)'"></p>
+                      </div>
+                      <i data-lucide="chevron-right" class="w-4 h-4 text-neutral-400 group-hover:text-violet-500 group-hover:translate-x-0.5 transition-all"></i>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-neutral-200/80 dark:border-neutral-800/80 bg-neutral-50/60 dark:bg-neutral-900/40 flex justify-end shrink-0">
+        <button @click="showDetailsModal = false"
+                class="px-5 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 transition-colors">
+          Close Profile
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= INVOICE DETAILS MODAL ================= -->
+  <div x-show="showBillDetailModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+         @click.away="showBillDetailModal = false">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-200/80 dark:border-neutral-800/80">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+            <i data-lucide="receipt" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-neutral-900 dark:text-white" x-text="selectedBill ? selectedBill.bill_id : 'Invoice'"></h3>
+            <p class="text-[10px] text-neutral-400 font-mono-num" x-text="selectedBill ? formatDateTime(selectedBill.created_at) : ''"></p>
+          </div>
+        </div>
+        <button @click="showBillDetailModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Bill Content -->
+      <template x-if="selectedBill">
+        <div class="space-y-4 text-xs">
+          <!-- Customer & Tender Overview -->
+          <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/70 space-y-1.5 font-mono-num">
+            <div class="flex justify-between">
+              <span class="text-neutral-400">Client:</span>
+              <span class="font-bold text-neutral-900 dark:text-white" x-text="selectedBill.client_name || 'Walk-in'"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-neutral-400">Phone:</span>
+              <span class="text-neutral-800 dark:text-neutral-200" x-text="selectedBill.client_phone || '—'"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-neutral-400">Payment Tender:</span>
+              <span class="font-bold text-violet-600 dark:text-neon-cyan" x-text="selectedBill.payment_mode"></span>
+            </div>
+          </div>
+
+          <!-- Items Breakdown -->
+          <div class="space-y-2">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Purchased Services / Items</p>
+            <div class="max-h-48 overflow-y-auto space-y-1.5 rounded-xl border border-neutral-200/70 dark:border-neutral-800/70 p-2.5 bg-neutral-50/40 dark:bg-neutral-900/40">
+              <template x-if="!selectedBill.items || selectedBill.items.length === 0">
+                <p class="text-[11px] text-neutral-400 italic py-2 text-center">No individual items recorded for this invoice.</p>
+              </template>
+              <template x-for="item in (selectedBill.items || [])" :key="item.id || item.cartId || item.name">
+                <div class="flex items-center justify-between text-xs py-1 border-b border-neutral-100 dark:border-neutral-800/60 last:border-0">
+                  <div>
+                    <span class="font-semibold text-neutral-900 dark:text-white" x-text="item.name"></span>
+                    <span x-show="item.staff" class="text-[10px] text-neutral-400 block" x-text="'Staff: ' + item.staff"></span>
+                  </div>
+                  <div class="text-right font-mono-num">
+                    <span class="text-neutral-500" x-text="(item.qty || 1) + ' × ₹' + item.price"></span>
+                    <span class="font-bold text-neutral-900 dark:text-white block">₹<span x-text="(item.qty || 1) * item.price"></span></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Financial Breakdown -->
+          <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/70 space-y-1.5 font-mono-num">
+            <div class="flex justify-between text-neutral-500">
+              <span>Subtotal:</span>
+              <span>₹<span x-text="Number(selectedBill.subtotal || 0).toLocaleString('en-IN')"></span></span>
+            </div>
+            <div class="flex justify-between text-rose-500" x-show="selectedBill.discount > 0">
+              <span>Discount:</span>
+              <span>-₹<span x-text="Number(selectedBill.discount || 0).toLocaleString('en-IN')"></span></span>
+            </div>
+            <div class="flex justify-between text-neutral-500" x-show="selectedBill.tax > 0">
+              <span>GST / Tax:</span>
+              <span>+₹<span x-text="Number(selectedBill.tax || 0).toLocaleString('en-IN')"></span></span>
+            </div>
+            <div class="flex justify-between text-sm font-black pt-2 border-t border-neutral-200 dark:border-neutral-800 text-neutral-900 dark:text-white">
+              <span>Grand Total:</span>
+              <span class="text-emerald-600 dark:text-emerald-400">₹<span x-text="Number(selectedBill.grand_total || 0).toLocaleString('en-IN')"></span></span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div class="flex gap-2 pt-2">
+        <button @click="showBillDetailModal = false"
+                class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          Back
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function customerDirectoryApp() {
+    let initialCustomers = [];
+    let initialAnalytics = {};
+
+    try {
+      const custEl = document.getElementById('customer-data-json');
+      if (custEl && custEl.textContent) initialCustomers = JSON.parse(custEl.textContent);
+    } catch (e) {
+      console.error("Error reading customers:", e);
+    }
+
+    try {
+      const anaEl = document.getElementById('analytics-data-json');
+      if (anaEl && anaEl.textContent) initialAnalytics = JSON.parse(anaEl.textContent);
+    } catch (e) {
+      console.error("Error reading analytics:", e);
+    }
+
+    const isStudioTier = {{ 'true' if is_studio else 'false' }};
+
+    return {
+      customers: initialCustomers || [],
+      analytics: initialAnalytics || {
+        retention_rate: 100,
+        active_count: initialCustomers.length,
+        churning_count: 0,
+        churned_count: 0,
+        avg_spend: 0,
+        repeat_rate: 0
+      },
+      searchQuery: '',
+      statusFilter: 'all',
+      showModal: false,
+      showUpgradeModal: false,
+      upgradeModalTitle: 'Studio Tier Feature',
+      upgradeModalDescription: 'Upgrade to Studio to unlock advanced features.',
+      saving: false,
+      editingId: null,
+      formError: '',
+      form: {
+        name: '',
+        phone: '',
+        email: '',
+        notes: '',
+        gender: ''
+      },
+
+      // Client Details & Bill History Modal State
+      showDetailsModal: false,
+      loadingDetails: false,
+      detailsError: '',
+      customerDetails: null,
+      billsHistory: [],
+      canViewStats: false,
+      clientStats: null,
+      selectedBill: null,
+      showBillDetailModal: false,
+
+      init() {
+        if (window.lucide) {
+          this.$nextTick(() => window.lucide.createIcons());
+        }
+      },
+
+      get filteredCustomers() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.customers.filter(c => {
+          // Status filter
+          if (this.statusFilter !== 'all' && c.status && c.status !== this.statusFilter) {
+            return false;
+          }
+          // Query search
+          if (!q) return true;
+          const matchName = String(c.name || '').toLowerCase().includes(q);
+          const matchPhone = String(c.phone || '').toLowerCase().includes(q);
+          const matchEmail = String(c.email || '').toLowerCase().includes(q);
+          const matchGender = String(c.gender || '').toLowerCase().includes(q);
+          return matchName || matchPhone || matchEmail || matchGender;
+        });
+      },
+
+      handleMassUpload() {
+        if (isStudioTier) {
+          // Navigate to the settings data import tool directly
+          window.location.href = "{{ url_for('settings') }}#data";
+        } else {
+          this.upgradeModalTitle = "Mass Upload is a Studio feature";
+          this.upgradeModalDescription = "You're on the {{ 'Free Trial' if is_free else 'Pro' }} plan. Upgrade to Studio to mass-import your entire customer list via CSV.";
+          this.showUpgradeModal = true;
+        }
+      },
+
+      openAddModal() {
+        this.editingId = null;
+        this.form = { name: '', phone: '', email: '', notes: '', gender: '' };
+        this.formError = '';
+        this.showModal = true;
+        this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+      },
+
+      openEditModal(c) {
+        this.editingId = c.id;
+        this.form = {
+          name: c.name || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          notes: c.notes || '',
+          gender: c.gender || ''
+        };
+        this.formError = '';
+        this.showModal = true;
+        this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+      },
+
+      sanitizePhone() {
+        this.form.phone = (this.form.phone || '').replace(/\D/g, '').slice(0, 10);
+      },
+
+      async saveCustomer() {
+        this.formError = '';
+        const name = (this.form.name || '').trim();
+        const phone = (this.form.phone || '').trim();
+
+        if (!name) {
+          this.formError = 'Please provide the customer name.';
+          return;
+        }
+        if (phone.length !== 10) {
+          this.formError = 'Phone number must be exactly 10 digits.';
+          return;
+        }
+
+        this.saving = true;
+        try {
+          if (this.editingId) {
+            // Update
+            const res = await fetch('/api/customers/' + this.editingId, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.form)
+            });
+            const data = await res.json();
+            if (data.success) {
+              const idx = this.customers.findIndex(x => x.id === this.editingId);
+              if (idx !== -1) {
+                this.customers[idx] = { ...this.customers[idx], ...this.form };
+              }
+              this.showModal = false;
+              if (window.uiToast) window.uiToast('Customer updated successfully.', 'success');
+            } else {
+              this.formError = data.message || 'Could not update customer.';
+            }
+          } else {
+            // Create
+            const res = await fetch('/api/customers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.form)
+            });
+            const data = await res.json();
+            if (data.success) {
+              const newCustomer = data.customer || {
+                id: data.id,
+                name: this.form.name,
+                phone: this.form.phone,
+                email: this.form.email,
+                notes: this.form.notes,
+                gender: this.form.gender,
+                created_at: Math.floor(Date.now() / 1000),
+                status: 'active',
+                total_spend: 0,
+                visit_count: 0
+              };
+              this.customers.unshift(newCustomer);
+              this.showModal = false;
+              if (window.uiToast) window.uiToast(`${name} added to your directory.`, 'success');
+            } else {
+              this.formError = data.message || 'Could not create customer.';
+            }
+          }
+        } catch (e) {
+          console.error(e);
+          this.formError = 'Connection error. Please try again.';
+        } finally {
+          this.saving = false;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        }
+      },
+
+      async deleteCustomer(c) {
+        if (!confirm(`Are you sure you want to remove ${c.name} from your customer directory?`)) {
+          return;
+        }
+        try {
+          const res = await fetch('/api/customers/' + c.id, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            this.customers = this.customers.filter(x => x.id !== c.id);
+            if (window.uiToast) window.uiToast('Customer deleted.', 'success');
+          } else {
+            if (window.uiToast) window.uiToast(data.message || 'Delete failed', 'error');
+          }
+        } catch (e) {
+          console.error(e);
+          if (window.uiToast) window.uiToast('Network error deleting customer', 'error');
+        }
+      },
+
+      initials(name) {
+        if (!name) return 'C';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      },
+
+      avatarClass(idx) {
+        const palettes = [
+          'bg-gradient-to-tr from-violet-600 to-indigo-500 shadow-violet-500/20',
+          'bg-gradient-to-tr from-cyan-600 to-teal-500 shadow-cyan-500/20',
+          'bg-gradient-to-tr from-rose-600 to-pink-500 shadow-rose-500/20',
+          'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-amber-500/20',
+          'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-500/20',
+        ];
+        return palettes[idx % palettes.length];
+      },
+
+      async openCustomerDetails(c) {
+        this.customerDetails = c;
+        this.showDetailsModal = true;
+        this.loadingDetails = true;
+        this.detailsError = '';
+        this.billsHistory = [];
+        this.canViewStats = false;
+        this.clientStats = null;
+        this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+
+        try {
+          const res = await fetch(`/api/customers/${c.id}/details`);
+          const data = await res.json();
+          if (data.success) {
+            this.customerDetails = data.customer || c;
+            this.canViewStats = Boolean(data.can_view_stats);
+            this.clientStats = data.stats || null;
+            this.billsHistory = data.bills || [];
+          } else {
+            this.detailsError = data.message || 'Unable to load customer statistics.';
+          }
+        } catch (e) {
+          console.error("Failed to load customer details:", e);
+          this.detailsError = 'Network error fetching customer details.';
+        } finally {
+          this.loadingDetails = false;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        }
+      },
+
+      openBillDetail(bill) {
+        this.selectedBill = bill;
+        this.showBillDetailModal = true;
+        this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+      },
+
+      printBillDetail() {
+        window.print();
+      },
+
+      formatDate(ts) {
+        if (!ts) return '—';
+        const d = new Date(ts * 1000);
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      },
+
+      formatDateTime(ts) {
+        if (!ts) return '—';
+        const d = new Date(ts * 1000);
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    };
+  }
+</script>
+{% endblock %}

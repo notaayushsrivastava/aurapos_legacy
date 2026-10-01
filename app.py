@@ -1329,6 +1329,39 @@ def staff_page():
     return render_template('service/staff.html', staff=staff_list)
 
 
+@app.route('/customers')
+@role_required("admin", "manager")
+def customers_page():
+    salon_id = session.get("id", 1)
+    tier, salon = get_salon_tier(salon_id)
+    is_studio = (tier == "studio")
+    is_free = (tier == "free")
+    
+    customer_list = customerRepo.get_customers(salon_id)
+    analytics = customerRepo.get_customer_analytics(salon_id) if is_studio else {
+        "total_customers": len(customer_list),
+        "active_count": len(customer_list),
+        "churning_count": 0,
+        "churned_count": 0,
+        "retention_rate": 100.0,
+        "repeat_rate": 0.0,
+        "avg_spend": 0,
+        "total_tracked_spend": 0,
+        "top_clients": [],
+        "customers_with_metrics": customer_list,
+    }
+    
+    return render_template(
+        'service/customers.html',
+        customers=customer_list,
+        analytics=analytics,
+        tier=tier,
+        is_studio=is_studio,
+        is_free=is_free,
+        salon=salon,
+    )
+
+
 @app.route('/reports')
 @role_required("admin", "manager")
 def reports_page():
@@ -1452,12 +1485,14 @@ def api_create_customer():
             "message": f"A customer with phone {phone_digits} already exists — attached them to the bill instead.",
             "existing": existing,
         }), 409
+    gender = str(data.get("gender", "") or "").strip()
     new_id = customerRepo.add_customer(
         account_id=salon_id,
         name=name,
         phone=phone_digits,
         email=str(data.get("email", "") or "").strip(),
         notes=str(data.get("notes", "") or "").strip(),
+        gender=gender,
     )
     customer = {
         "id": new_id,
@@ -1465,8 +1500,127 @@ def api_create_customer():
         "phone": phone_digits,
         "email": str(data.get("email", "") or "").strip(),
         "notes": str(data.get("notes", "") or "").strip(),
+        "gender": gender,
     }
     return jsonify({"success": True, "id": new_id, "customer": customer, "message": f"{name} added to your customer list."})
+
+
+@app.get('/api/customers')
+@role_required("admin", "manager")
+def api_get_customers():
+    salon_id = session.get("id", 1)
+    tier, _ = get_salon_tier(salon_id)
+    if tier == "studio":
+        analytics = customerRepo.get_customer_analytics(salon_id)
+        return jsonify({
+            "success": True,
+            "customers": analytics["customers_with_metrics"],
+            "analytics": {k: analytics[k] for k in analytics if k != "customers_with_metrics"},
+        })
+    customers = customerRepo.get_customers(salon_id)
+    return jsonify({"success": True, "customers": customers})
+
+
+@app.get('/api/customers/<int:customer_id>/details')
+@role_required("admin", "manager")
+def api_customer_details(customer_id):
+    """Retrieve client stats and bill history.
+    
+    RBAC:
+      - Manager: Can view bill history only (financial/revenue totals and visit frequency stats are masked).
+      - Admin: Can view full statistics (total revenue, visit frequency, churn/cohort status) AND bill history.
+    """
+    salon_id = session.get("id", 1)
+    user_role = session.get("auth_level", "admin")
+
+    # Find customer
+    customers = customerRepo.get_customers(salon_id)
+    customer = next((c for c in customers if c["id"] == customer_id), None)
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found."}), 404
+
+    phone = str(customer.get("phone") or "").strip()
+    bill_history = billRepo.get_bills_by_phone(salon_id, phone) if phone else []
+
+    can_view_stats = (user_role == "admin")
+
+    if can_view_stats:
+        total_revenue = sum(int(b.get("grand_total") or 0) for b in bill_history)
+        visit_count = len(bill_history)
+        last_visit_ts = max((int(b.get("created_at") or 0) for b in bill_history), default=0)
+        
+        # Calculate visit frequency
+        if visit_count <= 1:
+            visit_frequency = "New Client" if visit_count == 1 else "No Visits Yet"
+        else:
+            first_visit_ts = min((int(b.get("created_at") or 0) for b in bill_history), default=0)
+            span_days = max(1, (last_visit_ts - first_visit_ts) // 86400)
+            avg_interval_days = round(span_days / (visit_count - 1), 1)
+            visit_frequency = f"Every ~{avg_interval_days} days ({visit_count} total visits)"
+
+        stats = {
+            "total_revenue": total_revenue,
+            "visit_count": visit_count,
+            "visit_frequency": visit_frequency,
+            "last_visit_ts": last_visit_ts,
+            "avg_ticket": round(total_revenue / visit_count) if visit_count else 0,
+        }
+    else:
+        stats = None
+
+    return jsonify({
+        "success": True,
+        "customer": customer,
+        "can_view_stats": can_view_stats,
+        "stats": stats,
+        "bills": bill_history,
+    })
+
+
+@app.put('/api/customers/<int:customer_id>')
+@role_required("admin", "manager")
+def api_update_customer(customer_id):
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    phone_digits = "".join(ch for ch in str(data.get("phone", "") or "") if ch.isdigit())
+    if not name:
+        return jsonify({"success": False, "message": "Customer name is required."}), 400
+    if phone_digits and len(phone_digits) != 10:
+        return jsonify({"success": False, "message": "Phone number must be exactly 10 digits."}), 400
+
+    gender = str(data.get("gender", "") or "").strip()
+    ok = customerRepo.update_customer(
+        account_id=salon_id,
+        customer_id=customer_id,
+        name=name,
+        phone=phone_digits,
+        email=str(data.get("email", "") or "").strip(),
+        notes=str(data.get("notes", "") or "").strip(),
+        gender=gender,
+    )
+    if ok:
+        return jsonify({"success": True, "message": f"Customer updated successfully."})
+    return jsonify({"success": False, "message": "Could not update customer."}), 400
+
+
+@app.delete('/api/customers/<int:customer_id>')
+@role_required("admin", "manager")
+def api_delete_customer(customer_id):
+    salon_id = session.get("id", 1)
+    ok = customerRepo.delete_customer(salon_id, customer_id)
+    if ok:
+        return jsonify({"success": True, "message": "Customer removed from directory."})
+    return jsonify({"success": False, "message": "Could not remove customer."}), 400
+
+
+@app.get('/api/customers/analytics')
+@role_required("admin", "manager")
+@tier_required("studio")
+def api_get_customer_analytics():
+    salon_id = session.get("id", 1)
+    analytics = customerRepo.get_customer_analytics(salon_id)
+    return jsonify({"success": True, "analytics": analytics})
 
 
 @app.post('/api/bills')
@@ -2197,8 +2351,8 @@ def api_export_data(dataset):
         rows = customerRepo.get_customers(salon_id)
         return _csv_response(
             f"customers-{stamp}.csv",
-            ["id", "name", "phone", "email", "notes", "created_at"],
-            [[r["id"], r["name"], r["phone"], r["email"], r["notes"], r["created_at"]] for r in rows],
+            ["id", "name", "phone", "email", "gender", "notes", "created_at"],
+            [[r["id"], r["name"], r["phone"], r["email"], r.get("gender", ""), r["notes"], r["created_at"]] for r in rows],
         )
     if dataset == "appointments":
         rows = appointmentRepo.get_appointments(salon_id)
@@ -2225,10 +2379,10 @@ def api_import_template(dataset):
     if dataset == "customers":
         return _csv_response(
             "customers-upload-template.csv",
-            ["name", "phone", "email", "notes"],
+            ["name", "phone", "email", "gender", "notes"],
             [
-                ["Ananya Sharma", "9876543210", "ananya@gmail.com", "Prefers weekend slots"],
-                ["Rahul Verma", "9811112222", "rahul@gmail.com", ""],
+                ["Ananya Sharma", "9876543210", "ananya@gmail.com", "Female", "Prefers weekend slots"],
+                ["Rahul Verma", "9811112222", "rahul@gmail.com", "Male", ""],
             ],
         )
     if dataset == "services":

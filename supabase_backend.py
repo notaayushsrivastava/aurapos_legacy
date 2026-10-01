@@ -15,6 +15,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, date, timedelta
 from uuid import uuid4
 import json
+import time
 
 try:  # supabase-py is imported lazily so this module can be compiled/inspected without it
     from supabase import create_client
@@ -1631,6 +1632,31 @@ class BillRepository:
             bills.append(d)
         return bills
 
+    def get_bills_by_phone(self, account_id, phone, limit=50):
+        """Fetch bill history for a client phone number, newest first."""
+        phone = str(phone or "").strip()
+        if not phone:
+            return []
+        rows = (
+            _sb().table("bills")
+            .select("*")
+            .eq("account_id", account_id)
+            .eq("client_phone", phone)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        ).data or []
+        bills = []
+        for r in rows:
+            d = dict(r)
+            try:
+                items = json.loads(d.pop("items_json") or "[]")
+            except Exception:
+                items = []
+            d["items"] = items if isinstance(items, list) else []
+            bills.append(d)
+        return bills
+
     def seed_defaults_if_empty(self, account_id):
         # Cleared placeholder bills per user specification
         pass
@@ -1703,7 +1729,7 @@ class CustomerRepository:
         )
         return dict(row) if row else None
 
-    def add_customer(self, account_id, name, phone="", email="", notes="", created_at=None):
+    def add_customer(self, account_id, name, phone="", email="", notes="", created_at=None, gender=""):
         if created_at is None:
             created_at = int(datetime.now().timestamp())
         res = (
@@ -1714,6 +1740,7 @@ class CustomerRepository:
                 "phone": phone,
                 "email": email,
                 "notes": notes,
+                "gender": gender or "",
                 "created_at": created_at,
             })
             .execute()
@@ -1738,6 +1765,7 @@ class CustomerRepository:
             phone = str(row.get("phone", "") or "").strip()
             email = str(row.get("email", "") or "").strip()
             notes = str(row.get("notes", "") or "").strip()
+            gender = str(row.get("gender", "") or "").strip()
             if not name:
                 skipped += 1
                 continue
@@ -1750,6 +1778,7 @@ class CustomerRepository:
                 "phone": phone,
                 "email": email,
                 "notes": notes,
+                "gender": gender,
                 "created_at": int(datetime.now().timestamp()),
             })
             if phone:
@@ -1780,6 +1809,7 @@ class CustomerRepository:
                 "phone": phone,
                 "email": email,
                 "notes": notes,
+                "gender": "Female" if "Ananya" in name else "Male",
                 "created_at": now,
             }
             for (name, phone, email, notes) in self.DEFAULTS
@@ -1788,6 +1818,131 @@ class CustomerRepository:
             _sb().table("customers").insert(rows).execute()
         except Exception as exc:
             _warn(f"customer seed skipped: {exc}")
+
+    def update_customer(self, account_id, customer_id, name, phone="", email="", notes="", gender=""):
+        """Update existing customer details."""
+        res = (
+            _sb().table("customers")
+            .update({
+                "name": name,
+                "phone": phone,
+                "email": email,
+                "notes": notes,
+                "gender": gender or "",
+            })
+            .eq("id", customer_id)
+            .eq("account_id", account_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    def delete_customer(self, account_id, customer_id):
+        """Delete customer record."""
+        res = (
+            _sb().table("customers")
+            .delete()
+            .eq("id", customer_id)
+            .eq("account_id", account_id)
+            .execute()
+        )
+        return bool(res.data)
+
+    def get_customer_analytics(self, account_id):
+        """Compute advanced churn metrics, retention rate, and spend distribution for Studio tier."""
+        self.seed_defaults_if_empty(account_id)
+        customers = self.get_customers(account_id)
+        
+        # Pull bills for this salon to associate recency and spend
+        bills_res = (
+            _sb().table("bills")
+            .select("client_phone, grand_total, created_at")
+            .eq("account_id", account_id)
+            .execute()
+        )
+        bills = bills_res.data or []
+
+        # Map phone -> list of bills
+        phone_bills = {}
+        for b in bills:
+            phone = str(b.get("client_phone") or "").strip()
+            if phone:
+                phone_bills.setdefault(phone, []).append(b)
+
+        now_ts = int(datetime.now().timestamp())
+        day_sec = 86400
+        active_threshold = now_ts - (30 * day_sec)     # <= 30 days
+        churning_threshold = now_ts - (75 * day_sec)   # 31 to 75 days
+
+        active_count = 0
+        churning_count = 0
+        churned_count = 0
+        repeat_count = 0
+        total_tracked_spend = 0
+
+        annotated_customers = []
+        for c in customers:
+            phone = str(c.get("phone") or "").strip()
+            c_bills = phone_bills.get(phone, [])
+            total_spend = sum(int(b.get("grand_total") or 0) for b in c_bills)
+            visit_count = len(c_bills)
+            last_visit_ts = max((int(b.get("created_at") or 0) for b in c_bills), default=0)
+
+            if visit_count > 1:
+                repeat_count += 1
+            total_tracked_spend += total_spend
+
+            # Determine churn status
+            if last_visit_ts == 0:
+                # No bills recorded: check account registration date
+                created_at = int(c.get("created_at") or 0)
+                if created_at >= active_threshold:
+                    status = "active"
+                    active_count += 1
+                elif created_at >= churning_threshold:
+                    status = "churning"
+                    churning_count += 1
+                else:
+                    status = "churned"
+                    churned_count += 1
+            else:
+                if last_visit_ts >= active_threshold:
+                    status = "active"
+                    active_count += 1
+                elif last_visit_ts >= churning_threshold:
+                    status = "churning"
+                    churning_count += 1
+                else:
+                    status = "churned"
+                    churned_count += 1
+
+            c_copy = dict(c)
+            c_copy["total_spend"] = total_spend
+            c_copy["visit_count"] = visit_count
+            c_copy["last_visit_ts"] = last_visit_ts
+            c_copy["status"] = status
+            annotated_customers.append(c_copy)
+
+        total_customers = len(customers)
+        retention_rate = round((active_count / total_customers * 100), 1) if total_customers else 0
+        avg_spend = round(total_tracked_spend / total_customers) if total_customers else 0
+        repeat_rate = round((repeat_count / total_customers * 100), 1) if total_customers else 0
+
+        # Top 5 most valuable customers
+        top_clients = sorted(annotated_customers, key=lambda x: x["total_spend"], reverse=True)[:5]
+
+        return {
+            "total_customers": total_customers,
+            "active_count": active_count,
+            "churning_count": churning_count,
+            "churned_count": churned_count,
+            "retention_rate": retention_rate,
+            "repeat_rate": repeat_rate,
+            "avg_spend": avg_spend,
+            "total_tracked_spend": total_tracked_spend,
+            "top_clients": top_clients,
+            "customers_with_metrics": annotated_customers,
+        }
+
 
 
 class ReportRepository:
@@ -1977,6 +2132,7 @@ class AdminRepository:
 
     SETTING_ACCEPTING_PUBLIC = "accepting_public"
     _in_memory_settings = {}
+    _settings_cache_ts = {}
 
     def __init__(self):
         pass
@@ -1984,8 +2140,9 @@ class AdminRepository:
     # ---------- App settings (key/value) ----------
 
     def get_setting(self, key, default=None):
-        """Fetch a settings value; checks in-memory cache and Supabase fail-safe."""
-        if key in self._in_memory_settings:
+        """Fetch a settings value; uses a 3-second cache TTL to ensure fresh state across workers."""
+        now = time.time()
+        if key in self._in_memory_settings and (now - self._settings_cache_ts.get(key, 0) < 3.0):
             return self._in_memory_settings[key]
         try:
             row = _data(
@@ -1997,6 +2154,7 @@ class AdminRepository:
             )
             if row and "value" in row:
                 self._in_memory_settings[key] = row["value"]
+                self._settings_cache_ts[key] = now
                 return row["value"]
             return default
         except Exception as exc:
@@ -2004,13 +2162,10 @@ class AdminRepository:
             return self._in_memory_settings.get(key, default)
 
     def set_setting(self, key, value):
-        """Upsert a settings value. Returns True on success.
-
-        Applies the setting to the in-memory cache and environment variable immediately,
-        then attempts to persist to Supabase app_settings table.
-        """
+        """Upsert a settings value. Returns True on success."""
         str_val = str(value)
         self._in_memory_settings[key] = str_val
+        self._settings_cache_ts[key] = time.time()
         if key == self.SETTING_ACCEPTING_PUBLIC:
             os.environ["ACCEPTING_PUBLIC"] = str_val
 

@@ -4,6 +4,7 @@ from datetime import datetime, date, timedelta
 import json
 import os
 import re
+import time
 
 # ================= SUBSCRIPTION TIERS =================
 # Free-trial + two-tier subscription model:
@@ -1534,6 +1535,29 @@ class BillRepository:
             bills.append(d)
         return bills
 
+    def get_bills_by_phone(self, account_id, phone, limit=50):
+        """Fetch bill history for a client phone number, newest first."""
+        phone = str(phone or "").strip()
+        if not phone:
+            return []
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT * FROM bills WHERE account_id = ? AND client_phone = ? ORDER BY created_at DESC LIMIT ?",
+            (account_id, phone, int(limit)),
+        ).fetchall()
+        conn.close()
+        bills = []
+        for r in rows:
+            d = dict(r)
+            try:
+                items = json.loads(d.pop("items_json") or "[]")
+            except Exception:
+                items = []
+            d["items"] = items if isinstance(items, list) else []
+            bills.append(d)
+        return bills
+
     def seed_defaults_if_empty(self, account_id):
         # Cleared placeholder bills per user specification
         pass
@@ -1867,11 +1891,16 @@ class CustomerRepository:
                 phone TEXT DEFAULT '',
                 email TEXT DEFAULT '',
                 notes TEXT DEFAULT '',
+                gender TEXT DEFAULT '',
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (account_id) REFERENCES salons(id)
             );
             """
         )
+        try:
+            cur.execute("ALTER TABLE customers ADD COLUMN gender TEXT DEFAULT ''")
+        except Exception:
+            pass
         conn.commit()
         conn.close()
 
@@ -1925,17 +1954,17 @@ class CustomerRepository:
         conn.close()
         return dict(row) if row else None
 
-    def add_customer(self, account_id, name, phone="", email="", notes="", created_at=None):
+    def add_customer(self, account_id, name, phone="", email="", notes="", created_at=None, gender=""):
         if created_at is None:
             created_at = int(datetime.now().timestamp())
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO customers(account_id, name, phone, email, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO customers(account_id, name, phone, email, notes, gender, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (account_id, name, phone, email, notes, created_at),
+            (account_id, name, phone, email, notes, gender or "", created_at),
         )
         new_id = cur.lastrowid
         conn.commit()
@@ -1959,6 +1988,7 @@ class CustomerRepository:
             phone = str(row.get("phone", "") or "").strip()
             email = str(row.get("email", "") or "").strip()
             notes = str(row.get("notes", "") or "").strip()
+            gender = str(row.get("gender", "") or "").strip()
             if not name:
                 skipped += 1
                 continue
@@ -1968,10 +1998,10 @@ class CustomerRepository:
             try:
                 cur.execute(
                     """
-                    INSERT INTO customers(account_id, name, phone, email, notes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO customers(account_id, name, phone, email, notes, gender, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (account_id, name, phone, email, notes, int(datetime.now().timestamp())),
+                    (account_id, name, phone, email, notes, gender, int(datetime.now().timestamp())),
                 )
                 if phone:
                     existing.add(phone)
@@ -1992,18 +2022,138 @@ class CustomerRepository:
         if count == 0:
             now = int(datetime.now().timestamp())
             defaults = [
-                ("Ananya Sharma", "9876543210", "ananya@gmail.com", "Prefers weekend slots"),
-                ("Vikram Malhotra", "9812345678", "vikram@gmail.com", "Regular client"),
+                ("Ananya Sharma", "9876543210", "ananya@gmail.com", "Prefers weekend slots", "Female"),
+                ("Vikram Malhotra", "9812345678", "vikram@gmail.com", "Regular client", "Male"),
             ]
             cur.executemany(
                 """
-                INSERT INTO customers(account_id, name, phone, email, notes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO customers(account_id, name, phone, email, notes, gender, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 [(account_id, *d, now) for d in defaults],
             )
             conn.commit()
         conn.close()
+
+    def update_customer(self, account_id, customer_id, name, phone="", email="", notes="", gender=""):
+        """Update existing customer details."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE customers
+            SET name = ?, phone = ?, email = ?, notes = ?, gender = ?
+            WHERE id = ? AND account_id = ?
+            """,
+            (name, phone, email, notes, gender or "", customer_id, account_id),
+        )
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def delete_customer(self, account_id, customer_id):
+        """Delete customer record."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM customers WHERE id = ? AND account_id = ?", (customer_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def get_customer_analytics(self, account_id):
+        """Compute advanced churn metrics, retention rate, and spend distribution for Studio tier."""
+        self.seed_defaults_if_empty(account_id)
+        customers = self.get_customers(account_id)
+
+        conn = get_db()
+        cur = conn.cursor()
+        bills = cur.execute(
+            "SELECT client_phone, grand_total, created_at FROM bills WHERE account_id = ?",
+            (account_id,),
+        ).fetchall()
+        conn.close()
+
+        phone_bills = {}
+        for b in bills:
+            phone = str(b["client_phone"] or "").strip()
+            if phone:
+                phone_bills.setdefault(phone, []).append(dict(b))
+
+        now_ts = int(datetime.now().timestamp())
+        day_sec = 86400
+        active_threshold = now_ts - (30 * day_sec)     # <= 30 days
+        churning_threshold = now_ts - (75 * day_sec)   # 31 to 75 days
+
+        active_count = 0
+        churning_count = 0
+        churned_count = 0
+        repeat_count = 0
+        total_tracked_spend = 0
+
+        annotated_customers = []
+        for c in customers:
+            phone = str(c.get("phone") or "").strip()
+            c_bills = phone_bills.get(phone, [])
+            total_spend = sum(int(b.get("grand_total") or 0) for b in c_bills)
+            visit_count = len(c_bills)
+            last_visit_ts = max((int(b.get("created_at") or 0) for b in c_bills), default=0)
+
+            if visit_count > 1:
+                repeat_count += 1
+            total_tracked_spend += total_spend
+
+            # Determine churn status
+            if last_visit_ts == 0:
+                created_at = int(c.get("created_at") or 0)
+                if created_at >= active_threshold:
+                    status = "active"
+                    active_count += 1
+                elif created_at >= churning_threshold:
+                    status = "churning"
+                    churning_count += 1
+                else:
+                    status = "churned"
+                    churned_count += 1
+            else:
+                if last_visit_ts >= active_threshold:
+                    status = "active"
+                    active_count += 1
+                elif last_visit_ts >= churning_threshold:
+                    status = "churning"
+                    churning_count += 1
+                else:
+                    status = "churned"
+                    churned_count += 1
+
+            c_copy = dict(c)
+            c_copy["total_spend"] = total_spend
+            c_copy["visit_count"] = visit_count
+            c_copy["last_visit_ts"] = last_visit_ts
+            c_copy["status"] = status
+            annotated_customers.append(c_copy)
+
+        total_customers = len(customers)
+        retention_rate = round((active_count / total_customers * 100), 1) if total_customers else 0
+        avg_spend = round(total_tracked_spend / total_customers) if total_customers else 0
+        repeat_rate = round((repeat_count / total_customers * 100), 1) if total_customers else 0
+
+        top_clients = sorted(annotated_customers, key=lambda x: x["total_spend"], reverse=True)[:5]
+
+        return {
+            "total_customers": total_customers,
+            "active_count": active_count,
+            "churning_count": churning_count,
+            "churned_count": churned_count,
+            "retention_rate": retention_rate,
+            "repeat_rate": repeat_rate,
+            "avg_spend": avg_spend,
+            "total_tracked_spend": total_tracked_spend,
+            "top_clients": top_clients,
+            "customers_with_metrics": annotated_customers,
+        }
+
 
 
 class ReportRepository:
@@ -2184,6 +2334,7 @@ class ReportRepository:
 class AdminRepository:
     SETTING_ACCEPTING_PUBLIC = "accepting_public"
     _in_memory_settings = {}
+    _settings_cache_ts = {}
 
     def __init__(self):
         try:
@@ -2204,7 +2355,8 @@ class AdminRepository:
             pass
 
     def get_setting(self, key, default=None):
-        if key in self._in_memory_settings:
+        now = time.time()
+        if key in self._in_memory_settings and (now - self._settings_cache_ts.get(key, 0) < 3.0):
             return self._in_memory_settings[key]
         try:
             conn = get_db()
@@ -2213,6 +2365,7 @@ class AdminRepository:
             conn.close()
             if row and "value" in row:
                 self._in_memory_settings[key] = row["value"]
+                self._settings_cache_ts[key] = now
                 return row["value"]
             return default
         except Exception:
@@ -2221,6 +2374,7 @@ class AdminRepository:
     def set_setting(self, key, value):
         str_val = str(value)
         self._in_memory_settings[key] = str_val
+        self._settings_cache_ts[key] = time.time()
         if key == self.SETTING_ACCEPTING_PUBLIC:
             os.environ["ACCEPTING_PUBLIC"] = str_val
 

@@ -1,0 +1,2 @@
+ALTER TABLE "public"."customers"
+  ADD COLUMN IF NOT EXISTS "gender" text DEFAULT ''::text;
