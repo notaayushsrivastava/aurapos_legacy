@@ -719,21 +719,42 @@
     function initAuraMotion() {
       if (window.AURA_NO_REVEAL) return;
       if (!window.anime || !('IntersectionObserver' in window)) return;
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      /*
+       * Respect reduced-motion preferences without making AuraPOS feel static.
+       * Some Windows configurations (including System Properties > Performance)
+       * surface as prefers-reduced-motion: reduce. Use a lighter choreography:
+       * shorter fades, smaller movement, and no large transforms.
+       */
+      var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var motion = reducedMotion ? {
+        duration: 260,
+        translate: 6,
+        scale: 0.985,
+        maxDelay: 120,
+        countDuration: 450
+      } : {
+        duration: 700,
+        translate: 18,
+        scale: 0.94,
+        maxDelay: Infinity,
+        countDuration: 1500
+      };
 
       var els = Array.prototype.slice.call(document.querySelectorAll('[data-anim]'));
       if (els.length) {
         document.documentElement.classList.add('js-anim');
         var animateEl = function (el) {
           var mode = el.getAttribute('data-anim') || 'up';
-          var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
-          var cfg = { targets: el, duration: 700, delay: delay, easing: 'easeOutExpo' };
+          var rawDelay = parseInt(el.getAttribute('data-delay') || '0', 10);
+          var delay = Math.min(rawDelay, motion.maxDelay);
+          var cfg = { targets: el, duration: motion.duration, delay: delay, easing: 'easeOutExpo' };
           if (mode === 'scale') {
-            cfg.opacity = [0, 1]; cfg.scale = [0.94, 1]; cfg.translateY = [12, 0];
+            cfg.opacity = [0, 1]; cfg.scale = [motion.scale, 1]; cfg.translateY = [motion.translate / 2, 0];
           } else if (mode === 'left') {
-            cfg.opacity = [0, 1]; cfg.translateX = [-20, 0];
+            cfg.opacity = [0, 1]; cfg.translateX = [-motion.translate, 0];
           } else {
-            cfg.opacity = [0, 1]; cfg.translateY = [18, 0];
+            cfg.opacity = [0, 1]; cfg.translateY = [motion.translate, 0];
           }
           anime(cfg);
         };
@@ -778,7 +799,7 @@
           var suffix = el.getAttribute('data-suffix') || '';
           var obj = { v: 0 };
           anime({
-            targets: obj, v: end, duration: 1500, easing: 'easeOutExpo',
+            targets: obj, v: end, duration: motion.countDuration, easing: 'easeOutExpo',
             update: function () {
               el.textContent = prefix + Math.round(obj.v).toLocaleString('en-IN') + suffix;
             }
