@@ -288,6 +288,7 @@ def check_maintenance_mode():
     if (
         path.startswith("/static")
         or path.startswith("/assets")
+        or path.startswith("/js")
         or path.startswith("/socket.io")
         or path in ("/output.css", "/favicon.ico", "/robots.txt", "/sitemap.xml", "/api/platform-status")
     ):
@@ -721,6 +722,18 @@ def pricing_redirect():
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/x-icon')
+
+
+@app.route('/js/lucide.min.js')
+@app.route('/lucide.min.js')
+def lucide_min_js():
+    return send_from_directory(os.path.join(app.static_folder, 'js'), 'lucide.min.js', mimetype='text/javascript')
+
+
+@app.route('/js/lucide.min.js.map')
+@app.route('/lucide.min.js.map')
+def lucide_min_js_map():
+    return send_from_directory(os.path.join(app.static_folder, 'js'), 'lucide.min.js.map', mimetype='application/json')
 
 
 @app.route('/robots.txt')

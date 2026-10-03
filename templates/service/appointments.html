@@ -177,7 +177,6 @@
           <p class="text-xs text-neutral-400 mt-1">Select another status filter or book a new client.</p>
         </div>
       </template>
-      </div>
 
     </div>
 
@@ -328,6 +327,9 @@
         // Keep the date navigation in sync with the backend day view
         this.$watch('selectedDate', () => this.loadForDate());
         this.loadServices();
+        this.$nextTick(() => {
+          if (window.lucide) window.lucide.createIcons();
+        });
       },
 
       async loadServices() {
@@ -369,6 +371,9 @@
           }
         } catch (e) { /* keep the current list on network errors */ }
         this.loading = false;
+        this.$nextTick(() => {
+          if (window.lucide) window.lucide.createIcons();
+        });
       },
 
       get selectedDateFormatted() {

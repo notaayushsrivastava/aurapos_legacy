@@ -266,27 +266,27 @@
             <!-- Live Search Results Dropdown -->
             <div x-show="showCustomerResults" x-cloak
                  class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
-              <template x-if="customerSearching">
-                <p class="px-3 py-2.5 text-[11px] text-neutral-400">Searching customers…</p>
-              </template>
-              <template x-for="(c, idx) in customerResults" :key="c.id || idx">
-                <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
-                  <span class="min-w-0">
-                    <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
-                    <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
-                  </span>
-                  <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
-                </button>
-              </template>
-              <template x-if="!customerSearching && customerResults.length === 0">
-                <div class="px-3 py-2.5 space-y-2">
-                  <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
-                  <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
-                    <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
-                    Create New Customer
+              <div x-show="customerSearching" class="px-3 py-2.5 text-[11px] text-neutral-400">
+                Searching customers…
+              </div>
+              <div x-show="!customerSearching && customerResults.length > 0">
+                <template x-for="(c, idx) in customerResults" :key="c.id ? 'c_' + c.id : 'idx_' + idx">
+                  <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
+                    <span class="min-w-0">
+                      <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
+                      <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
+                    </span>
+                    <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
                   </button>
-                </div>
-              </template>
+                </template>
+              </div>
+              <div x-show="!customerSearching && customerResults.length === 0" class="px-3 py-2.5 space-y-2">
+                <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
+                <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
+                  <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                  Create New Customer
+                </button>
+              </div>
             </div>
           </div>
 

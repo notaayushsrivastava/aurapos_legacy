@@ -224,7 +224,10 @@ class PostgresConnWrapper:
 def get_db():
     if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
         dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-        return PostgresConnWrapper(dsn)
+        try:
+            return PostgresConnWrapper(dsn)
+        except Exception:
+            pass
     conn = sql.connect("database.db")
     conn.row_factory = sql.Row
     return conn

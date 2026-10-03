@@ -56,10 +56,10 @@
     <link rel="stylesheet" href="/output.css">
 
   <!-- anime.js — shared kinetic motion engine for all pages -->
-  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
+  <script src="/js/anime.min.js"></script>
 
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/js/lucide.min.js"></script>
 
   {% set is_auth_app_page = request.path.rstrip('/') in ['/dashboard', '/billing', '/services', '/appointments', '/settings', '/staff', '/reports', '/upgrade'] or request.path.startswith('/admin') %}
   {% set is_auth_session = (session.get('id') is not none) or (session.get('is_admin') is not none) %}
@@ -74,7 +74,7 @@
   </script>
 
   <!-- Alpine.js for lightweight declarative reactivity -->
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script defer src="/js/cdn.min.js"></script>
 
   <style>
     [x-cloak] { display: none !important; }
@@ -724,25 +724,48 @@
       var els = Array.prototype.slice.call(document.querySelectorAll('[data-anim]'));
       if (els.length) {
         document.documentElement.classList.add('js-anim');
+        var animateEl = function (el) {
+          var mode = el.getAttribute('data-anim') || 'up';
+          var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
+          var cfg = { targets: el, duration: 700, delay: delay, easing: 'easeOutExpo' };
+          if (mode === 'scale') {
+            cfg.opacity = [0, 1]; cfg.scale = [0.94, 1]; cfg.translateY = [12, 0];
+          } else if (mode === 'left') {
+            cfg.opacity = [0, 1]; cfg.translateX = [-20, 0];
+          } else {
+            cfg.opacity = [0, 1]; cfg.translateY = [18, 0];
+          }
+          anime(cfg);
+        };
+
         var io = new IntersectionObserver(function (entries) {
           entries.forEach(function (en) {
             if (!en.isIntersecting) return;
             var el = en.target;
             io.unobserve(el);
-            var mode = el.getAttribute('data-anim') || 'up';
-            var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
-            var cfg = { targets: el, duration: 750, delay: delay, easing: 'easeOutExpo' };
-            if (mode === 'scale') {
-              cfg.opacity = [0, 1]; cfg.scale = [0.92, 1]; cfg.translateY = [16, 0];
-            } else if (mode === 'left') {
-              cfg.opacity = [0, 1]; cfg.translateX = [-26, 0];
-            } else {
-              cfg.opacity = [0, 1]; cfg.translateY = [24, 0];
-            }
-            anime(cfg);
+            animateEl(el);
           });
-        }, { threshold: 0.12, rootMargin: '0px 0px -36px 0px' });
-        els.forEach(function (el) { el.style.opacity = '0'; io.observe(el); });
+        }, { threshold: 0.05, rootMargin: '0px 0px -20px 0px' });
+
+        els.forEach(function (el) {
+          var rect = el.getBoundingClientRect();
+          // If already in initial viewport, animate immediately to prevent blank flash
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            animateEl(el);
+          } else {
+            io.observe(el);
+          }
+        });
+
+        // Safety fallback: ensure all elements are visible if observer delays
+        setTimeout(function () {
+          els.forEach(function (el) {
+            if (window.getComputedStyle(el).opacity === '0') {
+              el.style.opacity = '1';
+              el.style.transform = 'none';
+            }
+          });
+        }, 1200);
       }
 
       var cio = new IntersectionObserver(function (entries) {
