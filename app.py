@@ -349,7 +349,6 @@ mailer = Mail(app)
 
 # Resend Email Configuration
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
-RESEND_SENDER = os.environ.get("RESEND_SENDER", "AuraPOS <noreply@aurapos.aayushsrivastava.com>")
 SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "aayush@aayushsrivastava.com")
 if resend and RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
@@ -369,7 +368,7 @@ def send_resend_email(to_email, subject, html_content, sync=False):
         if resend and RESEND_API_KEY:
             try:
                 params = {
-                    "from": RESEND_SENDER,
+                    "from": "AuraPOS <reciepts@aurapos.aayushsrivastava.com>",
                     "to": [to_email],
                     "subject": subject,
                     "html": html_content,
@@ -423,8 +422,9 @@ def send_purchase_invoice_email(recipient_email, salon_name, owner_name, plan_ti
         invoice_date_str = now_dt.strftime("%d %b %Y")
         next_billing_str = _fmt_date(expires_ts) if expires_ts else (now_dt + timedelta(days=365 if cycle == 'yearly' else 30)).strftime("%d %b %Y")
         
-        # Calculate subtotal and GST for itemized invoice breakdown
-        total_amt = float(amount or 0)
+        # Razorpay stores billing amounts in paise, but the invoice email should
+        # display them in rupees for customer-facing amounts.
+        total_amt = (float(amount or 0) / 100.0)
         subtotal_val = round(total_amt / 1.18, 2) if total_amt > 0 else 0
         tax_val = round(total_amt - subtotal_val, 2) if total_amt > 0 else 0
 
