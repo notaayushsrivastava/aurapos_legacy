@@ -298,6 +298,32 @@ def get_client():
         _client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
     return _client
 
+
+def _reset_client():
+    """Drop a possibly stale Supabase client so the next request gets a fresh connection."""
+    global _client
+    client = _client
+    _client = None
+    try:
+        session = getattr(getattr(client, "postgrest", None), "session", None)
+        close = getattr(session, "close", None)
+        if close:
+            close()
+    except Exception:
+        pass
+
+
+def _is_transient_supabase_disconnect(exc):
+    """Return True for the stale HTTP connection failures seen on warm Vercel instances."""
+    message = str(exc).lower()
+    return (
+        "server disconnected" in message
+        or "remoteprotocolerror" in message
+        or "connection reset" in message
+        or "connection closed" in message
+    )
+
+
 def _warn(msg):
     print(f"[supabase_backend] {msg}", file=sys.stderr)
 
@@ -694,16 +720,56 @@ class AuthorizationRepository:
             return False
 
     def create_account(self, auth_id, username, password, auth_level="admin"):
-        """Create a local AuraPOS account in the database."""
+        """Create a local AuraPOS account in the database.
+
+        Vercel can reuse a warm Python process whose HTTP/2 connection to
+        Supabase has gone stale. Recreate the client and retry once, but first
+        check whether the insert already committed so a lost response cannot
+        create a duplicate account.
+        """
         username = (username or "").strip().lower()
         if not username or not password:
             raise ValueError("Username and password are required.")
-        _sb().table("accounts").insert({
+
+        payload = {
             "auth_id": auth_id,
             "username": username,
             "password": password,
             "auth_level": auth_level or "admin",
-        }).execute()
+        }
+
+        for attempt in range(2):
+            try:
+                _sb().table("accounts").insert(payload).execute()
+                return
+            except Exception as exc:
+                if attempt != 0 or not _is_transient_supabase_disconnect(exc):
+                    raise
+
+                _warn("accounts insert hit a stale Supabase connection; refreshing client")
+                _reset_client()
+
+                # The request may have reached PostgREST even though its response
+                # was disconnected. Treat an already-created matching account as
+                # success instead of issuing a second insert.
+                try:
+                    existing = _data(
+                        _sb().table("accounts")
+                        .select("auth_id")
+                        .eq("username", username)
+                        .maybe_single()
+                        .execute()
+                    )
+                    if existing and str(existing.get("auth_id")) == str(auth_id):
+                        return
+                except Exception as check_exc:
+                    if not _is_transient_supabase_disconnect(check_exc):
+                        raise
+                    _reset_client()
+
+                time.sleep(0.15)
+
+        raise RuntimeError("Unable to create the account after refreshing the Supabase connection.")
 
     def create_auth(self, name, salon_name, phone, email, password, plan="pro",
                     created_on=None, auth_level="admin"):
