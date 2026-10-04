@@ -577,10 +577,14 @@ class AuthorizationRepository:
         if row and row["payment_methods"]:
             try:
                 val = row["payment_methods"]
-                return json.loads(val) if isinstance(val, str) else val
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    if "custom_methods" not in res or not isinstance(res.get("custom_methods"), list):
+                        res["custom_methods"] = []
+                    return res
             except Exception:
                 pass
-        return {"upi": "", "card_terminal": ""}
+        return {"upi": "", "card_terminal": "", "custom_methods": []}
 
     def update_payment_methods(self, salon_id, methods):
         conn = get_db()

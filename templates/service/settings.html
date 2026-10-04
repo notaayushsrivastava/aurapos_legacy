@@ -474,6 +474,71 @@
                 </div>
               </div>
             </div>
+
+            <!-- Additional / Custom Payment Methods -->
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    <i data-lucide="receipt" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-sm font-bold text-neutral-900 dark:text-white">Additional Payment Options</p>
+                    <p class="text-[10px] text-neutral-500">Add custom tenders such as Cheque, Demand Draft (DD), Bank Transfer, Gift Card, etc.</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono-num font-semibold text-neutral-400" x-text="((paymentMethods.custom_methods || []).length) + '/15 enabled'"></span>
+              </div>
+
+              <!-- Pill tags list -->
+              <div class="flex flex-wrap gap-2 pt-1">
+                <template x-for="(cm, idx) in (paymentMethods.custom_methods || [])" :key="cm">
+                  <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 shadow-sm animate-in fade-in zoom-in-95 duration-150">
+                    <i data-lucide="check" class="w-3 h-3 text-emerald-500"></i>
+                    <span x-text="cm"></span>
+                    <button type="button" @click="removeCustomMethod(idx)" class="ml-1 p-0.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-400 hover:text-red-500 transition-colors" title="Remove option">
+                      <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                  </span>
+                </template>
+
+                <p x-show="!(paymentMethods.custom_methods && paymentMethods.custom_methods.length)" class="text-[11px] text-neutral-400 italic py-1">
+                  No additional payment options added yet.
+                </p>
+              </div>
+
+              <!-- Input row to add new method -->
+              <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div class="relative flex-1">
+                  <input type="text"
+                         x-model="newCustomMethodInput"
+                         @keydown.enter.prevent="addCustomMethod()"
+                         placeholder="e.g. Cheque, Demand Draft (DD), Bank Transfer, Gift Voucher"
+                         maxlength="40"
+                         class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                </div>
+                <button type="button"
+                        @click="addCustomMethod()"
+                        :disabled="!newCustomMethodInput.trim() || (paymentMethods.custom_methods && paymentMethods.custom_methods.length >= 15)"
+                        class="px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-white text-white dark:text-neutral-900 text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 shadow-sm">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>Add Option</span>
+                </button>
+              </div>
+
+              <!-- Quick suggestion chips -->
+              <div class="pt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-400">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mr-1">Suggestions:</span>
+                <template x-for="sug in ['Cheque', 'Demand Draft (DD)', 'Bank Transfer', 'Gift Card']" :key="sug">
+                  <button type="button"
+                          x-show="!(paymentMethods.custom_methods || []).includes(sug)"
+                          @click="addSuggestedMethod(sug)"
+                          class="px-2 py-0.5 rounded-lg bg-neutral-200/70 dark:bg-neutral-800/80 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors">
+                    + <span x-text="sug"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
           </div>
 
           <div class="flex items-center justify-between pt-1">
@@ -1346,17 +1411,53 @@
       },
 
       // ---------- Payment Methods ----------
-      paymentMethods: { upi: '', card_terminal: '' },
+      paymentMethods: { upi: '', card_terminal: '', custom_methods: [] },
+      newCustomMethodInput: '',
       savingPayments: false,
       async loadPaymentMethods() {
         try {
           const res = await fetch('/api/settings/payment-methods');
           if (res.ok) {
             const data = await res.json();
-            this.paymentMethods = data.methods || { upi: '', card_terminal: '' };
+            const methods = data.methods || { upi: '', card_terminal: '', custom_methods: [] };
+            if (!Array.isArray(methods.custom_methods)) methods.custom_methods = [];
+            this.paymentMethods = methods;
           }
         } catch (e) {
           console.log('Failed to load payment methods:', e);
+        }
+        this.refreshIcons();
+      },
+      addCustomMethod() {
+        const val = (this.newCustomMethodInput || '').trim();
+        if (!val) return;
+        if (!Array.isArray(this.paymentMethods.custom_methods)) {
+          this.paymentMethods.custom_methods = [];
+        }
+        const exists = this.paymentMethods.custom_methods.some(m => m.toLowerCase() === val.toLowerCase());
+        if (exists) {
+          this.notify('Payment option already exists.', 'error');
+          return;
+        }
+        if (['UPI', 'CASH', 'CARD'].includes(val.toUpperCase())) {
+          this.notify('Standard methods (UPI, Cash, Card) are already supported.', 'error');
+          return;
+        }
+        if (this.paymentMethods.custom_methods.length >= 15) {
+          this.notify('Maximum 15 custom payment methods allowed.', 'error');
+          return;
+        }
+        this.paymentMethods.custom_methods.push(val);
+        this.newCustomMethodInput = '';
+        this.refreshIcons();
+      },
+      addSuggestedMethod(name) {
+        this.newCustomMethodInput = name;
+        this.addCustomMethod();
+      },
+      removeCustomMethod(index) {
+        if (Array.isArray(this.paymentMethods.custom_methods)) {
+          this.paymentMethods.custom_methods.splice(index, 1);
         }
       },
       async savePaymentMethods() {

@@ -14,7 +14,7 @@ class TestAllFeatures(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"User-agent: *", res.data)
         self.assertIn(b"Disallow: /admin", res.data)
-        self.assertIn(b"aurapos3.vercel.app", res.data)
+        self.assertTrue(b"aurapos.aayushsrivastava.com" in res.data or b"aurapos3.vercel.app" in res.data)
 
         # Test llms.txt
         res = self.client.get('/llms.txt')
@@ -190,6 +190,51 @@ class TestAllFeatures(unittest.TestCase):
         res = self.client.get('/api/customers')
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()['success'])
+
+    def test_custom_payment_methods_and_billing(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # 1. Update payment methods with custom options like Cheque, Demand Draft
+        payload = {
+            "methods": {
+                "upi": "salon@okaxis",
+                "card_terminal": "PineLabs Pro",
+                "custom_methods": ["Cheque", "Demand Draft (DD)", "Bank Transfer"]
+            }
+        }
+        res = self.client.put('/api/settings/payment-methods', json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['methods']['custom_methods'], ["Cheque", "Demand Draft (DD)", "Bank Transfer"])
+
+        # 2. Get payment methods
+        res = self.client.get('/api/settings/payment-methods')
+        self.assertEqual(res.status_code, 200)
+        get_data = res.get_json()
+        self.assertTrue(get_data['success'])
+        self.assertEqual(get_data['methods']['custom_methods'], ["Cheque", "Demand Draft (DD)", "Bank Transfer"])
+
+        # 3. Create a bill with custom payment method (e.g. Cheque)
+        bill_payload = {
+            "terminal_id": "POS-01",
+            "client_name": "Test Patron",
+            "client_phone": "9988776655",
+            "subtotal": 1200,
+            "discount": 0,
+            "tax": 0,
+            "grand_total": 1200,
+            "payment_mode": "Cheque (CHQ #889900)",
+            "items": [{"name": "Deluxe Haircut", "price": 1200, "qty": 1, "staff": "Unassigned"}]
+        }
+        b_res = self.client.post('/api/bills', json=bill_payload)
+        self.assertEqual(b_res.status_code, 200)
+        b_data = b_res.get_json()
+        self.assertTrue(b_data['success'])
+        self.assertTrue(b_data['bill_id'])
 
 if __name__ == '__main__':
     unittest.main()

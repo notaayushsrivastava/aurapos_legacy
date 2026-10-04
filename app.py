@@ -2487,6 +2487,8 @@ def api_change_password():
 def api_get_payment_methods():
     salon_id = session.get("id", 1)
     methods = authRepo.get_payment_methods(salon_id)
+    if isinstance(methods, dict) and "custom_methods" not in methods:
+        methods["custom_methods"] = []
     return jsonify({"success": True, "methods": methods})
 
 
@@ -2496,10 +2498,24 @@ def api_update_payment_methods():
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
     methods = data.get("methods", data)
-    # Sanitize: only allow expected keys
+    
+    # Sanitize custom payment methods: unique, non-empty, max 15 methods, max 40 chars each
+    raw_custom = methods.get("custom_methods", [])
+    custom_methods = []
+    if isinstance(raw_custom, list):
+        seen = set()
+        for item in raw_custom:
+            name = str(item).strip()[:40]
+            if name and name.lower() not in seen and name.upper() not in {"UPI", "CASH", "CARD"}:
+                seen.add(name.lower())
+                custom_methods.append(name)
+            if len(custom_methods) >= 15:
+                break
+
     sanitized = {
         "upi": str(methods.get("upi", "")).strip()[:100],
         "card_terminal": str(methods.get("card_terminal", "")).strip()[:100],
+        "custom_methods": custom_methods,
     }
     authRepo.update_payment_methods(salon_id, sanitized)
     return jsonify({"success": True, "message": "Payment methods updated.", "methods": sanitized})

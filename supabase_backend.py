@@ -686,10 +686,15 @@ class AuthorizationRepository:
                 .execute()
             )
             if row and row.get("payment_methods"):
-                return row["payment_methods"]
+                val = row["payment_methods"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    if "custom_methods" not in res or not isinstance(res.get("custom_methods"), list):
+                        res["custom_methods"] = []
+                    return res
         except Exception as exc:
             _warn(f"get_payment_methods({salon_id}) failed: {exc}")
-        return {"upi": "", "card_terminal": ""}
+        return {"upi": "", "card_terminal": "", "custom_methods": []}
 
     def update_payment_methods(self, salon_id, methods):
         """Update the salon's payment methods configuration."""

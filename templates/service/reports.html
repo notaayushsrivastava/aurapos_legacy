@@ -830,6 +830,10 @@
         if (m === 'CASH') return '#10b981'; // Emerald
         if (m === 'UPI') return '#06b6d4';  // Cyan
         if (m === 'CARD') return '#f97316'; // Orange
+        if (m.includes('CHEQUE')) return '#eab308'; // Amber / Gold
+        if (m.includes('DD') || m.includes('DEMAND DRAFT')) return '#6366f1'; // Indigo
+        if (m.includes('BANK') || m.includes('TRANSFER')) return '#3b82f6'; // Blue
+        if (m.includes('GIFT')) return '#ec4899'; // Pink
         return '#8b5cf6';                   // Violet
       },
 
