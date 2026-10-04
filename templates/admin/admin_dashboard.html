@@ -453,6 +453,13 @@
                         <i data-lucide="download" class="w-3.5 h-3.5"></i>
                       </a>
 
+                      <!-- Withhold Account -->
+                      <button @click="openWithholdModal(s)"
+                              class="p-1.5 rounded-lg bg-neutral-800 hover:bg-rose-900/40 text-neutral-400 hover:text-rose-300 transition-colors"
+                              title="Withhold account access and send notification">
+                        <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+                      </button>
+
                       <!-- Delete Danger -->
                       <button @click="openDeleteModal(s)"
                               class="p-1.5 rounded-lg bg-neutral-800 hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition-colors"
@@ -1321,6 +1328,46 @@
     </div>
   </div>
 
+  <!-- ======================================================== -->
+  <!-- MODAL 6: WITHHOLD ACCOUNT MODAL                          -->
+  <!-- ======================================================== -->
+  <div x-cloak x-show="withholdOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md grid place-items-center p-4"
+       @click.self="withholdOpen = false">
+    <div class="bg-[#141210] rounded-3xl border border-neutral-800 w-full max-w-lg p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-800">
+        <div>
+          <h2 class="text-base font-black text-white">Withhold Account Access</h2>
+          <p class="text-xs text-rose-300/80">Suspend salon terminals &amp; send official Resend notification</p>
+        </div>
+        <button @click="withholdOpen = false" class="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-rose-950/20 border border-rose-900/50 text-xs text-rose-200/90 space-y-1.5">
+        <p>Withholding <strong class="text-white" x-text="withholdTarget.salon_name"></strong> (#<span x-text="withholdTarget.id"></span>):</p>
+        <p class="text-[11px] text-neutral-400">Owner Email: <span class="text-neutral-200 font-mono-num" x-text="withholdTarget.email || 'None'"></span></p>
+        <p class="text-[11px] text-neutral-400">Terminal access will be suspended immediately and the Account Withheld email will be sent via Resend.</p>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-neutral-300">
+          Reason for Withholding Access
+          <textarea x-model="withholdReason" rows="3" placeholder="e.g. Subscription payment authorization failed or account verification was withheld by platform administrators."
+                    class="mt-1 w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 outline-none focus:border-rose-500"></textarea>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button @click="withholdOpen = false" class="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">Cancel</button>
+        <button @click="submitWithholdSalon()" :disabled="busy"
+                class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 active:scale-95">
+          <span x-text="busy ? 'Sending…' : 'Withhold & Send Email'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Application State & Interactive Controller -->
   <script>
     const ADMIN_DATA = {
@@ -1387,6 +1434,10 @@
         deleteOpen: false,
         deleteTarget: { id: null, salon_name: '' },
         deleteConfirmName: '',
+
+        withholdOpen: false,
+        withholdTarget: { id: null, salon_name: '', email: '' },
+        withholdReason: '',
 
         announcementForm: {
           message: ADMIN_DATA.announcement.message || '',
@@ -1462,6 +1513,7 @@
           this.grantOpen = false;
           this.createOpen = false;
           this.deleteOpen = false;
+          this.withholdOpen = false;
         },
 
         fmtMoney(n) {
@@ -1695,6 +1747,35 @@
             this.toast(data.message, !!data.success);
             if (data.success) {
               this.deleteOpen = false;
+              setTimeout(() => window.location.reload(), 1100);
+            }
+          } catch (e) {
+            this.toast('Network error: ' + e.message, false);
+          }
+          this.busy = false;
+        },
+
+        // --- Withhold Account Modal ---
+        openWithholdModal(s) {
+          this.withholdTarget = { id: s.id, salon_name: s.salon_name, email: s.email };
+          this.withholdReason = 'Subscription payment authorization failed or account verification was withheld by platform administrators.';
+          this.withholdOpen = true;
+          this.refreshIcons();
+        },
+
+        async submitWithholdSalon() {
+          if (!this.withholdTarget.id) return;
+          this.busy = true;
+          try {
+            const res = await fetch(`${ADMIN_BASE}/api/salon/${this.withholdTarget.id}/withhold`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: this.withholdReason })
+            });
+            const data = await res.json();
+            this.toast(data.message, !!data.success);
+            if (data.success) {
+              this.withholdOpen = false;
               setTimeout(() => window.location.reload(), 1100);
             }
           } catch (e) {

@@ -13,6 +13,11 @@ from flask import (
     Blueprint, send_from_directory,
 )
 import razorpay
+import threading
+try:
+    import resend
+except ImportError:
+    resend = None
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -342,6 +347,147 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 mailer = Mail(app)
 
+# Resend Email Configuration
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+RESEND_SENDER = os.environ.get("RESEND_SENDER", "AuraPOS <noreply@aurapos.aayushsrivastava.com>")
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "aayush@aayushsrivastava.com")
+if resend and RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
+
+def send_resend_email(to_email, subject, html_content, sync=False):
+    """
+    Sends transactional email via Resend SDK with graceful fallback to Flask-Mail SMTP.
+    Runs asynchronously in a daemon thread by default to keep HTTP request latencies instantaneous.
+    """
+    to_email = (to_email or "").strip()
+    if not to_email:
+        return False
+
+    def _deliver():
+        # 1. Try Resend if configured
+        if resend and RESEND_API_KEY:
+            try:
+                params = {
+                    "from": RESEND_SENDER,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_content,
+                    "reply_to": SUPPORT_EMAIL,
+                }
+                res = resend.Emails.send(params)
+                logger.info(f"Resend email sent to {to_email} (subject: '{subject}', id: {getattr(res, 'id', res)})")
+                return True
+            except Exception as e:
+                logger.warning(f"Resend send failed for {to_email}: {e}. Attempting SMTP fallback...")
+
+        # 2. Fallback to Flask-Mail SMTP if available
+        try:
+            with app.app_context():
+                mailer.connect()
+                mailer.send(
+                    Message(
+                        subject=subject,
+                        recipients=[to_email],
+                        html=html_content
+                    )
+                )
+                logger.info(f"Fallback SMTP email sent to {to_email}")
+                return True
+        except Exception as e:
+            logger.warning(f"Fallback SMTP send error for {to_email}: {e}")
+            return False
+
+    if sync:
+        return _deliver()
+    t = threading.Thread(target=_deliver, daemon=True)
+    t.start()
+    return True
+
+
+def _safe_external_url(endpoint, default_path="/"):
+    try:
+        return url_for(endpoint, _external=True)
+    except Exception:
+        app_domain = os.environ.get("APP_URL", "https://aurapos.aayushsrivastava.com").rstrip("/")
+        return f"{app_domain}{default_path}"
+
+
+def send_purchase_invoice_email(recipient_email, salon_name, owner_name, plan_tier, cycle, amount, invoice_id, expires_ts=None):
+    """Triggers the purchase invoice transactional email via Resend."""
+    if not recipient_email:
+        return False
+    try:
+        tier_label = TIER_PLANS.get(plan_tier, {}).get("label", plan_tier.title())
+        now_dt = datetime.now()
+        invoice_date_str = now_dt.strftime("%d %b %Y")
+        next_billing_str = _fmt_date(expires_ts) if expires_ts else (now_dt + timedelta(days=365 if cycle == 'yearly' else 30)).strftime("%d %b %Y")
+        
+        # Calculate subtotal and GST for itemized invoice breakdown
+        total_amt = float(amount or 0)
+        subtotal_val = round(total_amt / 1.18, 2) if total_amt > 0 else 0
+        tax_val = round(total_amt - subtotal_val, 2) if total_amt > 0 else 0
+
+        html_body = render_template(
+            "email/purchase-invoice.html",
+            invoice_id=invoice_id or f"INV-{now_dt.strftime('%Y%m%d')}-{str(uuid4())[:6].upper()}",
+            invoice_date=invoice_date_str,
+            salon_name=salon_name or "Your Salon",
+            owner_name=owner_name or "Partner",
+            customer_email=recipient_email,
+            plan_name=f"{tier_label} Plan",
+            billing_cycle=f"{cycle.title()} Recurring Subscription",
+            currency_symbol="₹",
+            amount_paid=f"{int(total_amt):,}" if total_amt.is_integer() else f"{total_amt:,.2f}",
+            subtotal=f"{subtotal_val:,.2f}",
+            tax_amount=f"{tax_val:,.2f}",
+            next_billing_date=next_billing_str,
+            payment_method="Razorpay Online",
+            dashboard_url=_safe_external_url("dashboard", "/dashboard"),
+            receipt_url=_safe_external_url("settings", "/settings"),
+            support_email=SUPPORT_EMAIL,
+        )
+        return send_resend_email(
+            to_email=recipient_email,
+            subject=f"Payment Receipt: {tier_label} Plan Subscription — AuraPOS",
+            html_content=html_body,
+        )
+    except Exception as e:
+        logger.warning(f"Error preparing purchase invoice email: {e}")
+        return False
+
+
+def send_account_withheld_email(recipient_email, salon_name, owner_name, reason=None):
+    """Triggers the account withheld notice transactional email via Resend."""
+    if not recipient_email:
+        return False
+    try:
+        now_dt = datetime.now()
+        notice_date_str = now_dt.strftime("%d %b %Y")
+        default_reason = reason or "Subscription expired or payment verification pending. Salon terminal access has been placed on hold."
+        account_ref = f"HOLD-{now_dt.strftime('%y%m')}-{str(uuid4())[:6].upper()}"
+
+        resolve_link = _safe_external_url("upgrade", "/upgrade")
+        html_body = render_template(
+            "email/account-withheld.html",
+            salon_name=salon_name or "Your Salon",
+            owner_name=owner_name or "Account Owner",
+            notice_date=notice_date_str,
+            reason=default_reason,
+            resolve_url=resolve_link,
+            action_url=resolve_link,
+            account_ref=account_ref,
+            support_email=SUPPORT_EMAIL,
+        )
+        return send_resend_email(
+            to_email=recipient_email,
+            subject="Action Required: Account Access Withheld — AuraPOS",
+            html_content=html_body,
+        )
+    except Exception as e:
+        logger.warning(f"Error preparing account withheld email: {e}")
+        return False
+
 rzp_key_id = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_SxU2RG4SoMaOcI")
 rzp_key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "nYTCHgr6NQy1b5X0VDEXcELO")
 rzp_client = razorpay.Client(
@@ -442,14 +588,26 @@ def inject_salon():
     except Exception:
         pass
 
+    is_impersonating = False
+    is_superadmin = False
+    salon_id = None
+    try:
+        from flask import has_request_context
+        if has_request_context():
+            is_impersonating = bool(session.get("impersonating"))
+            is_superadmin = bool(session.get("is_admin"))
+            salon_id = session.get("id")
+    except Exception:
+        pass
+
     res = {
         "platform_announcement": announcement,
         "platform_maintenance": maintenance,
-        "is_impersonating": bool(session.get("impersonating")),
-        "is_superadmin": bool(session.get("is_admin")),
+        "is_impersonating": is_impersonating,
+        "is_superadmin": is_superadmin,
     }
-    if "id" in session:
-        salon = _cached_salon(session["id"])
+    if salon_id:
+        salon = _cached_salon(salon_id)
         plan = (salon.plan if salon else "") or ""
         tier = plan if plan in TIER_PLANS else "pro"
         res.update(dict(
@@ -900,22 +1058,24 @@ def forgotpassword():
 
     user = authRepo.forgot_password(identifier)
 
-    if user:
+    if user and user.username:
         try:
-            mailer.connect()
-            mailer.send(
-                Message(
-                    subject="Your AuraPOS Account Credentials",
-                    recipients=[user.username],
-                    html=render_template(
-                        "email.html",
-                        password=user.password,
-                        login_url=url_for('directlogin', username=user.username, password=user.password, _external=True)
-                    )
-                )
+            salon = authRepo.get_salon(user.auth_id) if getattr(user, 'auth_id', None) else None
+            html_body = render_template(
+                "email/forgot-password.html",
+                password=user.password,
+                username=user.username,
+                salon_name=salon.salon_name if salon else "Your Salon",
+                login_url=url_for('directlogin', username=user.username, password=user.password, _external=True),
+                support_email=SUPPORT_EMAIL,
+            )
+            send_resend_email(
+                to_email=user.username,
+                subject="Your AuraPOS Account Credentials",
+                html_content=html_body,
             )
         except Exception as e:
-            logger.warning(f"Mail error (safe fallback): {e}")
+            logger.warning(f"Forgot password mail error (safe fallback): {e}")
 
     return jsonify({
         "success": True,
@@ -1041,6 +1201,22 @@ def verify_subscription():
     billRepo.seed_defaults_if_empty(accid)
 
     flash("🎉 Subscription activated successfully! Welcome to AuraPOS.", "success")
+
+    # Send Resend purchase invoice email
+    try:
+        new_salon = authRepo.get_salon(accid)
+        send_purchase_invoice_email(
+            recipient_email=email,
+            salon_name=account_data.get("salon_name", "Studio Elite"),
+            owner_name=account_data.get("owner_name", "Salon Owner"),
+            plan_tier=pricing["tier"],
+            cycle=pricing["cycle"],
+            amount=pricing["amount"],
+            invoice_id=data.get("razorpay_payment_id") or f"INV-{str(uuid4())[:8].upper()}",
+            expires_ts=getattr(new_salon, 'expires_on', None),
+        )
+    except Exception as e:
+        logger.warning(f"Error triggering purchase invoice on signup: {e}")
 
     return jsonify({
         "success": True,
@@ -1215,6 +1391,23 @@ def verify_upgrade():
     )
 
     flash(f"🎉 You're on the {TIER_PLANS[tier]['label']} plan now!", "success")
+
+    # Send Resend purchase invoice email
+    try:
+        updated_salon = authRepo.get_salon(salon_id)
+        recipient = (updated_salon.email if updated_salon else "") or session.get("username", "")
+        send_purchase_invoice_email(
+            recipient_email=recipient,
+            salon_name=updated_salon.salon_name if updated_salon else "Your Salon",
+            owner_name=updated_salon.name if updated_salon else "Partner",
+            plan_tier=tier,
+            cycle=cycle,
+            amount=pricing["amount"],
+            invoice_id=data.get("razorpay_payment_id") or f"INV-{str(uuid4())[:8].upper()}",
+            expires_ts=expires_ts,
+        )
+    except Exception as e:
+        logger.warning(f"Error triggering purchase invoice on upgrade: {e}")
 
     return jsonify({
         "success": True,
@@ -2850,6 +3043,42 @@ def admin_delete_salon(salon_id):
         adminRepo.add_audit_log(session.get("admin_user", ADMIN_USER), "DELETE_SALON", f"Salon #{salon_id}", f"Wiped salon {salon_name}")
         return jsonify({"success": True, "message": f"Salon #{salon_id} ({salon_name}) deleted completely."})
     return jsonify({"success": False, "message": "Failed to delete salon."}), 500
+
+
+@admin_bp.post("/api/salon/<int:salon_id>/withhold")
+@admin_required
+def admin_withhold_salon(salon_id):
+    data = request.get_json(silent=True) or {}
+    reason = str(data.get("reason") or "").strip()
+    salon = authRepo.get_salon(salon_id)
+    if not salon:
+        return jsonify({"success": False, "message": f"Salon #{salon_id} not found."}), 404
+
+    # Expire salon access to withhold terminal operations
+    now_ts = int(datetime.now().timestamp())
+    authRepo.update_salon_plan(salon_id, salon.plan or "free", salon.billing_cycle or "trial", now_ts - 1)
+
+    # Deliver Account Withheld notification email via Resend
+    recipient = (salon.email or "").strip()
+    if recipient:
+        send_account_withheld_email(
+            recipient_email=recipient,
+            salon_name=salon.salon_name,
+            owner_name=salon.name or "Salon Owner",
+            reason=reason or "Subscription payment authorization failed or account verification was withheld by platform administrators.",
+        )
+
+    adminRepo.add_audit_log(
+        session.get("admin_user", ADMIN_USER),
+        "WITHHOLD_SALON",
+        f"Salon #{salon_id} ({salon.salon_name})",
+        f"Withheld access. Reason: {reason or 'Administrative withhold'}"
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Account #{salon_id} ({salon.salon_name}) access withheld and notification sent to {recipient or 'owner'}."
+    })
 
 
 @admin_bp.get("/api/salon/<int:salon_id>/export")

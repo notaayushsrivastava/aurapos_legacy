@@ -210,6 +210,18 @@ def seed_database(include_demo_transactions=True):
                 WHERE account_id = %s AND name = %s;
             """, (total_rev, staff_services[staff_name], salon_id, staff_name))
 
+    # Synchronize all auto-increment sequences with their max IDs
+    sync_tables = ["salons", "accounts", "categories", "services", "staff", "appointments", "customers"]
+    for tbl in sync_tables:
+        try:
+            cur.execute(f"SELECT pg_get_serial_sequence('public.{tbl}', 'id') AS seq;")
+            res = cur.fetchone()
+            seq_name = res[0] if res else None
+            if seq_name:
+                cur.execute(f"SELECT setval('{seq_name}', COALESCE((SELECT MAX(id) FROM public.{tbl}), 1), (SELECT COUNT(*) FROM public.{tbl}) > 0);")
+        except Exception as e:
+            print(f"[WARN] Could not sync sequence for {tbl}: {e}")
+
     conn.commit()
     conn.close()
     print("[OK] PostgreSQL database seeded successfully with complete dataset & 200 demo transactions!")

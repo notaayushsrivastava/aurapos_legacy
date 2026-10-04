@@ -293,6 +293,25 @@ def ensure_schema_upgrades():
             updated_at INTEGER NOT NULL
         )
     """)
+    # Automatically sync PostgreSQL auto-increment sequences to max(id) to avoid
+    # unique constraint violations if rows were seeded or imported with explicit IDs.
+    if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
+        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings"]
+        for tbl in sync_tables:
+            try:
+                cur.execute(f"SELECT pg_get_serial_sequence('{tbl}', 'id') AS seq")
+                s_row = cur.fetchone()
+                seq_name = s_row["seq"] if s_row else None
+                if seq_name:
+                    cur.execute(f"""
+                        SELECT setval(
+                            '{seq_name}',
+                            COALESCE((SELECT MAX(id) FROM {tbl}), 1),
+                            (SELECT COUNT(*) FROM {tbl}) > 0
+                        )
+                    """)
+            except Exception:
+                pass
     conn.commit()
     conn.close()
 

@@ -1,0 +1,342 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
+  <title>Payment Invoice #{{ invoice_id or 'INV-00108' }} — AuraPOS</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style type="text/css">
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    
+    /* Reset styles */
+    body, p, h1, h2, h3, h4, table, td, div {
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    body {
+      background-color: #0d0c0a;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #f4f2ed;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    img {
+      border: 0;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+      display: block;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', Consolas, Monaco, Menlo, 'Courier New', monospace !important;
+      font-variant-numeric: tabular-nums;
+    }
+    /* Mobile responsive */
+    @media only screen and (max-width: 620px) {
+      .email-container {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .content-padding {
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+      }
+      .stack-column {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      .stack-column-spacer {
+        height: 16px !important;
+      }
+      .item-table td {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0d0c0a; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+  <!-- Preheader preview text (invisible in email body) -->
+  <div style="display: none; font-size: 1px; color: #0d0c0a; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all;">
+    Receipt for your {{ plan_name or 'Pro Studio' }} subscription. Total paid: {{ currency_symbol or '₹' }}{{ amount_paid or '2,999' }}. Thank you for powering your salon with AuraPOS.
+    &#847; &zwnj; &nbsp; &#8199; &shy; &#847; &zwnj; &nbsp; &#8199; &shy; &#847; &zwnj; &nbsp; &#8199; &shy; &#847; &zwnj; &nbsp; &#8199; &shy;
+  </div>
+
+  <!-- Outer Canvas Table -->
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0d0c0a; table-layout: fixed;">
+    <tr>
+      <td align="center" style="padding: 40px 16px 48px 16px;">
+        <!-- Email Card Wrapper (max 600px) -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" class="email-container" style="max-width: 600px; width: 100%; background-color: #141210; border: 1px solid #2a2721; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 48px -10px rgba(0,0,0,0.85);">
+          
+          <!-- Top Accent Flame Line -->
+          <tr>
+            <td height="4" style="background: linear-gradient(90deg, #f97316 0%, #ea580c 46%, #fbbf24 100%); line-height: 4px; font-size: 4px;">&nbsp;</td>
+          </tr>
+
+          <!-- Brand Header -->
+          <tr>
+            <td align="center" style="padding: 36px 36px 24px 36px;" class="content-padding">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <!-- Squircle Logo Tile -->
+                  <td valign="middle" align="center" style="padding-right: 14px;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="44" height="44" align="center" valign="middle" style="background: linear-gradient(135deg, #f97316 0%, #c2410c 55%, #b45309 100%); border-radius: 12px; box-shadow: 0 8px 20px -4px rgba(194, 65, 12, 0.45);">
+                          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12.3' stroke='%23ffffff' stroke-width='1.7' stroke-linecap='round' stroke-dasharray='17 8' opacity='.45' fill='none'/%3E%3Cpath d='M10 23.2 16 7.2l6 16' stroke='%23ffffff' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12.3 17h7.4' stroke='%23ffffff' stroke-width='2.7' stroke-linecap='round' fill='none'/%3E%3C/svg%3E"
+                               alt="AuraPOS" width="24" height="24" style="display: block; width: 24px; height: 24px;" />
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <!-- Brand Wordmark -->
+                  <td valign="middle">
+                    <span style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: #f4f2ed; display: inline-block;">
+                      Aura<span style="color: #fbbf24;">POS</span>
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Status Badge + Headline -->
+          <tr>
+            <td align="center" style="padding: 0 36px 28px 36px;" class="content-padding">
+              <!-- Pill Badge (Paid / Emerald) -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                <tr>
+                  <td align="center" style="background-color: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 9999px; padding: 6px 14px;">
+                    <span class="font-mono" style="font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #34d399;">
+                      &#10003; Payment Received
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 26px; font-weight: 800; line-height: 1.25; color: #ffffff; letter-spacing: -0.025em; margin: 0 0 10px 0;">
+                Subscription Confirmed
+              </h1>
+              <p style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 15px; line-height: 1.55; color: #a9a395; margin: 0;">
+                Hi <strong style="color: #f4f2ed;">{{ owner_name or salon_name or 'Partner' }}</strong>, thank you for your payment. Your salon subscription is active and ready on all terminals.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Invoice Details Card -->
+          <tr>
+            <td style="padding: 0 36px 28px 36px;" class="content-padding">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #191714; border: 1px solid #2a2721; border-radius: 14px; overflow: hidden;">
+                <!-- Meta Columns (Invoice # & Date) -->
+                <tr>
+                  <td style="padding: 20px 24px; border-bottom: 1px solid #2a2721;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td class="stack-column" valign="top" style="width: 50%;">
+                          <div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; margin-bottom: 4px;">
+                            Invoice Number
+                          </div>
+                          <div class="font-mono" style="font-size: 14px; font-weight: 600; color: #f4f2ed;">
+                            #{{ invoice_id or 'INV-00108' }}
+                          </div>
+                        </td>
+                        <td class="stack-column-spacer" style="display: none; height: 12px;"></td>
+                        <td class="stack-column" valign="top" align="right" style="width: 50%;">
+                          <div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; margin-bottom: 4px;">
+                            Payment Date
+                          </div>
+                          <div class="font-mono" style="font-size: 14px; font-weight: 600; color: #f4f2ed;">
+                            {{ invoice_date or date or '04 Oct 2026' }}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Billed To & Next Cycle -->
+                <tr>
+                  <td style="padding: 20px 24px; border-bottom: 1px solid #2a2721; background-color: #161412;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td class="stack-column" valign="top" style="width: 50%;">
+                          <div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; margin-bottom: 4px;">
+                            Billed Salon
+                          </div>
+                          <div style="font-size: 14px; font-weight: 700; color: #f4f2ed;">
+                            {{ salon_name or 'Aura Studio & Spa' }}
+                          </div>
+                          <div style="font-size: 12px; color: #a9a395; margin-top: 2px;">
+                            {{ customer_email or owner_name or 'owner@aurasalon.in' }}
+                          </div>
+                        </td>
+                        <td class="stack-column-spacer" style="display: none; height: 12px;"></td>
+                        <td class="stack-column" valign="top" align="right" style="width: 50%;">
+                          <div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; margin-bottom: 4px;">
+                            Next Billing Date
+                          </div>
+                          <div class="font-mono" style="font-size: 14px; font-weight: 600; color: #fbbf24;">
+                            {{ next_billing_date or '04 Nov 2026' }}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Itemized Breakdown Table -->
+                <tr>
+                  <td style="padding: 16px 24px 8px 24px;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="item-table">
+                      <thead>
+                        <tr>
+                          <th align="left" style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; padding-bottom: 12px; border-bottom: 1px solid #2a2721;">
+                            Description
+                          </th>
+                          <th align="right" style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7d7769; font-weight: 600; padding-bottom: 12px; border-bottom: 1px solid #2a2721;">
+                            Amount
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <!-- Plan Row -->
+                        <tr>
+                          <td style="padding: 14px 0 10px 0; border-bottom: 1px solid #22201b;">
+                            <div style="font-size: 14px; font-weight: 700; color: #f4f2ed;">
+                              {{ plan_name or 'Pro Studio Tier' }}
+                            </div>
+                            <div style="font-size: 12px; color: #a9a395; margin-top: 3px;">
+                              {{ billing_cycle or 'Monthly Recurring Subscription' }} &bull; Unlimited Terminals
+                            </div>
+                          </td>
+                          <td align="right" class="font-mono" style="padding: 14px 0 10px 0; font-size: 14px; font-weight: 600; color: #f4f2ed; border-bottom: 1px solid #22201b;">
+                            {{ currency_symbol or '₹' }}{{ subtotal or amount_paid or '2,999' }}
+                          </td>
+                        </tr>
+
+                        <!-- Subtotal & Taxes -->
+                        {% if tax_amount %}
+                        <tr>
+                          <td style="padding: 10px 0 6px 0; font-size: 13px; color: #a9a395;">
+                            Taxes / GST (Included)
+                          </td>
+                          <td align="right" class="font-mono" style="padding: 10px 0 6px 0; font-size: 13px; color: #a9a395;">
+                            {{ currency_symbol or '₹' }}{{ tax_amount }}
+                          </td>
+                        </tr>
+                        {% endif %}
+
+                        <!-- Total Row -->
+                        <tr>
+                          <td style="padding: 16px 0 16px 0; font-size: 15px; font-weight: 800; color: #ffffff;">
+                            Total Paid
+                          </td>
+                          <td align="right" class="font-mono" style="padding: 16px 0 16px 0; font-size: 20px; font-weight: 800; color: #34d399;">
+                            {{ currency_symbol or '₹' }}{{ amount_paid or '2,999' }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Payment Method Strip -->
+                <tr>
+                  <td style="padding: 12px 24px; background-color: #12100e; border-top: 1px solid #2a2721;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td valign="middle" style="font-size: 12px; color: #7d7769;">
+                          Payment Method: <span class="font-mono" style="color: #a9a395; font-weight: 600;">{{ payment_method or 'Razorpay / UPI' }}</span>
+                        </td>
+                        <td valign="middle" align="right">
+                          <span class="font-mono" style="font-size: 11px; color: #5b564b;">STATUS: SUCCESS</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Primary Call to Action Button -->
+          <tr>
+            <td align="center" style="padding: 8px 36px 36px 36px;" class="content-padding">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="background-color: #c2410c; border-radius: 12px; box-shadow: 0 10px 26px -10px rgba(194, 65, 12, 0.7);">
+                    <a href="{{ receipt_url or dashboard_url or 'https://aurasalon.in/dashboard' }}" target="_blank"
+                       style="display: inline-block; padding: 15px 36px; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 12px; letter-spacing: -0.01em;">
+                      Open Salon Terminal &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Secondary Link -->
+              <p style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 12px; line-height: 1.5; color: #7d7769; margin: 18px 0 0 0;">
+                Need a GST-compliant tax invoice PDF? You can download it anytime from 
+                <a href="{{ invoice_pdf_url or dashboard_url or 'https://aurasalon.in/billing' }}" style="color: #fb923c; text-decoration: underline;">
+                  Billing &amp; Subscriptions
+                </a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer Divider -->
+          <tr>
+            <td style="padding: 0 36px;" class="content-padding">
+              <div style="height: 1px; background-color: #2a2721; line-height: 1px; font-size: 1px;">&nbsp;</div>
+            </td>
+          </tr>
+
+          <!-- Brand Footer -->
+          <tr>
+            <td style="padding: 28px 36px 32px 36px;" class="content-padding">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; font-size: 12px; line-height: 1.6; color: #7d7769;">
+                    <div style="margin-bottom: 8px; font-weight: 600; color: #a9a395;">
+                      AuraPOS &bull; Precision Salon Billing &amp; Studio Operations
+                    </div>
+                    <div>
+                      Questions about this charge? Write to our billing team at 
+                      <a href="mailto:{{ support_email or 'aayush@aayushsrivastava.com' }}" style="color: #fb923c; text-decoration: none;">
+                        {{ support_email or 'aayush@aayushsrivastava.com' }}
+                      </a>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 11px; color: #5b564b;">
+                      &copy; 2026 AuraPOS Inc. All rights reserved. Built for high-volume salons and studios.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
