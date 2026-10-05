@@ -89,8 +89,52 @@ def expires_for(cycle, created_on=None):
         return created_on + TRIAL_DAYS * Time.day
     return created_on + Time.month
 
-# Supported access levels for salon team accounts
+# Supported access levels for salon team accounts (kept for backwards compatibility)
 AUTH_LEVELS = ("admin", "manager", "cashier")
+
+# Atomic permission definitions for AuraPOS RBAC
+SYSTEM_PERMISSIONS = [
+    # Point of Sale & Billing
+    {"key": "billing:read", "module": "Point of Sale", "name": "View Billing Terminal", "description": "Access the POS billing page and past terminal drafts"},
+    {"key": "billing:write", "module": "Point of Sale", "name": "Collect & Create Bills", "description": "Process payments, issue receipts and generate invoices"},
+    {"key": "billing:discount", "module": "Point of Sale", "name": "Apply Custom Discounts", "description": "Apply invoice-level discounts during checkout"},
+    
+    # Appointments & Scheduling
+    {"key": "appointments:read", "module": "Appointments", "name": "View Appointments", "description": "View booking calendar and appointment status"},
+    {"key": "appointments:write", "module": "Appointments", "name": "Manage Appointments", "description": "Book, reschedule, or cancel client appointments"},
+
+    # Customers & Patrons
+    {"key": "customers:read", "module": "Customers", "name": "View Customer Directory", "description": "Access customer directory and search patrons"},
+    {"key": "customers:write", "module": "Customers", "name": "Create & Edit Customers", "description": "Add new clients and update client profiles"},
+    {"key": "customers:delete", "module": "Customers", "name": "Delete Customers", "description": "Remove customers from salon directory"},
+    {"key": "customers:analytics", "module": "Customers", "name": "View Customer Analytics", "description": "View patron visit frequency, lifetime spend and churn"},
+
+    # Service Catalog & Categories
+    {"key": "services:read", "module": "Services", "name": "View Service Catalog", "description": "Browse salon service offerings and categories"},
+    {"key": "services:write", "module": "Services", "name": "Modify Services & Catalog", "description": "Add, edit, or adjust pricing of services & categories"},
+    {"key": "services:delete", "module": "Services", "name": "Delete Services", "description": "Remove services or service categories"},
+
+    # Staff Management
+    {"key": "staff:read", "module": "Staff", "name": "View Staff Members", "description": "View staff profiles, roles, and assigned services"},
+    {"key": "staff:write", "module": "Staff", "name": "Manage Staff", "description": "Add or modify staff members and assignments"},
+    {"key": "staff:delete", "module": "Staff", "name": "Delete Staff", "description": "Remove staff members from salon roster"},
+
+    # Reports & Business Analytics
+    {"key": "reports:read", "module": "Analytics", "name": "View Financial Reports", "description": "View gross revenue, sales trends, and staff commission"},
+    {"key": "reports:export", "module": "Analytics", "name": "Export Financial CSVs", "description": "Download sales reports and business data dumps"},
+
+    # Team Accounts & RBAC
+    {"key": "accounts:read", "module": "Team & Roles", "name": "View Team Accounts", "description": "View team members and active role assignments"},
+    {"key": "accounts:write", "module": "Team & Roles", "name": "Manage Team Members", "description": "Invite, edit, or remove team member logins"},
+    {"key": "roles:manage", "module": "Team & Roles", "name": "Manage Roles & Permissions", "description": "Create, edit, duplicate, and delete custom roles"},
+
+    # Settings & Salon Administration
+    {"key": "settings:read", "module": "Settings", "name": "View Salon Settings", "description": "View salon profile, hours, and preferences"},
+    {"key": "settings:write", "module": "Settings", "name": "Edit Salon Settings", "description": "Update salon profile, schedule, and payment options"},
+    {"key": "data:import_export", "module": "Settings", "name": "Import & Backup Data", "description": "Mass import CSV records and download backups"},
+]
+
+ALL_PERMISSION_KEYS = [p["key"] for p in SYSTEM_PERMISSIONS]
 
 
 class PostgresCursorWrapper:
@@ -293,10 +337,61 @@ def ensure_schema_upgrades():
             updated_at INTEGER NOT NULL
         )
     """)
+
+    # ================= RBAC TABLES & MIGRATION =================
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS permissions (
+            key TEXT PRIMARY KEY,
+            module TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL
+        )
+    """)
+    # Seed atomic system permissions
+    for p in SYSTEM_PERMISSIONS:
+        cur.execute("""
+            INSERT OR IGNORE INTO permissions (key, module, name, description)
+            VALUES (?, ?, ?, ?)
+        """, (p["key"], p["module"], p["name"], p["description"]))
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            role_name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            is_system_locked INTEGER DEFAULT 0,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS role_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role_id INTEGER NOT NULL,
+            permission_key TEXT NOT NULL,
+            FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+            FOREIGN KEY (permission_key) REFERENCES permissions(key) ON DELETE CASCADE
+        )
+    """)
+
+    # Add role_id column to accounts if it doesn't exist
+    accounts_columns = {r["name"] for r in cur.execute("PRAGMA table_info(accounts)").fetchall()}
+    if accounts_columns and "role_id" not in accounts_columns:
+        cur.execute("ALTER TABLE accounts ADD COLUMN role_id INTEGER")
+
+    # Add default_role_id and tax_settings columns to salon_settings if they don't exist
+    settings_cols = {r["name"] for r in cur.execute("PRAGMA table_info(salon_settings)").fetchall()}
+    if settings_cols and "default_role_id" not in settings_cols:
+        cur.execute("ALTER TABLE salon_settings ADD COLUMN default_role_id INTEGER")
+    if settings_cols and "tax_settings" not in settings_cols:
+        cur.execute("ALTER TABLE salon_settings ADD COLUMN tax_settings TEXT DEFAULT '{}'")
+
     # Automatically sync PostgreSQL auto-increment sequences to max(id) to avoid
     # unique constraint violations if rows were seeded or imported with explicit IDs.
     if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
-        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings"]
+        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings", "roles", "role_permissions"]
         for tbl in sync_tables:
             try:
                 cur.execute(f"SELECT pg_get_serial_sequence('{tbl}', 'id') AS seq")
@@ -397,17 +492,22 @@ class Account:
     username: str
     password: str
     auth_level: str
+    id: int | None = None
+    role_id: int | None = None
     salon: Salon | None = None
 
     @classmethod
     def from_row(cls, row):
         if not row:
             return None
+        row_id = row.get("id") if isinstance(row, dict) else (row["id"] if "id" in row.keys() else (row["rowid"] if "rowid" in row.keys() else None))
         return cls(
             auth_id=row["auth_id"],
             username=row["username"],
             password=row["password"],
             auth_level=row["auth_level"],
+            id=row_id,
+            role_id=row.get("role_id") if isinstance(row, dict) else (row["role_id"] if "role_id" in row.keys() else None),
         )
 
 
@@ -489,15 +589,15 @@ class AuthorizationRepository:
         conn.commit()
         conn.close()
 
-    def create_account(self, auth_id, username, password, auth_level="admin"):
+    def create_account(self, auth_id, username, password, auth_level="admin", role_id=None):
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO accounts(auth_id, username, password, auth_level)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO accounts(auth_id, username, password, auth_level, role_id)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (auth_id, username, password, auth_level),
+            (auth_id, username, password, auth_level, role_id),
         )
         conn.commit()
         conn.close()
@@ -522,7 +622,10 @@ class AuthorizationRepository:
         conn.commit()
         conn.close()
 
-        self.create_account(auth_id, email, password, auth_level)
+        # Provision base roles and link the owner role
+        roles_map = self.ensure_default_roles(auth_id)
+        owner_role_id = roles_map.get("owner")
+        self.create_account(auth_id, email, password, auth_level, role_id=owner_role_id)
         return auth_id
 
     def login(self, username, password):
@@ -621,6 +724,44 @@ class AuthorizationRepository:
             cur.execute("UPDATE salon_settings SET session_timeout = ?, updated_at = ? WHERE salon_id = ?", (timeout_clean, now, salon_id))
         else:
             cur.execute("INSERT INTO salon_settings (salon_id, session_timeout, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, timeout_clean, now, now))
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_tax_settings(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        defaults = {
+            "enabled": True,
+            "tax_name": "GST",
+            "tax_rate": 18.0,
+            "tax_type": "exclusive",
+            "tax_number": "",
+            "split_tax": True,
+        }
+        try:
+            row = cur.execute("SELECT tax_settings FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+            if row and row["tax_settings"]:
+                val = row["tax_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception:
+            pass
+        finally:
+            conn.close()
+        return defaults
+
+    def update_tax_settings(self, salon_id, settings):
+        conn = get_db()
+        cur = conn.cursor()
+        settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET tax_settings = ?, updated_at = ? WHERE salon_id = ?", (settings_json, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, tax_settings, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, settings_json, now, now))
         conn.commit()
         conn.close()
         return True
@@ -727,15 +868,350 @@ class AuthorizationRepository:
         conn.close()
         return changed
 
-    # ---------- Settings: team account management (max 3 seats per salon) ----------
+    # ---------- Settings: dynamic RBAC role & account management ----------
+    def ensure_default_roles(self, salon_id):
+        """Ensure standard base roles (Owner, Manager, Billing Desk) exist for a salon."""
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+        
+        # Check existing roles for this tenant
+        rows = cur.execute("SELECT id, role_name, is_system_locked FROM roles WHERE tenant_id = ?", (salon_id,)).fetchall()
+        existing = {r["role_name"].lower(): dict(r) for r in rows}
+
+        default_defs = [
+            {
+                "name": "Owner",
+                "desc": "Primary salon administrator with unrestricted access to all modules and configurations.",
+                "locked": 1,
+                "perms": ALL_PERMISSION_KEYS
+            },
+            {
+                "name": "Manager",
+                "desc": "Day-to-day salon operations, staff, customer directory, and catalogs.",
+                "locked": 0,
+                "perms": [
+                    "billing:read", "billing:write", "billing:discount",
+                    "appointments:read", "appointments:write",
+                    "customers:read", "customers:write",
+                    "services:read", "services:write",
+                    "staff:read", "staff:write",
+                    "reports:read",
+                    "accounts:read",
+                    "settings:read"
+                ]
+            },
+            {
+                "name": "Billing Desk",
+                "desc": "Front desk checkout, payment collection, and client appointments.",
+                "locked": 0,
+                "perms": [
+                    "billing:read", "billing:write", "billing:discount",
+                    "appointments:read", "appointments:write",
+                    "customers:read", "customers:write",
+                    "services:read"
+                ]
+            }
+        ]
+
+        created_or_found = {}
+        for d in default_defs:
+            name_key = d["name"].lower()
+            if name_key in existing:
+                role_id = existing[name_key]["id"]
+            else:
+                cur.execute(
+                    "INSERT INTO roles (tenant_id, role_name, description, is_system_locked, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (salon_id, d["name"], d["desc"], d["locked"], now, now)
+                )
+                role_id = cur.lastrowid
+                for pkey in d["perms"]:
+                    cur.execute(
+                        "INSERT INTO role_permissions (role_id, permission_key) VALUES (?, ?)",
+                        (role_id, pkey)
+                    )
+            created_or_found[name_key] = role_id
+
+        # Update salon_settings default_role_id if unset
+        s_row = cur.execute("SELECT default_role_id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if not s_row or not s_row["default_role_id"]:
+            cashier_role_id = created_or_found.get("billing desk") or created_or_found.get("cashier")
+            if cashier_role_id:
+                cur.execute("UPDATE salon_settings SET default_role_id = ? WHERE salon_id = ?", (cashier_role_id, salon_id))
+
+        # Backfill any existing accounts without role_id
+        owner_id = self.get_primary_account_id(salon_id)
+        owner_role_id = created_or_found.get("owner")
+        manager_role_id = created_or_found.get("manager")
+        cashier_role_id = created_or_found.get("billing desk")
+
+        acc_rows = cur.execute("SELECT rowid AS id, auth_level, role_id FROM accounts WHERE auth_id = ?", (salon_id,)).fetchall()
+        for a in acc_rows:
+            if not a["role_id"]:
+                lvl = (a["auth_level"] or "").lower()
+                assigned_role = owner_role_id
+                if a["id"] == owner_id or lvl == "admin":
+                    assigned_role = owner_role_id
+                elif lvl == "manager":
+                    assigned_role = manager_role_id
+                elif lvl == "cashier":
+                    assigned_role = cashier_role_id
+                if assigned_role:
+                    cur.execute("UPDATE accounts SET role_id = ? WHERE rowid = ?", (assigned_role, a["id"]))
+
+        conn.commit()
+        conn.close()
+        return created_or_found
+
+    def get_permissions(self):
+        """Return all atomic system permissions."""
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute("SELECT key, module, name, description FROM permissions ORDER BY module ASC, key ASC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows] if rows else SYSTEM_PERMISSIONS
+
+    def get_roles(self, salon_id):
+        """Get all custom and system roles for a salon with permissions and active user counts."""
+        self.ensure_default_roles(salon_id)
+        conn = get_db()
+        cur = conn.cursor()
+        roles_rows = cur.execute(
+            """
+            SELECT r.id, r.tenant_id, r.role_name, r.description, r.is_system_locked, r.created_at, r.updated_at,
+                   COUNT(a.id) AS member_count
+            FROM roles r
+            LEFT JOIN accounts a ON a.role_id = r.id AND a.auth_id = r.tenant_id
+            WHERE r.tenant_id = ?
+            GROUP BY r.id
+            ORDER BY r.is_system_locked DESC, r.id ASC
+            """,
+            (salon_id,)
+        ).fetchall()
+
+        roles = []
+        for r in roles_rows:
+            r_dict = dict(r)
+            perm_rows = cur.execute(
+                "SELECT permission_key FROM role_permissions WHERE role_id = ?",
+                (r_dict["id"],)
+            ).fetchall()
+            r_dict["permissions"] = [p["permission_key"] for p in perm_rows]
+            roles.append(r_dict)
+        conn.close()
+        return roles
+
+    def get_role(self, salon_id, role_id):
+        """Get a single role with its permissions."""
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT id, tenant_id, role_name, description, is_system_locked FROM roles WHERE tenant_id = ? AND id = ?",
+            (salon_id, role_id)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return None
+        r_dict = dict(row)
+        perm_rows = cur.execute("SELECT permission_key FROM role_permissions WHERE role_id = ?", (role_id,)).fetchall()
+        r_dict["permissions"] = [p["permission_key"] for p in perm_rows]
+        conn.close()
+        return r_dict
+
+    def get_role_permissions(self, role_id):
+        """Fetch assigned permission keys for a given role ID."""
+        if not role_id:
+            return []
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute("SELECT permission_key FROM role_permissions WHERE role_id = ?", (role_id,)).fetchall()
+        conn.close()
+        return [r["permission_key"] for r in rows]
+
+    def get_account_permissions(self, salon_id, account_id):
+        """Fetch all permissions assigned to an account."""
+        conn = get_db()
+        cur = conn.cursor()
+        acc = cur.execute("SELECT rowid AS id, auth_level, role_id FROM accounts WHERE auth_id = ? AND rowid = ?", (salon_id, account_id)).fetchone()
+        conn.close()
+        if not acc:
+            return []
+        primary_id = self.get_primary_account_id(salon_id)
+        if acc["id"] == primary_id or acc["auth_level"] == "admin":
+            return ALL_PERMISSION_KEYS
+        if acc["role_id"]:
+            perms = self.get_role_permissions(acc["role_id"])
+            if perms:
+                return perms
+        # Fallback to legacy auth_level mapping if role_id not linked
+        lvl = (acc["auth_level"] or "cashier").lower()
+        if lvl == "admin":
+            return ALL_PERMISSION_KEYS
+        elif lvl == "manager":
+            return [
+                "billing:read", "billing:write", "billing:discount",
+                "appointments:read", "appointments:write",
+                "customers:read", "customers:write",
+                "services:read", "services:write",
+                "staff:read", "staff:write",
+                "reports:read", "accounts:read", "settings:read"
+            ]
+        return ["billing:read", "billing:write", "billing:discount", "appointments:read", "appointments:write", "customers:read", "customers:write", "services:read"]
+
+    def create_role(self, salon_id, role_name, description, permissions):
+        """Create a new custom role with assigned permissions."""
+        name = (role_name or "").strip()
+        if not name:
+            return {"success": False, "message": "Role name is required."}
+        conn = get_db()
+        cur = conn.cursor()
+        existing = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND LOWER(role_name) = LOWER(?)", (salon_id, name)).fetchone()
+        if existing:
+            conn.close()
+            return {"success": False, "message": f"A role named '{name}' already exists."}
+
+        now = int(datetime.now().timestamp())
+        cur.execute(
+            "INSERT INTO roles (tenant_id, role_name, description, is_system_locked, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)",
+            (salon_id, name, (description or "").strip(), now, now)
+        )
+        role_id = cur.lastrowid
+        valid_perms = set(ALL_PERMISSION_KEYS)
+        for pkey in set(permissions or []):
+            if pkey in valid_perms:
+                cur.execute("INSERT INTO role_permissions (role_id, permission_key) VALUES (?, ?)", (role_id, pkey))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": f"Role '{name}' created successfully.", "role_id": role_id}
+
+    def update_role(self, salon_id, role_id, role_name, description, permissions):
+        """Update an existing role and its permissions with security safeguards."""
+        name = (role_name or "").strip()
+        if not name:
+            return {"success": False, "message": "Role name is required."}
+        conn = get_db()
+        cur = conn.cursor()
+        role = cur.execute("SELECT * FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, role_id)).fetchone()
+        if not role:
+            conn.close()
+            return {"success": False, "message": "Role not found."}
+
+        # Owner Lockout Protection: The system locked role must retain accounts:write & billing:write
+        is_locked = bool(role["is_system_locked"])
+        clean_perms = set(permissions or [])
+        if is_locked:
+            if "accounts:write" not in clean_perms or "billing:write" not in clean_perms:
+                conn.close()
+                return {"success": False, "message": "Owner Lockout Protection: The primary system role must retain account management and billing permissions."}
+
+        # Check name collision
+        collision = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND LOWER(role_name) = LOWER(?) AND id != ?", (salon_id, name, role_id)).fetchone()
+        if collision:
+            conn.close()
+            return {"success": False, "message": f"Another role named '{name}' already exists."}
+
+        now = int(datetime.now().timestamp())
+        cur.execute(
+            "UPDATE roles SET role_name = ?, description = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
+            (name, (description or "").strip(), now, role_id, salon_id)
+        )
+        cur.execute("DELETE FROM role_permissions WHERE role_id = ?", (role_id,))
+        valid_perms = set(ALL_PERMISSION_KEYS)
+        for pkey in clean_perms:
+            if pkey in valid_perms:
+                cur.execute("INSERT INTO role_permissions (role_id, permission_key) VALUES (?, ?)", (role_id, pkey))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": f"Role '{name}' updated successfully."}
+
+    def delete_role(self, salon_id, role_id, reassign_to_role_id=None):
+        """Delete a custom role, requiring reassignment if users are actively assigned."""
+        conn = get_db()
+        cur = conn.cursor()
+        role = cur.execute("SELECT * FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, role_id)).fetchone()
+        if not role:
+            conn.close()
+            return {"success": False, "message": "Role not found."}
+        if role["is_system_locked"]:
+            conn.close()
+            return {"success": False, "message": "System-critical roles cannot be deleted."}
+
+        # Check assigned accounts
+        assigned_count = cur.execute("SELECT COUNT(*) AS c FROM accounts WHERE auth_id = ? AND role_id = ?", (salon_id, role_id)).fetchone()["c"]
+        if assigned_count > 0:
+            if not reassign_to_role_id or int(reassign_to_role_id) == int(role_id):
+                conn.close()
+                return {
+                    "success": False,
+                    "requires_reassignment": True,
+                    "assigned_count": assigned_count,
+                    "message": f"{assigned_count} team member(s) are assigned to this role. Please choose a role to reassign them to before deletion."
+                }
+            # Verify target role exists
+            target = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, reassign_to_role_id)).fetchone()
+            if not target:
+                conn.close()
+                return {"success": False, "message": "Target role for reassignment not found."}
+            cur.execute("UPDATE accounts SET role_id = ? WHERE auth_id = ? AND role_id = ?", (reassign_to_role_id, salon_id, role_id))
+
+        # Check default role setting
+        s_row = cur.execute("SELECT default_role_id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if s_row and s_row["default_role_id"] == role_id:
+            fallback_role = reassign_to_role_id or self.get_default_role_id(salon_id)
+            cur.execute("UPDATE salon_settings SET default_role_id = ? WHERE salon_id = ?", (fallback_role, salon_id))
+
+        cur.execute("DELETE FROM role_permissions WHERE role_id = ?", (role_id,))
+        cur.execute("DELETE FROM roles WHERE id = ? AND tenant_id = ?", (role_id, salon_id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": f"Role '{role['role_name']}' deleted successfully."}
+
+    def get_default_role_id(self, salon_id):
+        """Get the configured default role ID for new invites."""
+        self.ensure_default_roles(salon_id)
+        conn = get_db()
+        cur = conn.cursor()
+        s_row = cur.execute("SELECT default_role_id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if s_row and s_row["default_role_id"]:
+            role = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, s_row["default_role_id"])).fetchone()
+            if role:
+                conn.close()
+                return role["id"]
+        # Fallback to Billing Desk or lowest non-locked role
+        fallback = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND is_system_locked = 0 ORDER BY id ASC LIMIT 1", (salon_id,)).fetchone()
+        conn.close()
+        return fallback["id"] if fallback else None
+
+    def set_default_role_id(self, salon_id, role_id):
+        """Set the default role ID for new team invites."""
+        conn = get_db()
+        cur = conn.cursor()
+        role = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, role_id)).fetchone()
+        if not role:
+            conn.close()
+            return {"success": False, "message": "Selected role does not exist."}
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET default_role_id = ?, updated_at = ? WHERE salon_id = ?", (role_id, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, default_role_id, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, role_id, now, now))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": "Default invite role updated."}
+
     def get_accounts(self, salon_id):
+        self.ensure_default_roles(salon_id)
         conn = get_db()
         cur = conn.cursor()
         rows = cur.execute(
             """
-            SELECT rowid AS id, username, password, auth_level
-            FROM accounts WHERE auth_id = ?
-            ORDER BY rowid ASC
+            SELECT a.rowid AS id, a.username, a.password, a.auth_level, a.role_id,
+                   r.role_name, r.description AS role_description, r.is_system_locked
+            FROM accounts a
+            LEFT JOIN roles r ON a.role_id = r.id
+            WHERE a.auth_id = ?
+            ORDER BY a.rowid ASC
             """,
             (salon_id,),
         ).fetchall()
@@ -762,57 +1238,89 @@ class AuthorizationRepository:
         conn.close()
         return row["id"] if row else None
 
-    def add_account(self, salon_id, username, password, auth_level, seat_limit=None):
+    def add_account(self, salon_id, username, password, auth_level=None, role_id=None, seat_limit=None):
         username = (username or "").strip().lower()
-        if auth_level not in AUTH_LEVELS:
-            return {"success": False, "message": "Invalid access level selected."}
         if not username or not password:
             return {"success": False, "message": "Email and password are both required."}
         if seat_limit is not None and self.count_accounts(salon_id) >= seat_limit:
             return {
                 "success": False,
-                "message": f"Team seat limit reached â€” a salon can have up to {seat_limit} accounts.",
+                "message": f"Team seat limit reached — a salon can have up to {seat_limit} accounts.",
             }
+
+        self.ensure_default_roles(salon_id)
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Resolve role_id and corresponding auth_level
+        resolved_role_id = role_id
+        if not resolved_role_id:
+            resolved_role_id = self.get_default_role_id(salon_id)
+
+        role = cur.execute("SELECT id, role_name, is_system_locked FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, resolved_role_id)).fetchone()
+        if not role:
+            # Fallback to default
+            resolved_role_id = self.get_default_role_id(salon_id)
+            role = cur.execute("SELECT id, role_name, is_system_locked FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, resolved_role_id)).fetchone()
+
+        resolved_auth_level = auth_level or ("admin" if (role and role["is_system_locked"]) else "cashier")
+        if role and role["role_name"].lower() == "manager":
+            resolved_auth_level = "manager"
+        elif role and role["is_system_locked"]:
+            resolved_auth_level = "admin"
+
         try:
-            conn = get_db()
-            cur = conn.cursor()
             cur.execute(
-                "INSERT INTO accounts(auth_id, username, password, auth_level) VALUES (?, ?, ?, ?)",
-                (salon_id, username, password, auth_level),
+                "INSERT INTO accounts(auth_id, username, password, auth_level, role_id) VALUES (?, ?, ?, ?, ?)",
+                (salon_id, username, password, resolved_auth_level, resolved_role_id),
             )
             conn.commit()
             conn.close()
         except sql.IntegrityError:
+            conn.close()
             return {"success": False, "message": "An account with this email already exists."}
         return {"success": True, "message": f"Team account created for {username}."}
 
-    def update_account(self, salon_id, row_id, username, auth_level, password=None):
+    def update_account(self, salon_id, row_id, username, auth_level=None, role_id=None, password=None):
         username = (username or "").strip().lower()
-        if auth_level not in AUTH_LEVELS:
-            return {"success": False, "message": "Invalid access level selected."}
         primary_id = self.get_primary_account_id(salon_id)
         conn = get_db()
         cur = conn.cursor()
         row = cur.execute(
-            "SELECT rowid AS id FROM accounts WHERE rowid = ? AND auth_id = ?",
+            "SELECT rowid AS id, role_id, auth_level FROM accounts WHERE rowid = ? AND auth_id = ?",
             (row_id, salon_id),
         ).fetchone()
         if not row:
             conn.close()
             return {"success": False, "message": "Account not found."}
-        if row["id"] == primary_id and auth_level != "admin":
-            conn.close()
-            return {"success": False, "message": "The primary owner account must keep full access."}
+
+        # Resolve role
+        resolved_role_id = role_id if role_id is not None else row["role_id"]
+        if row["id"] == primary_id:
+            # Primary owner account must always retain Owner system role
+            owner_role = cur.execute("SELECT id FROM roles WHERE tenant_id = ? AND is_system_locked = 1 LIMIT 1", (salon_id,)).fetchone()
+            if owner_role:
+                resolved_role_id = owner_role["id"]
+            resolved_auth_level = "admin"
+        else:
+            role = cur.execute("SELECT id, role_name, is_system_locked FROM roles WHERE tenant_id = ? AND id = ?", (salon_id, resolved_role_id)).fetchone() if resolved_role_id else None
+            if role and role["is_system_locked"]:
+                resolved_auth_level = "admin"
+            elif role and role["role_name"].lower() == "manager":
+                resolved_auth_level = "manager"
+            else:
+                resolved_auth_level = auth_level or "cashier"
+
         try:
             if password:
                 cur.execute(
-                    "UPDATE accounts SET username = ?, auth_level = ?, password = ? WHERE rowid = ? AND auth_id = ?",
-                    (username, auth_level, password, row_id, salon_id),
+                    "UPDATE accounts SET username = ?, auth_level = ?, role_id = ?, password = ? WHERE rowid = ? AND auth_id = ?",
+                    (username, resolved_auth_level, resolved_role_id, password, row_id, salon_id),
                 )
             else:
                 cur.execute(
-                    "UPDATE accounts SET username = ?, auth_level = ? WHERE rowid = ? AND auth_id = ?",
-                    (username, auth_level, row_id, salon_id),
+                    "UPDATE accounts SET username = ?, auth_level = ?, role_id = ? WHERE rowid = ? AND auth_id = ?",
+                    (username, resolved_auth_level, resolved_role_id, row_id, salon_id),
                 )
             conn.commit()
         except sql.IntegrityError:
@@ -1269,6 +1777,64 @@ class StaffRepository:
         conn.close()
         return new_id
 
+    def bulk_add_staff(self, account_id, rows):
+        """Mass-insert staff from uploaded CSV rows. Name is required."""
+        added, skipped, errors = 0, 0, []
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+
+        existing_names = {
+            str(r["name"]).strip().lower()
+            for r in cur.execute("SELECT name FROM staff WHERE account_id = ?", (account_id,)).fetchall()
+            if str(r["name"]).strip()
+        }
+
+        for idx, row in enumerate(rows, start=2):
+            name = str(row.get("name", "") or "").strip()
+            if not name:
+                skipped += 1
+                errors.append(f"Row {idx}: Missing mandatory staff name.")
+                continue
+
+            if name.lower() in existing_names:
+                skipped += 1
+                errors.append(f"Row {idx}: Staff member '{name}' already exists.")
+                continue
+
+            role = str(row.get("role", "") or "Stylist").strip() or "Stylist"
+            phone = str(row.get("phone", "") or "").strip()
+            gender = str(row.get("gender", "") or "").strip()
+            email = str(row.get("email", "") or "").strip()
+
+            try:
+                services_done = max(0, int(float(str(row.get("services_done", "0") or 0))))
+            except (ValueError, TypeError):
+                services_done = 0
+
+            try:
+                total_revenue = max(0, int(float(str(row.get("total_revenue", "0") or 0))))
+            except (ValueError, TypeError):
+                total_revenue = 0
+
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO staff(account_id, name, role, phone, gender, email, total_revenue, services_done, created_on)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (account_id, name, role, phone, gender, email, total_revenue, services_done, now),
+                )
+                existing_names.add(name.lower())
+                added += 1
+            except sql.Error as e:
+                errors.append(f"Row {idx}: {e}")
+                skipped += 1
+
+        conn.commit()
+        conn.close()
+        return {"added": added, "skipped": skipped, "errors": errors}
+
     def update_staff(self, staff_id, account_id, name, role, phone="", gender="", email=""):
         conn = get_db()
         cur = conn.cursor()
@@ -1464,6 +2030,106 @@ class BillRepository:
         conn.commit()
         conn.close()
         return bill_id
+
+    def bulk_add_bills(self, account_id, rows):
+        """Mass-insert bills/invoices from uploaded CSV rows."""
+        added, skipped, errors = 0, 0, []
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+
+        existing_ids = {
+            str(r["id"]).strip().upper()
+            for r in cur.execute("SELECT id FROM bills WHERE account_id = ?", (account_id,)).fetchall()
+            if str(r["id"]).strip()
+        }
+
+        for idx, row in enumerate(rows, start=2):
+            raw_id = str(row.get("id", "") or "").strip().upper()
+            if raw_id and raw_id in existing_ids:
+                skipped += 1
+                errors.append(f"Row {idx}: Invoice ID '{raw_id}' already exists.")
+                continue
+
+            bill_id = raw_id if raw_id else f"AP-{str(uuid4())[:6].upper()}"
+
+            client_name = str(row.get("client_name", "") or row.get("client", "") or "Walk-in").strip() or "Walk-in"
+            client_phone = str(row.get("client_phone", "") or row.get("phone", "") or "").strip()
+            payment_mode = str(row.get("payment_mode", "") or row.get("payment", "") or "UPI").strip() or "UPI"
+
+            try:
+                subtotal = max(0, int(float(str(row.get("subtotal", "0") or 0))))
+                discount = max(0, int(float(str(row.get("discount", "0") or 0))))
+                tax = max(0, int(float(str(row.get("tax", "0") or 0))))
+                raw_grand_total = row.get("grand_total") or row.get("total")
+                if raw_grand_total is not None and str(raw_grand_total).strip() != "":
+                    grand_total = max(0, int(float(str(raw_grand_total))))
+                else:
+                    grand_total = max(0, subtotal - discount + tax)
+            except (ValueError, TypeError):
+                errors.append(f"Row {idx}: Invalid numeric figures.")
+                skipped += 1
+                continue
+
+            if grand_total > 500000:
+                errors.append(f"Row {idx}: Bill grand total ₹{grand_total:,} exceeds ₹5,00,000 cap.")
+                skipped += 1
+                continue
+
+            # Parse items
+            raw_items = row.get("items") or row.get("items_json") or row.get("services") or ""
+            items_list = []
+            if raw_items:
+                raw_items_str = str(raw_items).strip()
+                if raw_items_str.startswith("[") and raw_items_str.endswith("]"):
+                    try:
+                        parsed = json.loads(raw_items_str)
+                        if isinstance(parsed, list):
+                            items_list = parsed
+                    except Exception:
+                        pass
+                if not items_list:
+                    parts = [p.strip() for p in raw_items_str.split(",") if p.strip()]
+                    for p in parts:
+                        items_list.append({"name": p, "price": 0, "qty": 1, "staff": "Unassigned"})
+
+            if not items_list:
+                items_list = [{"name": "Service", "price": subtotal, "qty": 1, "staff": "Unassigned"}]
+
+            created_at = now
+            raw_date = str(row.get("created_at", "") or row.get("date", "") or "").strip()
+            if raw_date:
+                try:
+                    if raw_date.isdigit():
+                        created_at = int(raw_date)
+                    else:
+                        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                            try:
+                                dt = datetime.strptime(raw_date, fmt)
+                                created_at = int(dt.timestamp())
+                                break
+                            except ValueError:
+                                pass
+                except Exception:
+                    created_at = now
+
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, json.dumps(items_list)),
+                )
+                existing_ids.add(bill_id)
+                added += 1
+            except sql.Error as e:
+                errors.append(f"Row {idx}: {e}")
+                skipped += 1
+
+        conn.commit()
+        conn.close()
+        return {"added": added, "skipped": skipped, "errors": errors}
 
     def find_recent_duplicate(self, account_id, client_phone, grand_total, window_seconds=4):
         conn = get_db()

@@ -79,6 +79,18 @@
         <span class="px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="accounts.length + (maxSeats === null ? '' :'/'+ maxSeats)"></span>
       </button>
 
+      {% if can_manage_roles or is_admin %}
+      <button @click="tab = 'roles'"
+              :class="tab === 'roles' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
+              class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
+        <span class="flex items-center gap-3">
+          <i data-lucide="shield-check" class="w-4 h-4" :class="tab === 'roles' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
+          <span>Roles &amp; Permissions</span>
+        </span>
+        <span class="px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="roles.length"></span>
+      </button>
+      {% endif %}
+
       <button @click="tab = 'booking-link'"
               :class="tab === 'booking-link' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
@@ -92,6 +104,20 @@
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
         <i data-lucide="banknote" class="w-4 h-4" :class="tab === 'payments' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
         <span>Payment Methods</span>
+      </button>
+      {% endif %}
+
+      {% if is_admin %}
+      <button @click="tab = 'taxes'"
+              :class="tab === 'taxes' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
+              class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
+        <span class="flex items-center gap-3">
+          <i data-lucide="receipt" class="w-4 h-4" :class="tab === 'taxes' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
+          <span>Tax Master</span>
+        </span>
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+              :class="taxSettings.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'"
+              x-text="taxSettings.enabled ? taxSettings.tax_rate + '%' : 'Off'"></span>
       </button>
       {% endif %}
 
@@ -552,6 +578,191 @@
         </div>
       </section>
 
+      <!-- ============ TAX MASTER SECTION ============ -->
+      <section x-show="tab === 'taxes'" x-cloak class="space-y-6">
+        <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                <i data-lucide="receipt" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                  <span>Tax Master &amp; Invoicing</span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                        :class="taxSettings.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-500/20' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'"
+                        x-text="taxSettings.enabled ? 'Active on POS' : 'Tax Disabled'"></span>
+                </h3>
+                <p class="text-xs text-neutral-400">Configure tax rates, GST/VAT rules, and registration IDs applied to POS checkouts and receipts</p>
+              </div>
+            </div>
+
+            <!-- Tax Enable Switch -->
+            <label class="relative inline-flex items-center cursor-pointer select-none">
+              <input type="checkbox" x-model="taxSettings.enabled" class="sr-only peer">
+              <div class="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600 dark:peer-checked:bg-neon-cyan"></div>
+              <span class="ml-2.5 text-xs font-bold text-neutral-700 dark:text-neutral-300" x-text="taxSettings.enabled ? 'Tax Enabled' : 'Tax Disabled'"></span>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Left: Config inputs -->
+            <div class="lg:col-span-7 space-y-5">
+              <!-- Tax Name & Rate -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1.5">Tax Label / Name</label>
+                  <input type="text" x-model="taxSettings.tax_name" placeholder="e.g. GST, VAT, Sales Tax"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
+                  <p class="text-[10px] text-neutral-400 mt-1">Displayed on customer bills and receipts</p>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1.5">Tax Rate (%)</label>
+                  <div class="relative">
+                    <input type="number" step="0.1" min="0" max="100" x-model.number="taxSettings.tax_rate"
+                           class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 pr-8">
+                    <span class="absolute right-3 top-2.5 text-xs font-bold text-neutral-400">%</span>
+                  </div>
+                  <!-- Quick Preset Pills -->
+                  <div class="flex items-center gap-1.5 mt-2">
+                    <span class="text-[10px] text-neutral-400">Presets:</span>
+                    <template x-for="r in [0, 5, 12, 18, 28]" :key="r">
+                      <button type="button" @click="taxSettings.tax_rate = r"
+                              :class="Number(taxSettings.tax_rate) === r ? 'bg-violet-600 text-white dark:bg-neon-cyan dark:text-neutral-950 font-bold' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'"
+                              class="px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer"
+                              x-text="r + '%'"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Calculation Mode (Exclusive vs Inclusive) -->
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2">Calculation Method</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label class="p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
+                         :class="taxSettings.tax_type === 'exclusive' ? 'border-violet-500 bg-violet-50/50 dark:bg-violet-950/20 ring-1 ring-violet-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40 hover:border-neutral-300 dark:hover:border-neutral-700'">
+                    <input type="radio" name="tax_type" value="exclusive" x-model="taxSettings.tax_type" class="mt-0.5 text-violet-600 focus:ring-violet-500">
+                    <div>
+                      <p class="text-xs font-bold text-neutral-900 dark:text-white">Exclusive (Added to Subtotal)</p>
+                      <p class="text-[10px] text-neutral-400 mt-0.5">Total = Subtotal + Tax. Standard for retail &amp; salon services.</p>
+                    </div>
+                  </label>
+                  <label class="p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
+                         :class="taxSettings.tax_type === 'inclusive' ? 'border-violet-500 bg-violet-50/50 dark:bg-violet-950/20 ring-1 ring-violet-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40 hover:border-neutral-300 dark:hover:border-neutral-700'">
+                    <input type="radio" name="tax_type" value="inclusive" x-model="taxSettings.tax_type" class="mt-0.5 text-violet-600 focus:ring-violet-500">
+                    <div>
+                      <p class="text-xs font-bold text-neutral-900 dark:text-white">Inclusive (Included in Price)</p>
+                      <p class="text-[10px] text-neutral-400 mt-0.5">Subtotal already includes tax. Tax is extracted for reporting.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- GSTIN / Tax Number -->
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1.5">Tax Registration Number (GSTIN / VAT ID)</label>
+                <div class="relative">
+                  <input type="text" x-model="taxSettings.tax_number" placeholder="e.g. 27AAPFU0939F1ZV"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 text-xs font-mono uppercase text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50">
+                </div>
+                <p class="text-[10px] text-neutral-400 mt-1">Printed on receipts and invoice headers for tax compliance.</p>
+              </div>
+
+              <!-- Split Tax Breakdown Toggle -->
+              <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white">CGST &amp; SGST Dual Breakdown</p>
+                  <p class="text-[10px] text-neutral-400">Splits GST equally into Central GST (CGST) and State GST (SGST) on checkout summary.</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer select-none">
+                  <input type="checkbox" x-model="taxSettings.split_tax" class="sr-only peer">
+                  <div class="w-9 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600 dark:peer-checked:bg-neon-cyan"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Right: Live Bill / Invoice Simulation Preview -->
+            <div class="lg:col-span-5">
+              <div class="p-4 sm:p-5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-800 space-y-4">
+                <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 text-violet-500"></i>
+                    <span class="text-xs font-bold text-neutral-900 dark:text-white">Live Invoice Preview</span>
+                  </div>
+                  <span class="text-[10px] font-mono uppercase text-neutral-400">Simulated ₹1,000 Bill</span>
+                </div>
+
+                <!-- Mock Invoice Receipt -->
+                <div class="p-4 rounded-xl bg-white dark:bg-neutral-950 border border-neutral-200/60 dark:border-neutral-800/80 space-y-2 text-xs shadow-inner">
+                  <div class="text-center pb-2 border-b border-dashed border-neutral-200 dark:border-neutral-800">
+                    <p class="font-bold text-neutral-900 dark:text-white text-sm" x-text="profile.salon_name || 'AuraPOS Salon'"></p>
+                    <p class="text-[10px] text-neutral-400" x-show="taxSettings.tax_number" x-text="'GSTIN: ' + taxSettings.tax_number"></p>
+                  </div>
+
+                  <div class="flex justify-between text-neutral-600 dark:text-neutral-400 pt-1">
+                    <span>Sample Service Subtotal</span>
+                    <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">₹1,000</span>
+                  </div>
+
+                  <template x-if="taxSettings.enabled">
+                    <div class="space-y-1 py-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                      <div class="flex justify-between text-neutral-600 dark:text-neutral-400">
+                        <span x-text="(taxSettings.tax_name || 'GST') + ' (' + (taxSettings.tax_rate || 0) + '%)' + (taxSettings.tax_type === 'inclusive' ? ' [Incl.]' : '')"></span>
+                        <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">
+                          ₹<span x-text="taxSettings.tax_type === 'inclusive' ? Math.round(1000 - (1000 / (1 + ((Number(taxSettings.tax_rate) || 0) / 100)))) : Math.round(1000 * ((Number(taxSettings.tax_rate) || 0) / 100))"></span>
+                        </span>
+                      </div>
+                      <template x-if="taxSettings.split_tax && (taxSettings.tax_name || '').toUpperCase().includes('GST')">
+                        <div class="pl-2 text-[10px] text-neutral-400 space-y-0.5">
+                          <div class="flex justify-between">
+                            <span>• CGST (<span x-text="((Number(taxSettings.tax_rate) || 0) / 2).toFixed(1)"></span>%)</span>
+                            <span>₹<span x-text="Math.round((taxSettings.tax_type === 'inclusive' ? Math.round(1000 - (1000 / (1 + ((Number(taxSettings.tax_rate) || 0) / 100)))) : Math.round(1000 * ((Number(taxSettings.tax_rate) || 0) / 100))) / 2)"></span></span>
+                          </div>
+                          <div class="flex justify-between">
+                            <span>• SGST (<span x-text="((Number(taxSettings.tax_rate) || 0) / 2).toFixed(1)"></span>%)</span>
+                            <span>₹<span x-text="Math.round((taxSettings.tax_type === 'inclusive' ? Math.round(1000 - (1000 / (1 + ((Number(taxSettings.tax_rate) || 0) / 100)))) : Math.round(1000 * ((Number(taxSettings.tax_rate) || 0) / 100))) / 2)"></span></span>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+
+                  <template x-if="!taxSettings.enabled">
+                    <div class="flex justify-between text-neutral-400 italic text-[11px] py-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                      <span>Tax Exemption</span>
+                      <span>₹0 (Disabled)</span>
+                    </div>
+                  </template>
+
+                  <div class="pt-2 border-t-2 border-neutral-900 dark:border-white flex justify-between font-bold text-sm text-neutral-900 dark:text-white">
+                    <span>Total Due</span>
+                    <span class="font-mono-num text-violet-600 dark:text-neon-cyan">
+                      ₹<span x-text="taxSettings.enabled && taxSettings.tax_type === 'exclusive' ? (1000 + Math.round(1000 * ((Number(taxSettings.tax_rate) || 0) / 100))) : 1000"></span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-200/50 dark:border-violet-800/50 text-[11px] text-violet-700 dark:text-neon-cyan">
+                  <p class="font-semibold">Applied automatically to POS</p>
+                  <p class="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5">When stylists bill clients, these tax calculation rules and GSTIN headers are seamlessly applied in real time.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="flex items-center justify-between pt-3 border-t border-neutral-100 dark:border-neutral-800">
+            <p class="text-[11px] text-neutral-400">Settings update across all POS terminals and print receipts.</p>
+            <button @click="saveTaxSettings()" :disabled="savingTax"
+                    class="px-5 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center gap-2 active:scale-95 cursor-pointer">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span x-text="savingTax ? 'Saving...' : 'Save Tax Master'"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ CATEGORY 2: TEAM ACCOUNTS ============ -->
       <section x-show="tab === 'team'" x-cloak class="space-y-6">
 
@@ -581,37 +792,65 @@
             <span>Only the salon owner (full access) can add, edit or remove team accounts.</span>
           </div>
 
-          <!-- Add Account Form -->
-          <div x-show="is_admin && (maxSeats === null || seatsUsed < maxSeats)" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800 space-y-3">
-            <p class="text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-              <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
-              Add Team Account
-            </p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_auto_auto] gap-3 items-end">
+          <!-- Default Invite Role Setting & Add Account Form -->
+          <div x-show="is_admin || can_manage_accounts" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800 space-y-4">
+            
+            <!-- Default Role selector -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-200/60 dark:border-neutral-800">
               <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Login Email</label>
-                <input type="email" x-model="addForm.email" placeholder="stylist@salon.com"
-                       class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                <p class="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                  <i data-lucide="shield" class="w-3.5 h-3.5 text-violet-500"></i>
+                  Default Role for New Invites
+                </p>
+                <p class="text-[11px] text-neutral-500 dark:text-neutral-400">Newly invited team members will automatically receive this custom role.</p>
               </div>
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Password</label>
-                <input type="password" x-model="addForm.password" placeholder="Set a password"
-                       class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Access Level</label>
-                <select x-model="addForm.auth_level"
-                        class="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-                  <option value="admin">Full Access</option>
-                  <option value="manager">Manager</option>
-                  <option value="cashier">Billing Desk</option>
+              <div class="flex items-center gap-2">
+                <select x-model="defaultRoleId" @change="saveDefaultRole()" :disabled="savingDefaultRole"
+                        class="px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70">
+                  <template x-for="r in roles" :key="r.id">
+                    <option :value="r.id" x-text="r.role_name + (r.is_system_locked ? ' (System)' : '')"></option>
+                  </template>
                 </select>
+                <span x-show="savingDefaultRole" class="text-[10px] text-violet-600 animate-pulse">Saving...</span>
               </div>
-              <button @click="addAccount()" :disabled="adding"
-                      class="px-4 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap">
-                <i data-lucide="plus" class="w-4 h-4"></i>
-                <span x-text="adding ? 'Adding...' : 'Add Account'"></span>
-              </button>
+            </div>
+
+            <!-- Add Account Form -->
+            <div x-show="maxSeats === null || seatsUsed < maxSeats" class="space-y-3">
+              <p class="text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                Add Team Account
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.2fr_1fr_auto_auto] gap-3 items-end">
+                <div>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Login Email</label>
+                  <input type="email" x-model="addForm.email" placeholder="stylist@salon.com"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Password</label>
+                  <input type="password" x-model="addForm.password" placeholder="Set a password"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                </div>
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Assigned Role</label>
+                  </div>
+                  <div class="relative group">
+                    <select x-model="addForm.role_id"
+                            class="w-full sm:w-auto min-w-[140px] px-3.5 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                      <template x-for="r in roles" :key="r.id">
+                        <option :value="r.id" x-text="r.role_name"></option>
+                      </template>
+                    </select>
+                  </div>
+                </div>
+                <button @click="addAccount()" :disabled="adding"
+                        class="px-4 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  <span x-text="adding ? 'Adding...' : 'Add Account'"></span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -632,13 +871,16 @@
                   <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-100 to-cyan-50 dark:from-violet-950/60 dark:to-cyan-950/40 font-bold text-xs text-violet-700 dark:text-neon-cyan flex items-center justify-center uppercase shrink-0" x-text="acc.username.charAt(0)"></div>
                   <div class="min-w-0">
                     <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="acc.username"></p>
-                    <div class="flex items-center gap-1.5 mt-0.5">
-                      <span class="text-[10px] text-neutral-400" x-text="levelLabel(acc.auth_level)"></span>
-                      <span x-show="acc.id === primaryId" class="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-neon-cyan text-[9px] font-bold uppercase tracking-wider">Owner</span>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-500/10 text-violet-700 dark:text-neon-cyan border border-violet-200/60 dark:border-violet-800/50">
+                        <i data-lucide="shield" class="w-2.5 h-2.5"></i>
+                        <span x-text="acc.role_name || levelLabel(acc.auth_level)"></span>
+                      </span>
+                      <span x-show="acc.id === primaryId" class="px-1.5 py-0.5 rounded bg-violet-600 text-white text-[9px] font-bold uppercase tracking-wider">Owner</span>
                     </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-1.5 shrink-0" x-show="is_admin">
+                <div class="flex items-center gap-1.5 shrink-0" x-show="is_admin || can_manage_accounts">
                   <button @click="startEdit(acc)" title="Edit account"
                           class="p-2 rounded-lg text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors">
                     <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
@@ -664,12 +906,12 @@
                            class="w-full px-3 py-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
                   </div>
                   <div>
-                    <label class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Access Level</label>
-                    <select x-model="editForm.auth_level" :disabled="acc.id === primaryId"
+                    <label class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Custom Role</label>
+                    <select x-model="editForm.role_id" :disabled="acc.id === primaryId"
                             class="w-full px-3 py-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 disabled:opacity-60">
-                      <option value="admin">Full Access</option>
-                      <option value="manager">Manager</option>
-                      <option value="cashier">Billing Desk</option>
+                      <template x-for="r in roles" :key="r.id">
+                        <option :value="r.id" x-text="r.role_name + (r.is_system_locked ? ' (System)' : '')"></option>
+                      </template>
                     </select>
                   </div>
                 </div>
@@ -691,6 +933,236 @@
         </div>
       </section>
 
+      <!-- ============ CATEGORY: ROLES & PERMISSIONS (RBAC) ============ -->
+      <section x-show="tab === 'roles'" x-cloak class="space-y-6">
+
+        <!-- Roles Header & Quick Actions -->
+        <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white">Custom Roles &amp; Permissions</h3>
+                <p class="text-xs text-neutral-400">Build granular, permission-based access profiles for your salon staff</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="openCreateRoleModal()"
+                      class="px-3.5 py-2 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 hover:opacity-95 transition-all flex items-center gap-1.5 active:scale-95">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Create New Role</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Roles Overview Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="r in roles" :key="r.id">
+              <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800 flex flex-col justify-between space-y-4 hover:border-violet-300 dark:hover:border-violet-700/60 transition-all">
+                <div class="space-y-2">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <h4 class="text-sm font-bold text-neutral-900 dark:text-white truncate" x-text="r.role_name"></h4>
+                      <span x-show="r.is_system_locked" class="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-neon-cyan text-[9px] font-bold uppercase tracking-wider shrink-0 border border-violet-500/20">System</span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-mono-num font-semibold shrink-0"
+                          :class="r.member_count > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-neutral-200/60 dark:bg-neutral-800 text-neutral-500'">
+                      <span x-text="r.member_count + ' member' + (r.member_count === 1 ? '' : 's')"></span>
+                    </span>
+                  </div>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2" x-text="r.description || 'No description provided.'"></p>
+                </div>
+
+                <div class="pt-2 border-t border-neutral-200/60 dark:border-neutral-800/80 flex items-center justify-between text-xs">
+                  <span class="text-[11px] font-medium text-neutral-400">
+                    <span class="font-bold text-neutral-800 dark:text-neutral-200 font-mono-num" x-text="(r.permissions || []).length"></span> permissions
+                  </span>
+                  <div class="flex items-center gap-1">
+                    <!-- Duplicate / Clone -->
+                    <button @click="cloneRole(r)" title="Duplicate role"
+                            class="p-1.5 rounded-lg text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors">
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <!-- Edit -->
+                    <button @click="openEditRoleModal(r)" title="Edit role & permissions"
+                            class="p-1.5 rounded-lg text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors">
+                      <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <!-- Delete (only non-system locked) -->
+                    <button x-show="!r.is_system_locked" @click="promptDeleteRole(r)" title="Delete role"
+                            class="p-1.5 rounded-lg text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Role Builder / Editor Drawer Modal -->
+        <div x-show="roleModal.open" x-cloak
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div @click.away="closeRoleModal()"
+               class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200 dark:border-neutral-800 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <!-- Modal Header -->
+            <div class="p-5 sm:p-6 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between shrink-0 bg-neutral-50/50 dark:bg-neutral-900/30">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                  <i data-lucide="sliders" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-neutral-900 dark:text-white" x-text="roleModal.isEdit ? 'Edit Role: ' + roleModal.form.role_name : 'Create Custom Role'"></h3>
+                  <p class="text-xs text-neutral-400">Configure access claims and permissions across all AuraPOS modules</p>
+                </div>
+              </div>
+              <button @click="closeRoleModal()" class="p-2 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <!-- Modal Body (Scrollable Matrix) -->
+            <div class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+              
+              <!-- Basic Role Info -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Role Name *</label>
+                  <input type="text" x-model="roleModal.form.role_name" placeholder="e.g. Weekend Shift Lead"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Description</label>
+                  <input type="text" x-model="roleModal.form.description" placeholder="Short description of responsibilities"
+                         class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+                </div>
+              </div>
+
+              <!-- Scope Live Summary Banner -->
+              <div class="p-3.5 rounded-2xl bg-gradient-to-r from-violet-50 to-cyan-50 dark:from-violet-950/30 dark:to-cyan-950/20 border border-violet-200/70 dark:border-violet-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center font-bold text-xs">
+                    <span x-text="roleModal.form.permissions.length"></span>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white">Active Permissions Scope</p>
+                    <p class="text-[11px] text-neutral-600 dark:text-neutral-300" x-text="getRoleScopeSummary()"></p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button type="button" @click="selectAllPermissions()" class="text-[11px] font-bold text-violet-600 dark:text-neon-cyan hover:underline">Select All</button>
+                  <span class="text-neutral-300 dark:text-neutral-700">·</span>
+                  <button type="button" @click="clearAllPermissions()" class="text-[11px] font-bold text-neutral-500 hover:underline">Clear</button>
+                </div>
+              </div>
+
+              <!-- Granular Access Matrix: Module Accordions -->
+              <div class="space-y-3">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Permissions Matrix by Module</p>
+
+                <template x-for="(perms, moduleName) in groupedPermissions" :key="moduleName">
+                  <div class="border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-hidden bg-neutral-50/50 dark:bg-neutral-900/40">
+                    
+                    <!-- Module Accordion Header -->
+                    <div class="p-3.5 bg-white dark:bg-neutral-900 flex items-center justify-between cursor-pointer select-none"
+                         @click="toggleModuleAccordion(moduleName)">
+                      <div class="flex items-center gap-2.5">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-neutral-400 transition-transform duration-200"
+                           :class="roleModal.expandedModules[moduleName] ? 'rotate-90' : ''"></i>
+                        <span class="text-sm font-bold text-neutral-900 dark:text-white" x-text="moduleName"></span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-mono-num font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400"
+                              x-text="countModuleActive(perms) + '/' + perms.length"></span>
+                      </div>
+                      <div class="flex items-center gap-2" @click.stop>
+                        <button type="button" @click="toggleAllInModule(perms, true)" class="text-[10px] font-semibold text-violet-600 dark:text-neon-cyan hover:underline">Enable All</button>
+                        <span class="text-neutral-300 dark:text-neutral-700">·</span>
+                        <button type="button" @click="toggleAllInModule(perms, false)" class="text-[10px] font-semibold text-neutral-400 hover:underline">None</button>
+                      </div>
+                    </div>
+
+                    <!-- Module Permissions List -->
+                    <div x-show="roleModal.expandedModules[moduleName]" class="p-3.5 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+                      <template x-for="p in perms" :key="p.key">
+                        <label class="flex items-start justify-between gap-3 p-2.5 rounded-xl hover:bg-white dark:hover:bg-neutral-800/60 cursor-pointer transition-colors border border-transparent hover:border-neutral-200/60 dark:hover:border-neutral-700/60">
+                          <div class="space-y-0.5 min-w-0">
+                            <div class="flex items-center gap-2">
+                              <span class="text-xs font-bold text-neutral-900 dark:text-white" x-text="p.name"></span>
+                              <code class="text-[10px] px-1.5 py-0.2 rounded bg-neutral-200/60 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono" x-text="p.key"></code>
+                            </div>
+                            <p class="text-[11px] text-neutral-500 dark:text-neutral-400" x-text="p.description"></p>
+                          </div>
+                          <input type="checkbox" :value="p.key" x-model="roleModal.form.permissions"
+                                 class="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-neutral-300 dark:border-neutral-700 mt-1 cursor-pointer">
+                        </label>
+                      </template>
+                    </div>
+
+                  </div>
+                </template>
+              </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 sm:p-5 border-t border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/30 flex items-center justify-between shrink-0">
+              <button type="button" @click="closeRoleModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors">Cancel</button>
+              <button type="button" @click="saveRole()" :disabled="roleModal.saving"
+                      class="px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 hover:opacity-95 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                <span x-text="roleModal.saving ? 'Saving...' : (roleModal.isEdit ? 'Save Role Changes' : 'Create Custom Role')"></span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Role Reassignment & Deletion Modal -->
+        <div x-show="reassignModal.open" x-cloak
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div @click.away="closeReassignModal()"
+               class="bg-white dark:bg-[#141210] rounded-3xl border border-rose-200 dark:border-rose-900/50 w-full max-w-md p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center shrink-0">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white">Role Reassignment Required</h3>
+                <p class="text-xs text-neutral-400">Cannot leave team accounts orphaned without a role</p>
+              </div>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 text-xs text-rose-800 dark:text-rose-300">
+              <p>There are <strong class="font-mono-num" x-text="reassignModal.assignedCount"></strong> team members currently assigned to <strong x-text="reassignModal.roleName"></strong>. Select a new role to reassign them to before deleting.</p>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Reassign Members To:</label>
+              <select x-model="reassignModal.targetRoleId"
+                      class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <template x-for="r in roles.filter(x => x.id !== reassignModal.roleId)" :key="r.id">
+                  <option :value="r.id" x-text="r.role_name + (r.is_system_locked ? ' (System)' : '')"></option>
+                </template>
+              </select>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+              <button type="button" @click="closeReassignModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">Cancel</button>
+              <button type="button" @click="confirmReassignAndDelete()" :disabled="reassignModal.submitting"
+                      class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/25 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span x-text="reassignModal.submitting ? 'Reassigning...' : 'Reassign & Delete Role'"></span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
       {% if is_admin %}
       <!-- ============ CATEGORY 3: DATA & BACKUP ============ -->
       <section x-show="tab === 'data'" x-cloak class="space-y-6 {% if not is_studio %}relative{% endif %}">
@@ -708,7 +1180,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <a href="/api/settings/export/customers" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 hover:border-cyan-400/60 hover:shadow-sm transition-all group">
               <div class="w-9 h-9 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
                 <i data-lucide="download" class="w-4 h-4"></i>
@@ -722,6 +1194,13 @@
               </div>
               <p class="mt-3 text-xs font-bold text-neutral-900 dark:text-white">Services</p>
               <p class="text-[10px] text-neutral-400 mt-0.5">Catalog, pricing &amp; durations</p>
+            </a>
+            <a href="/api/settings/export/staff" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 hover:border-pink-400/60 hover:shadow-sm transition-all group">
+              <div class="w-9 h-9 rounded-xl bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 flex items-center justify-center">
+                <i data-lucide="users" class="w-4 h-4"></i>
+              </div>
+              <p class="mt-3 text-xs font-bold text-neutral-900 dark:text-white">Staff Roster</p>
+              <p class="text-[10px] text-neutral-400 mt-0.5">Stylists, roles &amp; revenue</p>
             </a>
             <a href="/api/settings/export/appointments" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80 hover:border-amber-400/60 hover:shadow-sm transition-all group">
               <div class="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -755,7 +1234,7 @@
             </div>
             <div>
               <h3 class="text-base font-bold text-neutral-900 dark:text-white">Mass Upload</h3>
-              <p class="text-xs text-neutral-400">Import customers &amp; services in bulk from a CSV file</p>
+              <p class="text-xs text-neutral-400">Import customers, services, staff &amp; invoices in bulk from CSV files</p>
             </div>
           </div>
 
@@ -817,7 +1296,7 @@
 
               <label class="block cursor-pointer pt-1">
                 <input type="file" accept=".csv" class="hidden" @change="uploadCsv('customers', $event)">
-                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all">
+                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all cursor-pointer">
                   <i data-lucide="upload" class="w-3.5 h-3.5 text-violet-500"></i>
                   <span x-text="importing === 'customers' ? 'Uploading...' : (customerImportMode === 'destructive' ? 'Upload CSV (Wipe & Replace)' : 'Choose CSV File')"></span>
                 </span>
@@ -828,20 +1307,145 @@
             <!-- Services Upload -->
             <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-dashed border-neutral-300 dark:border-neutral-700 space-y-3">
               <div class="flex items-center justify-between">
-                <p class="text-xs font-bold text-neutral-900 dark:text-white">Upload Services</p>
-                <a href="/api/settings/export/template/services" class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-1">
-                  <i data-lucide="file-text" class="w-3 h-3"></i> Sample CSV
+                <div>
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white">Upload Services</p>
+                  <p class="text-[10px] text-neutral-400 mt-0.5">Bulk import catalog treatments &amp; pricing</p>
+                </div>
+                <a href="/api/settings/export/template/services" class="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:bg-violet-100 dark:hover:bg-violet-900/50 border border-violet-500/20 flex items-center gap-1 transition-colors">
+                  <i data-lucide="download" class="w-3 h-3"></i> Sample CSV
                 </a>
               </div>
-              <p class="text-[10px] text-neutral-400 leading-relaxed">Columns: <span class="font-mono-num">name, category, price, duration, staff, description, active</span>. Only <span class="font-semibold">name</span> is mandatory. Unique categories found in the file are registered automatically.</p>
-              <label class="block cursor-pointer">
+              <div class="space-y-1.5 pt-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Accepted CSV Columns:</span>
+                <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Required field">
+                    <span>name</span>
+                    <span class="text-[9px] text-rose-500 font-bold">*</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>category</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>price</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>duration</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>staff</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>active</span>
+                  </span>
+                </div>
+                <p class="text-[10px] text-neutral-400 leading-relaxed pt-0.5">
+                  Only <strong class="text-neutral-700 dark:text-neutral-300">name</strong> is mandatory. Unique categories are registered automatically.
+                </p>
+              </div>
+              <label class="block cursor-pointer pt-1">
                 <input type="file" accept=".csv" class="hidden" @change="uploadCsv('services', $event)">
-                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all">
+                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all cursor-pointer">
                   <i data-lucide="upload" class="w-3.5 h-3.5 text-violet-500"></i>
                   <span x-text="importing === 'services' ? 'Uploading...' : 'Choose CSV File'"></span>
                 </span>
               </label>
               <p x-show="importResult && importResult.dataset === 'services'" class="text-[11px] font-semibold" :class="importResult && importResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" x-text="importResult && importResult.dataset === 'services' ? importResult.message : ''"></p>
+            </div>
+
+            <!-- Staff Upload -->
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-dashed border-neutral-300 dark:border-neutral-700 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white">Upload Staff Roster</p>
+                  <p class="text-[10px] text-neutral-400 mt-0.5">Bulk import stylists, colorists &amp; specialists</p>
+                </div>
+                <a href="/api/settings/export/template/staff" class="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:bg-violet-100 dark:hover:bg-violet-900/50 border border-violet-500/20 flex items-center gap-1 transition-colors">
+                  <i data-lucide="download" class="w-3 h-3"></i> Sample CSV
+                </a>
+              </div>
+              <div class="space-y-1.5 pt-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Accepted CSV Columns:</span>
+                <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Required field">
+                    <span>name</span>
+                    <span class="text-[9px] text-rose-500 font-bold">*</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200" title="Stylist, Senior, Barber, etc.">
+                    <span>role</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>phone</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-neon-cyan font-bold">
+                    <span>gender</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>email</span>
+                  </span>
+                </div>
+                <p class="text-[10px] text-neutral-400 leading-relaxed pt-0.5">
+                  Only <strong class="text-neutral-700 dark:text-neutral-300">name</strong> is mandatory. Role defaults to Stylist if omitted.
+                </p>
+              </div>
+              <label class="block cursor-pointer pt-1">
+                <input type="file" accept=".csv" class="hidden" @change="uploadCsv('staff', $event)">
+                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-violet-500"></i>
+                  <span x-text="importing === 'staff' ? 'Uploading...' : 'Choose CSV File'"></span>
+                </span>
+              </label>
+              <p x-show="importResult && importResult.dataset === 'staff'" class="text-[11px] font-semibold" :class="importResult && importResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" x-text="importResult && importResult.dataset === 'staff' ? importResult.message : ''"></p>
+            </div>
+
+            <!-- Invoices Upload -->
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-dashed border-neutral-300 dark:border-neutral-700 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-xs font-bold text-neutral-900 dark:text-white">Upload Invoices &amp; Bills</p>
+                  <p class="text-[10px] text-neutral-400 mt-0.5">Bulk import historical receipts &amp; POS orders</p>
+                </div>
+                <a href="/api/settings/export/template/invoices" class="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:bg-violet-100 dark:hover:bg-violet-900/50 border border-violet-500/20 flex items-center gap-1 transition-colors">
+                  <i data-lucide="download" class="w-3 h-3"></i> Sample CSV
+                </a>
+              </div>
+              <div class="space-y-1.5 pt-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Accepted CSV Columns:</span>
+                <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold" title="Subtotal in Rupees">
+                    <span>subtotal</span>
+                    <span class="text-[9px] text-rose-500 font-bold">*</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>client_name</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>client_phone</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>discount</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>tax</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>payment_mode</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200">
+                    <span>items</span>
+                  </span>
+                </div>
+                <p class="text-[10px] text-neutral-400 leading-relaxed pt-0.5">
+                  Grand total calculated automatically if omitted (<span class="font-mono text-neutral-700 dark:text-neutral-300">subtotal - discount + tax</span>).
+                </p>
+              </div>
+              <label class="block cursor-pointer pt-1">
+                <input type="file" accept=".csv" class="hidden" @change="uploadCsv('invoices', $event)">
+                <span class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-violet-400 transition-all cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-violet-500"></i>
+                  <span x-text="importing === 'invoices' ? 'Uploading...' : 'Choose CSV File'"></span>
+                </span>
+              </label>
+              <p x-show="importResult && importResult.dataset === 'invoices'" class="text-[11px] font-semibold" :class="importResult && importResult.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" x-text="importResult && importResult.dataset === 'invoices' ? importResult.message : ''"></p>
             </div>
 
           </div>
@@ -1085,16 +1689,24 @@
     deletion_request: {{ deletion_request|tojson }},
     is_admin: {{ 'true' if is_admin else 'false' }},
     current_username: {{ session.get('username', 'owner')|tojson }},
+    roles: {{ roles|tojson if roles is defined else '[]' }},
+    permissions: {{ system_permissions|tojson if system_permissions is defined else '[]' }},
+    default_role_id: {{ default_role_id|tojson if default_role_id is defined else 'null' }},
+    tax_settings: {{ tax_settings|tojson if tax_settings is defined else '{}' }},
+    can_manage_roles: {{ 'true' if can_manage_roles else 'false' }},
+    can_manage_accounts: {{ 'true' if can_manage_accounts else 'false' }},
   };
 
   function settingsApp() {
     return {
       tab: (() => {
         const hash = (window.location.hash || '').replace('#', '');
-        const valid = ['profile', 'team', 'booking-link', 'payments', 'data', 'subscription'];
+        const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'data', 'subscription'];
         return valid.includes(hash) ? hash : 'profile';
       })(),
       is_admin: SETTINGS_BOOT.is_admin,
+      can_manage_roles: SETTINGS_BOOT.can_manage_roles,
+      can_manage_accounts: SETTINGS_BOOT.can_manage_accounts,
       currentUsername: SETTINGS_BOOT.current_username,
       toast: { show: false, message: '', type: 'success' },
 
@@ -1137,12 +1749,13 @@
       async init() {
         window.addEventListener('hashchange', () => {
           const hash = (window.location.hash || '').replace('#', '');
-          const valid = ['profile', 'team', 'booking-link', 'payments', 'data', 'subscription'];
+          const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'data', 'subscription'];
           if (valid.includes(hash)) this.tab = hash;
         });
 
         await Promise.all([
-          this.loadPaymentMethods()
+          this.loadPaymentMethods(),
+          this.loadTaxSettings()
         ]);
         this.refreshIcons();
 
@@ -1476,14 +2089,328 @@
         this.savingPayments = false;
       },
 
+      // ---------- Tax Master ----------
+      taxSettings: (() => {
+        const d = { enabled: true, tax_name: 'GST', tax_rate: 18.0, tax_type: 'exclusive', tax_number: '', split_tax: true };
+        return { ...d, ...(SETTINGS_BOOT.tax_settings || {}) };
+      })(),
+      savingTax: false,
+      async loadTaxSettings() {
+        try {
+          const res = await fetch('/api/settings/taxes');
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.tax_settings) {
+              this.taxSettings = { ...this.taxSettings, ...data.tax_settings };
+            }
+          }
+        } catch (e) {
+          console.log('Failed to load tax settings:', e);
+        }
+        this.refreshIcons();
+      },
+      async saveTaxSettings() {
+        this.savingTax = true;
+        try {
+          const res = await fetch('/api/settings/taxes', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tax_settings: this.taxSettings }),
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data && data.tax_settings) {
+            this.taxSettings = data.tax_settings;
+          }
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+        this.savingTax = false;
+      },
+
+      // ---------- RBAC: Roles & Permissions ----------
+      roles: SETTINGS_BOOT.roles || [],
+      permissions: SETTINGS_BOOT.permissions || [],
+      defaultRoleId: SETTINGS_BOOT.default_role_id || (SETTINGS_BOOT.roles && SETTINGS_BOOT.roles[0] ? SETTINGS_BOOT.roles[0].id : null),
+      savingDefaultRole: false,
+
+      get groupedPermissions() {
+        const groups = {};
+        (this.permissions || []).forEach(p => {
+          const mod = p.module || 'General';
+          if (!groups[mod]) groups[mod] = [];
+          groups[mod].push(p);
+        });
+        return groups;
+      },
+
+      roleModal: {
+        open: false,
+        isEdit: false,
+        roleId: null,
+        saving: false,
+        expandedModules: {},
+        form: {
+          role_name: '',
+          description: '',
+          permissions: [],
+        }
+      },
+
+      reassignModal: {
+        open: false,
+        roleId: null,
+        roleName: '',
+        assignedCount: 0,
+        targetRoleId: null,
+        submitting: false,
+      },
+
+      openCreateRoleModal() {
+        const expanded = {};
+        Object.keys(this.groupedPermissions).forEach(k => expanded[k] = true);
+        this.roleModal = {
+          open: true,
+          isEdit: false,
+          roleId: null,
+          saving: false,
+          expandedModules: expanded,
+          form: {
+            role_name: '',
+            description: '',
+            permissions: [
+              'billing:read', 'billing:write', 'billing:discount',
+              'appointments:read', 'appointments:write',
+              'customers:read', 'customers:write'
+            ]
+          }
+        };
+        this.refreshIcons();
+      },
+
+      openEditRoleModal(role) {
+        const expanded = {};
+        Object.keys(this.groupedPermissions).forEach(k => expanded[k] = true);
+        this.roleModal = {
+          open: true,
+          isEdit: true,
+          roleId: role.id,
+          saving: false,
+          expandedModules: expanded,
+          form: {
+            role_name: role.role_name,
+            description: role.description || '',
+            permissions: [...(role.permissions || [])]
+          }
+        };
+        this.refreshIcons();
+      },
+
+      cloneRole(role) {
+        const expanded = {};
+        Object.keys(this.groupedPermissions).forEach(k => expanded[k] = true);
+        this.roleModal = {
+          open: true,
+          isEdit: false,
+          roleId: null,
+          saving: false,
+          expandedModules: expanded,
+          form: {
+            role_name: role.role_name + ' (Copy)',
+            description: role.description || '',
+            permissions: [...(role.permissions || [])]
+          }
+        };
+        this.refreshIcons();
+      },
+
+      closeRoleModal() {
+        this.roleModal.open = false;
+      },
+
+      toggleModuleAccordion(mod) {
+        this.roleModal.expandedModules[mod] = !this.roleModal.expandedModules[mod];
+        this.refreshIcons();
+      },
+
+      countModuleActive(perms) {
+        const current = new Set(this.roleModal.form.permissions || []);
+        return (perms || []).filter(p => current.has(p.key)).length;
+      },
+
+      toggleAllInModule(perms, enable) {
+        const set = new Set(this.roleModal.form.permissions || []);
+        (perms || []).forEach(p => {
+          if (enable) set.add(p.key);
+          else set.delete(p.key);
+        });
+        this.roleModal.form.permissions = Array.from(set);
+      },
+
+      selectAllPermissions() {
+        this.roleModal.form.permissions = (this.permissions || []).map(p => p.key);
+      },
+
+      clearAllPermissions() {
+        this.roleModal.form.permissions = [];
+      },
+
+      getRoleScopeSummary() {
+        const active = this.roleModal.form.permissions || [];
+        const total = (this.permissions || []).length;
+        if (!active.length) return 'No permissions assigned — user cannot perform actions.';
+        if (active.length === total) return 'Full administrative privileges across all modules.';
+        
+        let fullMods = 0, partialMods = 0;
+        Object.values(this.groupedPermissions).forEach(perms => {
+          const c = this.countModuleActive(perms);
+          if (c === perms.length) fullMods++;
+          else if (c > 0) partialMods++;
+        });
+        return `Full access to ${fullMods} module${fullMods === 1 ? '' : 's'}, restricted access to ${partialMods} module${partialMods === 1 ? '' : 's'}.`;
+      },
+
+      async saveRole() {
+        const name = (this.roleModal.form.role_name || '').trim();
+        if (!name) {
+          this.notify('Role name is required.', 'error');
+          return;
+        }
+        this.roleModal.saving = true;
+        try {
+          const isEdit = this.roleModal.isEdit;
+          const url = isEdit ? '/api/settings/roles/' + this.roleModal.roleId : '/api/settings/roles';
+          const method = isEdit ? 'PATCH' : 'POST';
+          const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.roleModal.form)
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data.success) {
+            this.closeRoleModal();
+            await this.refreshRoles();
+            await this.refreshAccounts();
+          }
+        } catch (e) {
+          this.notify('Network error saving role.', 'error');
+        }
+        this.roleModal.saving = false;
+      },
+
+      async promptDeleteRole(role) {
+        if (role.is_system_locked) {
+          this.notify('System roles cannot be deleted.', 'error');
+          return;
+        }
+
+        if (role.member_count > 0) {
+          // Open reassignment modal
+          const fallback = this.roles.find(r => r.id !== role.id);
+          this.reassignModal = {
+            open: true,
+            roleId: role.id,
+            roleName: role.role_name,
+            assignedCount: role.member_count,
+            targetRoleId: fallback ? fallback.id : null,
+            submitting: false,
+          };
+          this.refreshIcons();
+          return;
+        }
+
+        const ok = await window.uiConfirm({
+          title: `Delete role "${role.role_name}"?`,
+          message: 'This role will be permanently removed. This action cannot be undone.',
+          confirmText: 'Delete Role',
+          danger: true
+        });
+        if (!ok) return;
+
+        try {
+          const res = await fetch('/api/settings/roles/' + role.id, { method: 'DELETE' });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data.success) {
+            await this.refreshRoles();
+            await this.refreshAccounts();
+          }
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+      },
+
+      closeReassignModal() {
+        this.reassignModal.open = false;
+      },
+
+      async confirmReassignAndDelete() {
+        if (!this.reassignModal.targetRoleId) {
+          this.notify('Please select a role for reassignment.', 'error');
+          return;
+        }
+        this.reassignModal.submitting = true;
+        try {
+          const res = await fetch('/api/settings/roles/' + this.reassignModal.roleId, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reassign_to: this.reassignModal.targetRoleId })
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data.success) {
+            this.closeReassignModal();
+            await this.refreshRoles();
+            await this.refreshAccounts();
+          }
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+        this.reassignModal.submitting = false;
+      },
+
+      async saveDefaultRole() {
+        this.savingDefaultRole = true;
+        try {
+          const res = await fetch('/api/settings/default-role', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: this.defaultRoleId })
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+        } catch (e) {
+          this.notify('Network error updating default role.', 'error');
+        }
+        this.savingDefaultRole = false;
+      },
+
+      async refreshRoles() {
+        try {
+          const res = await fetch('/api/settings/roles');
+          const data = await res.json();
+          if (data.success) {
+            this.roles = data.roles;
+            this.defaultRoleId = data.default_role_id || this.defaultRoleId;
+          }
+        } catch (e) { /* keep state */ }
+        this.refreshIcons();
+      },
+
       // ---------- Team Accounts ----------
       accounts: SETTINGS_BOOT.accounts,
       primaryId: SETTINGS_BOOT.primary_account_id,
       maxSeats: SETTINGS_BOOT.max_seats,
-      addForm: { email: '', password: '', auth_level: 'cashier' },
+      addForm: {
+        email: '',
+        password: '',
+        role_id: SETTINGS_BOOT.default_role_id || (SETTINGS_BOOT.roles && SETTINGS_BOOT.roles[0] ? SETTINGS_BOOT.roles[0].id : null),
+        auth_level: 'cashier'
+      },
       adding: false,
       editingId: null,
-      editForm: { email: '', auth_level: 'cashier', password: '' },
+      editForm: { email: '', role_id: null, auth_level: 'cashier', password: '' },
       savingEdit: false,
 
       get seatsUsed() { return this.accounts.length; },
@@ -1514,7 +2441,12 @@
           const data = await res.json();
           this.notify(data.message, data.success ? 'success' : 'error');
           if (data.success) {
-            this.addForm = { email: '', password: '', auth_level: 'cashier' };
+            this.addForm = {
+              email: '',
+              password: '',
+              role_id: this.defaultRoleId || (this.roles && this.roles[0] ? this.roles[0].id : null),
+              auth_level: 'cashier'
+            };
             await this.refreshAccounts();
           }
         } catch (e) {
@@ -1525,7 +2457,12 @@
 
       startEdit(acc) {
         this.editingId = acc.id;
-        this.editForm = { email: acc.username, auth_level: acc.auth_level, password: '' };
+        this.editForm = {
+          email: acc.username,
+          role_id: acc.role_id,
+          auth_level: acc.auth_level,
+          password: ''
+        };
         this.refreshIcons();
       },
 

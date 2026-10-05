@@ -118,7 +118,51 @@ def expires_for(cycle, created_on=None):
 
 
 # Supported access levels for salon team accounts
-AUTH_LEVELS = ["admin", "manager", "staff"]
+AUTH_LEVELS = ["admin", "manager", "staff", "cashier"]
+
+# Atomic permission definitions for AuraPOS RBAC
+SYSTEM_PERMISSIONS = [
+    # Point of Sale & Billing
+    {"key": "billing:read", "module": "Point of Sale", "name": "View Billing Terminal", "description": "Access the POS billing page and past terminal drafts"},
+    {"key": "billing:write", "module": "Point of Sale", "name": "Collect & Create Bills", "description": "Process payments, issue receipts and generate invoices"},
+    {"key": "billing:discount", "module": "Point of Sale", "name": "Apply Custom Discounts", "description": "Apply invoice-level discounts during checkout"},
+    
+    # Appointments & Scheduling
+    {"key": "appointments:read", "module": "Appointments", "name": "View Appointments", "description": "View booking calendar and appointment status"},
+    {"key": "appointments:write", "module": "Appointments", "name": "Manage Appointments", "description": "Book, reschedule, or cancel client appointments"},
+
+    # Customers & Patrons
+    {"key": "customers:read", "module": "Customers", "name": "View Customer Directory", "description": "Access customer directory and search patrons"},
+    {"key": "customers:write", "module": "Customers", "name": "Create & Edit Customers", "description": "Add new clients and update client profiles"},
+    {"key": "customers:delete", "module": "Customers", "name": "Delete Customers", "description": "Remove customers from salon directory"},
+    {"key": "customers:analytics", "module": "Customers", "name": "View Customer Analytics", "description": "View patron visit frequency, lifetime spend and churn"},
+
+    # Service Catalog & Categories
+    {"key": "services:read", "module": "Services", "name": "View Service Catalog", "description": "Browse salon service offerings and categories"},
+    {"key": "services:write", "module": "Services", "name": "Modify Services & Catalog", "description": "Add, edit, or adjust pricing of services & categories"},
+    {"key": "services:delete", "module": "Services", "name": "Delete Services", "description": "Remove services or service categories"},
+
+    # Staff Management
+    {"key": "staff:read", "module": "Staff", "name": "View Staff Members", "description": "View staff profiles, roles, and assigned services"},
+    {"key": "staff:write", "module": "Staff", "name": "Manage Staff", "description": "Add or modify staff members and assignments"},
+    {"key": "staff:delete", "module": "Staff", "name": "Delete Staff", "description": "Remove staff members from salon roster"},
+
+    # Reports & Business Analytics
+    {"key": "reports:read", "module": "Analytics", "name": "View Financial Reports", "description": "View gross revenue, sales trends, and staff commission"},
+    {"key": "reports:export", "module": "Analytics", "name": "Export Financial CSVs", "description": "Download sales reports and business data dumps"},
+
+    # Team Accounts & RBAC
+    {"key": "accounts:read", "module": "Team & Roles", "name": "View Team Accounts", "description": "View team members and active role assignments"},
+    {"key": "accounts:write", "module": "Team & Roles", "name": "Manage Team Members", "description": "Invite, edit, or remove team member logins"},
+    {"key": "roles:manage", "module": "Team & Roles", "name": "Manage Roles & Permissions", "description": "Create, edit, duplicate, and delete custom roles"},
+
+    # Settings & Salon Administration
+    {"key": "settings:read", "module": "Settings", "name": "View Salon Settings", "description": "View salon profile, hours, and preferences"},
+    {"key": "settings:write", "module": "Settings", "name": "Edit Salon Settings", "description": "Update salon profile, schedule, and payment options"},
+    {"key": "data:import_export", "module": "Settings", "name": "Import & Backup Data", "description": "Mass import CSV records and download backups"},
+]
+
+ALL_PERMISSION_KEYS = [p["key"] for p in SYSTEM_PERMISSIONS]
 
 # Canonical weekday keys used by the opening-hours editor / booking portal.
 WEEKDAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -171,6 +215,8 @@ class Account:
     username: str
     password: str
     auth_level: str = "admin"
+    id: int = None
+    role_id: int = None
     salon: dict = None
 
     @classmethod
@@ -184,6 +230,8 @@ class Account:
             username=row.get("username"),
             password=row.get("password"),
             auth_level=row.get("auth_level") or "admin",
+            id=row.get("id"),
+            role_id=row.get("role_id"),
             salon=row.get("salon"),
         )
 
@@ -724,7 +772,61 @@ class AuthorizationRepository:
             _warn(f"update_payment_methods({salon_id}) failed: {exc}")
             return False
 
-    def create_account(self, auth_id, username, password, auth_level="admin"):
+    def get_tax_settings(self, salon_id):
+        defaults = {
+            "enabled": True,
+            "tax_name": "GST",
+            "tax_rate": 18.0,
+            "tax_type": "exclusive",
+            "tax_number": "",
+            "split_tax": True,
+        }
+        try:
+            row = _data(
+                _sb().table("salon_settings")
+                .select("tax_settings")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            if row and row.get("tax_settings"):
+                val = row["tax_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception as exc:
+            _warn(f"get_tax_settings({salon_id}) failed: {exc}")
+        return defaults
+
+    def update_tax_settings(self, salon_id, settings):
+        try:
+            settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+            existing = _data(
+                _sb().table("salon_settings")
+                .select("id")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            now = int(datetime.now().timestamp())
+            if existing:
+                _sb().table("salon_settings").update({
+                    "tax_settings": settings_json,
+                    "updated_at": now,
+                }).eq("salon_id", salon_id).execute()
+            else:
+                _sb().table("salon_settings").insert({
+                    "salon_id": salon_id,
+                    "tax_settings": settings_json,
+                    "created_at": now,
+                    "updated_at": now,
+                }).execute()
+            return True
+        except Exception as exc:
+            _warn(f"update_tax_settings({salon_id}) failed: {exc}")
+            return False
+
+    def create_account(self, auth_id, username, password, auth_level="admin", role_id=None):
         """Create a local AuraPOS account in the database.
 
         Vercel can reuse a warm Python process whose HTTP/2 connection to
@@ -741,6 +843,7 @@ class AuthorizationRepository:
             "username": username,
             "password": password,
             "auth_level": auth_level or "admin",
+            "role_id": role_id,
         }
 
         for attempt in range(2):
@@ -800,7 +903,9 @@ class AuthorizationRepository:
             .execute()
         )
         auth_id = res.data[0]["id"]
-        self.create_account(auth_id, email, password, auth_level)
+        roles_map = self.ensure_default_roles(auth_id)
+        owner_role_id = roles_map.get("owner")
+        self.create_account(auth_id, email, password, auth_level, role_id=owner_role_id)
         return auth_id
 
     def login(self, username, password):
@@ -987,23 +1092,327 @@ class AuthorizationRepository:
 
     # ---------- Settings: team account management ----------
 
+    # ---------- Settings: dynamic RBAC role & account management ----------
+    def ensure_default_roles(self, salon_id):
+        """Ensure standard base roles (Owner, Manager, Billing Desk) exist for a salon in Supabase."""
+        now = int(datetime.now().timestamp())
+        roles_res = _sb().table("roles").select("id, role_name, is_system_locked").eq("tenant_id", salon_id).execute()
+        existing = {r["role_name"].lower(): dict(r) for r in (roles_res.data or [])}
+
+        default_defs = [
+            {
+                "name": "Owner",
+                "desc": "Primary salon administrator with unrestricted access to all modules and configurations.",
+                "locked": 1,
+                "perms": ALL_PERMISSION_KEYS
+            },
+            {
+                "name": "Manager",
+                "desc": "Day-to-day salon operations, staff, customer directory, and catalogs.",
+                "locked": 0,
+                "perms": [
+                    "billing:read", "billing:write", "billing:discount",
+                    "appointments:read", "appointments:write",
+                    "customers:read", "customers:write",
+                    "services:read", "services:write",
+                    "staff:read", "staff:write",
+                    "reports:read",
+                    "accounts:read",
+                    "settings:read"
+                ]
+            },
+            {
+                "name": "Billing Desk",
+                "desc": "Front desk checkout, payment collection, and client appointments.",
+                "locked": 0,
+                "perms": [
+                    "billing:read", "billing:write", "billing:discount",
+                    "appointments:read", "appointments:write",
+                    "customers:read", "customers:write",
+                    "services:read"
+                ]
+            }
+        ]
+
+        created_or_found = {}
+        for d in default_defs:
+            name_key = d["name"].lower()
+            if name_key in existing:
+                role_id = existing[name_key]["id"]
+            else:
+                ins = _sb().table("roles").insert({
+                    "tenant_id": salon_id,
+                    "role_name": d["name"],
+                    "description": d["desc"],
+                    "is_system_locked": d["locked"],
+                    "created_at": now,
+                    "updated_at": now
+                }).execute()
+                role_id = ins.data[0]["id"]
+                perm_payload = [{"role_id": role_id, "permission_key": pkey} for pkey in d["perms"]]
+                if perm_payload:
+                    _sb().table("role_permissions").insert(perm_payload).execute()
+            created_or_found[name_key] = role_id
+
+        # Update salon_settings default_role_id if unset
+        s_row = _data(_sb().table("salon_settings").select("default_role_id").eq("salon_id", salon_id).maybe_single().execute())
+        if not s_row or not s_row.get("default_role_id"):
+            cashier_role_id = created_or_found.get("billing desk")
+            if cashier_role_id:
+                if s_row:
+                    _sb().table("salon_settings").update({"default_role_id": cashier_role_id}).eq("salon_id", salon_id).execute()
+                else:
+                    _sb().table("salon_settings").insert({"salon_id": salon_id, "default_role_id": cashier_role_id, "created_at": now, "updated_at": now}).execute()
+
+        # Backfill any existing accounts without role_id
+        owner_id = self.get_primary_account_id(salon_id)
+        owner_role_id = created_or_found.get("owner")
+        manager_role_id = created_or_found.get("manager")
+        cashier_role_id = created_or_found.get("billing desk")
+
+        acc_rows = (_sb().table("accounts").select("id, auth_level, role_id").eq("auth_id", salon_id).execute()).data or []
+        for a in acc_rows:
+            if not a.get("role_id"):
+                lvl = (a.get("auth_level") or "").lower()
+                assigned_role = owner_role_id
+                if a["id"] == owner_id or lvl == "admin":
+                    assigned_role = owner_role_id
+                elif lvl == "manager":
+                    assigned_role = manager_role_id
+                elif lvl == "cashier":
+                    assigned_role = cashier_role_id
+                if assigned_role:
+                    _sb().table("accounts").update({"role_id": assigned_role}).eq("id", a["id"]).execute()
+
+        return created_or_found
+
+    def get_permissions(self):
+        """Return all atomic system permissions."""
+        try:
+            res = _sb().table("permissions").select("key, module, name, description").order("module").order("key").execute()
+            if res.data:
+                return res.data
+        except Exception:
+            pass
+        return SYSTEM_PERMISSIONS
+
+    def get_roles(self, salon_id):
+        """Get all custom and system roles for a salon with permissions and active user counts."""
+        self.ensure_default_roles(salon_id)
+        roles_rows = (_sb().table("roles").select("id, tenant_id, role_name, description, is_system_locked, created_at, updated_at")
+                      .eq("tenant_id", salon_id).order("is_system_locked", desc=True).order("id").execute()).data or []
+        
+        accs = (_sb().table("accounts").select("id, role_id").eq("auth_id", salon_id).execute()).data or []
+        counts = {}
+        for a in accs:
+            rid = a.get("role_id")
+            if rid:
+                counts[rid] = counts.get(rid, 0) + 1
+
+        all_role_ids = [r["id"] for r in roles_rows]
+        perms_map = {rid: [] for rid in all_role_ids}
+        if all_role_ids:
+            rp_rows = (_sb().table("role_permissions").select("role_id, permission_key").in_("role_id", all_role_ids).execute()).data or []
+            for rp in rp_rows:
+                perms_map.setdefault(rp["role_id"], []).append(rp["permission_key"])
+
+        roles = []
+        for r in roles_rows:
+            r_dict = dict(r)
+            r_dict["member_count"] = counts.get(r["id"], 0)
+            r_dict["permissions"] = perms_map.get(r["id"], [])
+            roles.append(r_dict)
+        return roles
+
+    def get_role(self, salon_id, role_id):
+        """Get a single role with its permissions."""
+        row = _data(_sb().table("roles").select("id, tenant_id, role_name, description, is_system_locked")
+                    .eq("tenant_id", salon_id).eq("id", role_id).maybe_single().execute())
+        if not row:
+            return None
+        r_dict = dict(row)
+        rp_rows = (_sb().table("role_permissions").select("permission_key").eq("role_id", role_id).execute()).data or []
+        r_dict["permissions"] = [p["permission_key"] for p in rp_rows]
+        return r_dict
+
+    def get_role_permissions(self, role_id):
+        """Fetch assigned permission keys for a given role ID."""
+        if not role_id:
+            return []
+        rp_rows = (_sb().table("role_permissions").select("permission_key").eq("role_id", role_id).execute()).data or []
+        return [r["permission_key"] for r in rp_rows]
+
+    def get_account_permissions(self, salon_id, account_id):
+        """Fetch all permissions assigned to an account."""
+        acc = _data(_sb().table("accounts").select("id, auth_level, role_id").eq("auth_id", salon_id).eq("id", account_id).maybe_single().execute())
+        if not acc:
+            return []
+        primary_id = self.get_primary_account_id(salon_id)
+        if acc["id"] == primary_id or acc.get("auth_level") == "admin":
+            return ALL_PERMISSION_KEYS
+        if acc.get("role_id"):
+            perms = self.get_role_permissions(acc["role_id"])
+            if perms:
+                return perms
+        lvl = (acc.get("auth_level") or "cashier").lower()
+        if lvl == "admin":
+            return ALL_PERMISSION_KEYS
+        elif lvl == "manager":
+            return [
+                "billing:read", "billing:write", "billing:discount",
+                "appointments:read", "appointments:write",
+                "customers:read", "customers:write",
+                "services:read", "services:write",
+                "staff:read", "staff:write",
+                "reports:read", "accounts:read", "settings:read"
+            ]
+        return ["billing:read", "billing:write", "billing:discount", "appointments:read", "appointments:write", "customers:read", "customers:write", "services:read"]
+
+    def create_role(self, salon_id, role_name, description, permissions):
+        """Create a new custom role with assigned permissions."""
+        name = (role_name or "").strip()
+        if not name:
+            return {"success": False, "message": "Role name is required."}
+        existing = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).ilike("role_name", name).maybe_single().execute())
+        if existing:
+            return {"success": False, "message": f"A role named '{name}' already exists."}
+
+        now = int(datetime.now().timestamp())
+        ins = _sb().table("roles").insert({
+            "tenant_id": salon_id,
+            "role_name": name,
+            "description": (description or "").strip(),
+            "is_system_locked": 0,
+            "created_at": now,
+            "updated_at": now
+        }).execute()
+        role_id = ins.data[0]["id"]
+        valid_perms = set(ALL_PERMISSION_KEYS)
+        clean = [p for p in set(permissions or []) if p in valid_perms]
+        if clean:
+            _sb().table("role_permissions").insert([{"role_id": role_id, "permission_key": p} for p in clean]).execute()
+        return {"success": True, "message": f"Role '{name}' created successfully.", "role_id": role_id}
+
+    def update_role(self, salon_id, role_id, role_name, description, permissions):
+        """Update an existing role and its permissions with security safeguards."""
+        name = (role_name or "").strip()
+        if not name:
+            return {"success": False, "message": "Role name is required."}
+        role = _data(_sb().table("roles").select("*").eq("tenant_id", salon_id).eq("id", role_id).maybe_single().execute())
+        if not role:
+            return {"success": False, "message": "Role not found."}
+
+        # Owner Lockout Protection
+        is_locked = bool(role.get("is_system_locked"))
+        clean_perms = set(permissions or [])
+        if is_locked:
+            if "accounts:write" not in clean_perms or "billing:write" not in clean_perms:
+                return {"success": False, "message": "Owner Lockout Protection: The primary system role must retain account management and billing permissions."}
+
+        # Check name collision
+        collision = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).ilike("role_name", name).neq("id", role_id).maybe_single().execute())
+        if collision:
+            return {"success": False, "message": f"Another role named '{name}' already exists."}
+
+        now = int(datetime.now().timestamp())
+        _sb().table("roles").update({
+            "role_name": name,
+            "description": (description or "").strip(),
+            "updated_at": now
+        }).eq("id", role_id).eq("tenant_id", salon_id).execute()
+
+        _sb().table("role_permissions").delete().eq("role_id", role_id).execute()
+        valid_perms = set(ALL_PERMISSION_KEYS)
+        clean = [p for p in clean_perms if p in valid_perms]
+        if clean:
+            _sb().table("role_permissions").insert([{"role_id": role_id, "permission_key": p} for p in clean]).execute()
+        return {"success": True, "message": f"Role '{name}' updated successfully."}
+
+    def delete_role(self, salon_id, role_id, reassign_to_role_id=None):
+        """Delete a custom role, requiring reassignment if users are actively assigned."""
+        role = _data(_sb().table("roles").select("*").eq("tenant_id", salon_id).eq("id", role_id).maybe_single().execute())
+        if not role:
+            return {"success": False, "message": "Role not found."}
+        if role.get("is_system_locked"):
+            return {"success": False, "message": "System-critical roles cannot be deleted."}
+
+        # Check assigned accounts
+        assigned_accs = (_sb().table("accounts").select("id").eq("auth_id", salon_id).eq("role_id", role_id).execute()).data or []
+        assigned_count = len(assigned_accs)
+        if assigned_count > 0:
+            if not reassign_to_role_id or int(reassign_to_role_id) == int(role_id):
+                return {
+                    "success": False,
+                    "requires_reassignment": True,
+                    "assigned_count": assigned_count,
+                    "message": f"{assigned_count} team member(s) are assigned to this role. Please choose a role to reassign them to before deletion."
+                }
+            target = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).eq("id", reassign_to_role_id).maybe_single().execute())
+            if not target:
+                return {"success": False, "message": "Target role for reassignment not found."}
+            _sb().table("accounts").update({"role_id": reassign_to_role_id}).eq("auth_id", salon_id).eq("role_id", role_id).execute()
+
+        # Check default role setting
+        s_row = _data(_sb().table("salon_settings").select("default_role_id").eq("salon_id", salon_id).maybe_single().execute())
+        if s_row and s_row.get("default_role_id") == role_id:
+            fallback_role = reassign_to_role_id or self.get_default_role_id(salon_id)
+            _sb().table("salon_settings").update({"default_role_id": fallback_role}).eq("salon_id", salon_id).execute()
+
+        _sb().table("role_permissions").delete().eq("role_id", role_id).execute()
+        _sb().table("roles").delete().eq("id", role_id).eq("tenant_id", salon_id).execute()
+        return {"success": True, "message": f"Role '{role['role_name']}' deleted successfully."}
+
+    def get_default_role_id(self, salon_id):
+        """Get the configured default role ID for new invites."""
+        self.ensure_default_roles(salon_id)
+        s_row = _data(_sb().table("salon_settings").select("default_role_id").eq("salon_id", salon_id).maybe_single().execute())
+        if s_row and s_row.get("default_role_id"):
+            role = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).eq("id", s_row["default_role_id"]).maybe_single().execute())
+            if role:
+                return role["id"]
+        fallback = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).eq("is_system_locked", 0).order("id").limit(1).maybe_single().execute())
+        return fallback["id"] if fallback else None
+
+    def set_default_role_id(self, salon_id, role_id):
+        """Set the default role ID for new team invites."""
+        role = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).eq("id", role_id).maybe_single().execute())
+        if not role:
+            return {"success": False, "message": "Selected role does not exist."}
+        now = int(datetime.now().timestamp())
+        existing = _data(_sb().table("salon_settings").select("id").eq("salon_id", salon_id).maybe_single().execute())
+        if existing:
+            _sb().table("salon_settings").update({"default_role_id": role_id, "updated_at": now}).eq("salon_id", salon_id).execute()
+        else:
+            _sb().table("salon_settings").insert({"salon_id": salon_id, "default_role_id": role_id, "created_at": now, "updated_at": now}).execute()
+        return {"success": True, "message": "Default invite role updated."}
+
     def get_accounts(self, salon_id):
+        self.ensure_default_roles(salon_id)
         rows = (
             _sb().table("accounts")
-            .select("id, username, password, auth_level")
+            .select("id, username, password, auth_level, role_id")
             .eq("auth_id", salon_id)
             .order("id")
             .execute()
-        ).data
-        return [
-            {
+        ).data or []
+
+        roles = {r["id"]: r for r in self.get_roles(salon_id)}
+        accounts = []
+        for r in rows:
+            acc = {
                 "id": r["id"],
                 "username": r["username"],
                 "password": r["password"],
-                "auth_level": r["auth_level"],
+                "auth_level": r.get("auth_level"),
+                "role_id": r.get("role_id"),
             }
-            for r in (rows or [])
-        ]
+            if r.get("role_id") and r["role_id"] in roles:
+                role_obj = roles[r["role_id"]]
+                acc["role_name"] = role_obj.get("role_name")
+                acc["role_description"] = role_obj.get("description")
+                acc["is_system_locked"] = role_obj.get("is_system_locked")
+            accounts.append(acc)
+        return accounts
 
     def count_accounts(self, salon_id):
         res = (
@@ -1027,10 +1436,8 @@ class AuthorizationRepository:
         )
         return row["id"] if row else None
 
-    def add_account(self, salon_id, username, password, auth_level, seat_limit=None):
+    def add_account(self, salon_id, username, password, auth_level=None, role_id=None, seat_limit=None):
         username = (username or "").strip().lower()
-        if auth_level not in AUTH_LEVELS:
-            return {"success": False, "message": "Invalid access level."}
         if not username or not password:
             return {"success": False, "message": "Email and password are both required."}
         if seat_limit is not None and self.count_accounts(salon_id) >= seat_limit:
@@ -1038,6 +1445,20 @@ class AuthorizationRepository:
                 "success": False,
                 "message": f"Seat limit reached ({seat_limit} on your plan). Upgrade to add more team accounts.",
             }
+
+        self.ensure_default_roles(salon_id)
+        resolved_role_id = role_id or self.get_default_role_id(salon_id)
+        role = _data(_sb().table("roles").select("id, role_name, is_system_locked").eq("tenant_id", salon_id).eq("id", resolved_role_id).maybe_single().execute())
+        if not role:
+            resolved_role_id = self.get_default_role_id(salon_id)
+            role = _data(_sb().table("roles").select("id, role_name, is_system_locked").eq("tenant_id", salon_id).eq("id", resolved_role_id).maybe_single().execute())
+
+        resolved_auth_level = auth_level or ("admin" if (role and role.get("is_system_locked")) else "cashier")
+        if role and role.get("role_name", "").lower() == "manager":
+            resolved_auth_level = "manager"
+        elif role and role.get("is_system_locked"):
+            resolved_auth_level = "admin"
+
         dup = _data(
             _sb().table("accounts")
             .select("id")
@@ -1047,13 +1468,11 @@ class AuthorizationRepository:
         )
         if dup:
             return {"success": False, "message": "An account with this email already exists."}
-        self.create_account(salon_id, username, password, auth_level)
+        self.create_account(salon_id, username, password, resolved_auth_level, role_id=resolved_role_id)
         return {"success": True, "message": f"Team account created for {username}."}
 
-    def update_account(self, salon_id, row_id, username, auth_level, password=None):
+    def update_account(self, salon_id, row_id, username, auth_level=None, role_id=None, password=None):
         username = (username or "").strip().lower()
-        if auth_level not in AUTH_LEVELS:
-            return {"success": False, "message": "Invalid access level."}
         if not username:
             return {"success": False, "message": "Email is required."}
 
@@ -1079,7 +1498,23 @@ class AuthorizationRepository:
         if dup:
             return {"success": False, "message": "Another account already uses this email."}
 
-        payload = {"username": username, "auth_level": auth_level}
+        primary_id = self.get_primary_account_id(salon_id)
+        resolved_role_id = role_id if role_id is not None else row.get("role_id")
+        if row["id"] == primary_id:
+            owner_role = _data(_sb().table("roles").select("id").eq("tenant_id", salon_id).eq("is_system_locked", 1).limit(1).maybe_single().execute())
+            if owner_role:
+                resolved_role_id = owner_role["id"]
+            resolved_auth_level = "admin"
+        else:
+            role = _data(_sb().table("roles").select("id, role_name, is_system_locked").eq("tenant_id", salon_id).eq("id", resolved_role_id).maybe_single().execute()) if resolved_role_id else None
+            if role and role.get("is_system_locked"):
+                resolved_auth_level = "admin"
+            elif role and role.get("role_name", "").lower() == "manager":
+                resolved_auth_level = "manager"
+            else:
+                resolved_auth_level = auth_level or "cashier"
+
+        payload = {"username": username, "auth_level": resolved_auth_level, "role_id": resolved_role_id}
         if password:
             payload["password"] = password
         _sb().table("accounts").update(payload).eq("id", row_id).eq("auth_id", salon_id).execute()
@@ -1513,6 +1948,61 @@ class StaffRepository:
         )
         return res.data[0]["id"]
 
+    def bulk_add_staff(self, account_id, rows):
+        """Mass-insert staff from uploaded CSV rows."""
+        added, skipped, errors = 0, 0, []
+        now = int(datetime.now().timestamp())
+        existing = {
+            str(r.get("name", "")).strip().lower()
+            for r in self.get_staff(account_id)
+            if str(r.get("name", "")).strip()
+        }
+        to_insert = []
+        for idx, row in enumerate(rows, start=2):
+            name = str(row.get("name", "") or "").strip()
+            if not name:
+                skipped += 1
+                errors.append(f"Row {idx}: Missing mandatory staff name.")
+                continue
+            if name.lower() in existing:
+                skipped += 1
+                errors.append(f"Row {idx}: Staff member '{name}' already exists.")
+                continue
+            role = str(row.get("role", "") or "Stylist").strip() or "Stylist"
+            phone = str(row.get("phone", "") or "").strip()
+            gender = str(row.get("gender", "") or "").strip()
+            email = str(row.get("email", "") or "").strip()
+            try:
+                services_done = max(0, int(float(str(row.get("services_done", "0") or 0))))
+            except Exception:
+                services_done = 0
+            try:
+                total_revenue = max(0, int(float(str(row.get("total_revenue", "0") or 0))))
+            except Exception:
+                total_revenue = 0
+
+            to_insert.append({
+                "account_id": account_id,
+                "name": name,
+                "role": role,
+                "phone": phone,
+                "gender": gender,
+                "email": email,
+                "services_done": services_done,
+                "total_revenue": total_revenue,
+                "created_on": now,
+            })
+            existing.add(name.lower())
+
+        if to_insert:
+            try:
+                _sb().table("staff").insert(to_insert).execute()
+                added = len(to_insert)
+            except Exception as exc:
+                errors.append(str(exc))
+                skipped += len(to_insert)
+        return {"added": added, "skipped": skipped, "errors": errors}
+
     def update_staff(self, staff_id, account_id, name, role, phone, gender, email):
         _sb().table("staff").update({
             "name": name,
@@ -1673,6 +2163,93 @@ class BillRepository:
             "items_json": items_json,
         }).execute()
         return bill_id
+
+    def bulk_add_bills(self, account_id, rows):
+        """Mass-insert bills/invoices from uploaded CSV rows."""
+        added, skipped, errors = 0, 0, []
+        now = int(datetime.now().timestamp())
+        to_insert = []
+        for idx, row in enumerate(rows, start=2):
+            raw_id = str(row.get("id", "") or "").strip().upper()
+            bill_id = raw_id if raw_id else f"AP-{str(uuid4())[:6].upper()}"
+            client_name = str(row.get("client_name", "") or row.get("client", "") or "Walk-in").strip() or "Walk-in"
+            client_phone = str(row.get("client_phone", "") or row.get("phone", "") or "").strip()
+            payment_mode = str(row.get("payment_mode", "") or row.get("payment", "") or "UPI").strip() or "UPI"
+            try:
+                subtotal = max(0, int(float(str(row.get("subtotal", "0") or 0))))
+                discount = max(0, int(float(str(row.get("discount", "0") or 0))))
+                tax = max(0, int(float(str(row.get("tax", "0") or 0))))
+                raw_grand_total = row.get("grand_total") or row.get("total")
+                if raw_grand_total is not None and str(raw_grand_total).strip() != "":
+                    grand_total = max(0, int(float(str(raw_grand_total))))
+                else:
+                    grand_total = max(0, subtotal - discount + tax)
+            except (ValueError, TypeError):
+                errors.append(f"Row {idx}: Invalid numeric figures.")
+                skipped += 1
+                continue
+            if grand_total > 500000:
+                errors.append(f"Row {idx}: Bill grand total exceeds ₹5,00,000 cap.")
+                skipped += 1
+                continue
+
+            raw_items = row.get("items") or row.get("items_json") or row.get("services") or ""
+            items_list = []
+            if raw_items:
+                raw_items_str = str(raw_items).strip()
+                if raw_items_str.startswith("[") and raw_items_str.endswith("]"):
+                    try:
+                        parsed = json.loads(raw_items_str)
+                        if isinstance(parsed, list):
+                            items_list = parsed
+                    except Exception:
+                        pass
+                if not items_list:
+                    parts = [p.strip() for p in raw_items_str.split(",") if p.strip()]
+                    for p in parts:
+                        items_list.append({"name": p, "price": 0, "qty": 1, "staff": "Unassigned"})
+            if not items_list:
+                items_list = [{"name": "Service", "price": subtotal, "qty": 1, "staff": "Unassigned"}]
+
+            created_at = now
+            raw_date = str(row.get("created_at", "") or row.get("date", "") or "").strip()
+            if raw_date:
+                try:
+                    if raw_date.isdigit():
+                        created_at = int(raw_date)
+                    else:
+                        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                            try:
+                                dt = datetime.strptime(raw_date, fmt)
+                                created_at = int(dt.timestamp())
+                                break
+                            except ValueError:
+                                pass
+                except Exception:
+                    created_at = now
+
+            to_insert.append({
+                "id": bill_id,
+                "account_id": account_id,
+                "client_name": client_name,
+                "client_phone": client_phone,
+                "subtotal": subtotal,
+                "discount": discount,
+                "tax": tax,
+                "grand_total": grand_total,
+                "payment_mode": payment_mode,
+                "created_at": created_at,
+                "items_json": json.dumps(items_list),
+            })
+
+        if to_insert:
+            try:
+                _sb().table("bills").insert(to_insert).execute()
+                added = len(to_insert)
+            except Exception as exc:
+                errors.append(str(exc))
+                skipped += len(to_insert)
+        return {"added": added, "skipped": skipped, "errors": errors}
 
     def find_recent_duplicate(self, account_id, client_phone, grand_total, window_seconds=4):
         threshold = int(datetime.now().timestamp()) - window_seconds

@@ -65,12 +65,84 @@ def login_required(f):
     return decorated_function
 
 
-def role_required(*levels):
-    """Gate a route to specific auth levels.
+def get_user_permissions(salon_id=None, account_id=None):
+    """Retrieve granted permissions set for the current user or given account."""
+    if salon_id is None:
+        salon_id = session.get("id", 1)
+    if account_id is None:
+        account_id = session.get("account_id")
 
-    Pages redirect unauthorized users to /billing with a flash message;
-    API endpoints return a 403 JSON response instead.
-    """
+    # If the user is the tenant owner or admin, grant all permissions
+    if session.get("auth_level") == "admin":
+        return set(ALL_PERMISSION_KEYS)
+
+    # Use cached session permissions if available
+    cached = session.get("permissions")
+    if cached is not None and isinstance(cached, (list, set)):
+        return set(cached)
+
+    if account_id:
+        try:
+            perms = authRepo.get_account_permissions(salon_id, account_id)
+            session["permissions"] = list(perms)
+            return set(perms)
+        except Exception:
+            pass
+
+    # Fallback to level-based defaults
+    lvl = (session.get("auth_level") or "cashier").lower()
+    if lvl == "admin":
+        return set(ALL_PERMISSION_KEYS)
+    elif lvl == "manager":
+        return {
+            "billing:read", "billing:write", "billing:discount",
+            "appointments:read", "appointments:write",
+            "customers:read", "customers:write",
+            "services:read", "services:write",
+            "staff:read", "staff:write",
+            "reports:read", "accounts:read", "settings:read"
+        }
+    return {
+        "billing:read", "billing:write", "billing:discount",
+        "appointments:read", "appointments:write",
+        "customers:read", "customers:write",
+        "services:read"
+    }
+
+
+def has_permission(resource, action):
+    """Check if the currently logged-in user possesses a specific permission claim."""
+    claim = f"{resource}:{action}"
+    perms = get_user_permissions()
+    return claim in perms
+
+
+def permission_required(resource, action):
+    """Gate a route to a granular permission claim (f'{resource}:{action}')."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if "id" not in session:
+                flash("Please sign in to access your salon terminal.", "warning")
+                return redirect(url_for("login"))
+
+            claim = f"{resource}:{action}"
+            perms = get_user_permissions()
+            if claim not in perms:
+                if request.path.startswith("/api/"):
+                    return jsonify({
+                        "success": False,
+                        "message": f"Insufficient permissions: requires '{claim}'.",
+                    }), 403
+                flash("Your role doesn't have permission to access that section.", "error")
+                return redirect(url_for("billing"))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+def role_required(*levels):
+    """Gate a route to specific auth levels or matching granular permissions."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -618,9 +690,14 @@ def inject_salon():
             is_pro=(tier == "pro"),
             is_free=(tier == "free"),
             TIER_PLANS=TIER_PLANS,
+            has_permission=has_permission,
+            current_user_permissions=get_user_permissions(),
         ))
         return res
-    res.update(dict(current_salon=None, salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False, TIER_PLANS=TIER_PLANS))
+    res.update(dict(
+        current_salon=None, salon=None, tier="pro", is_studio=False, is_pro=False, is_free=False,
+        TIER_PLANS=TIER_PLANS, has_permission=has_permission, current_user_permissions=set(),
+    ))
     return res
 
 
@@ -1014,6 +1091,12 @@ def login():
             session["auth_level"] = logged_in_acc.auth_level
             session["password"] = logged_in_acc.password
             session["username"] = logged_in_acc.username
+            session["account_id"] = logged_in_acc.id
+            session["role_id"] = logged_in_acc.role_id
+            try:
+                session["permissions"] = list(authRepo.get_account_permissions(logged_in_acc.auth_id, logged_in_acc.id))
+            except Exception:
+                session["permissions"] = list(ALL_PERMISSION_KEYS if logged_in_acc.auth_level == "admin" else [])
             flash(f"Welcome back, {logged_in_acc.username}!", "success")
             return redirect(url_for('dashboard'))
 
@@ -1042,6 +1125,12 @@ def directlogin():
         session["auth_level"] = logged_in_acc.auth_level
         session["password"] = logged_in_acc.password
         session["username"] = logged_in_acc.username
+        session["account_id"] = logged_in_acc.id
+        session["role_id"] = logged_in_acc.role_id
+        try:
+            session["permissions"] = list(authRepo.get_account_permissions(logged_in_acc.auth_id, logged_in_acc.id))
+        except Exception:
+            session["permissions"] = list(ALL_PERMISSION_KEYS if logged_in_acc.auth_level == "admin" else [])
         return redirect(url_for('dashboard'))
 
     return render_template('page_not_found.html')
@@ -1569,6 +1658,7 @@ def billing():
         terminal_limit=terminal_limit,
         account_id=session.get("account_id", 0),
         account_username=session.get("username", "Staff"),
+        tax_settings=authRepo.get_tax_settings(salon_id),
     )
 
 
@@ -2317,23 +2407,34 @@ def api_public_booking():
 # ================= SETTINGS =================
 
 @app.route('/settings')
-@role_required("admin", "manager")
+@login_required
 def settings():
+    if not (has_permission("settings", "read") or has_permission("accounts", "read") or session.get("auth_level") in ("admin", "manager")):
+        flash("Your role doesn't have permission to access salon settings.", "error")
+        return redirect(url_for("billing"))
+
     salon_id = session.get("id", 1)
     salon = authRepo.get_salon(salon_id)
     accounts = authRepo.get_accounts(salon_id)
+    roles = authRepo.get_roles(salon_id)
+    all_perms = authRepo.get_permissions()
+    default_role_id = authRepo.get_default_role_id(salon_id)
+
     # Never expose team passwords to the client
     safe_accounts = [{**acc, "password": "********"} for acc in accounts]
     salon_data = asdict(salon) if salon else {}
     subscriptions = authRepo.get_subscriptions(salon_id)
     deletion_request = authRepo.get_pending_deletion_request(salon_id)
-    if session.get("auth_level", "admin") != "admin":
-        # Managers can open Settings (team overview, own password) but must
-        # never see subscription details or salon billing metadata.
+
+    # Selective Data Serialization:
+    # Check if user has permission to view financial billing details & subscriptions
+    can_view_billing = has_permission("billing", "write") or has_permission("billing", "read") or session.get("auth_level") == "admin"
+    if not can_view_billing:
         for key in ("plan", "created_on", "expires_on"):
             salon_data.pop(key, None)
         subscriptions = []
         deletion_request = None
+
     return render_template(
         'service/settings.html',
         salon=salon_data,
@@ -2342,6 +2443,13 @@ def settings():
         subscriptions=subscriptions,
         deletion_request=deletion_request,
         max_team_seats=get_seat_limit(salon.plan if salon else ""),
+        roles=roles,
+        system_permissions=all_perms,
+        default_role_id=default_role_id,
+        can_view_billing=can_view_billing,
+        can_manage_roles=has_permission("roles", "manage") or session.get("auth_level") == "admin",
+        can_manage_accounts=has_permission("accounts", "write") or session.get("auth_level") == "admin",
+        tax_settings=authRepo.get_tax_settings(salon_id),
     )
 
 
@@ -2521,9 +2629,142 @@ def api_update_payment_methods():
     return jsonify({"success": True, "message": "Payment methods updated.", "methods": sanitized})
 
 
+@app.route('/api/settings/taxes', methods=['GET'])
+@login_required
+def api_get_tax_settings():
+    salon_id = session.get("id", 1)
+    tax_settings = authRepo.get_tax_settings(salon_id)
+    return jsonify({"success": True, "tax_settings": tax_settings})
+
+
+@app.route('/api/settings/taxes', methods=['POST', 'PUT', 'PATCH'])
+@login_required
+def api_update_tax_settings():
+    if not (session.get("auth_level") == "admin" or has_permission("settings", "write") or has_permission("billing", "write")):
+        return jsonify({"success": False, "message": "Unauthorized to update tax settings."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    settings = data.get("tax_settings", data)
+
+    enabled = bool(settings.get("enabled", True))
+    tax_name = str(settings.get("tax_name", "GST") or "GST").strip()[:30]
+    try:
+        tax_rate = max(0.0, min(100.0, float(settings.get("tax_rate", 18.0) if settings.get("tax_rate") is not None else 18.0)))
+    except (ValueError, TypeError):
+        tax_rate = 18.0
+
+    tax_type = str(settings.get("tax_type", "exclusive") or "exclusive").strip().lower()
+    if tax_type not in ("exclusive", "inclusive"):
+        tax_type = "exclusive"
+
+    tax_number = str(settings.get("tax_number", "") or "").strip()[:50]
+    split_tax = bool(settings.get("split_tax", True))
+
+    sanitized = {
+        "enabled": enabled,
+        "tax_name": tax_name,
+        "tax_rate": tax_rate,
+        "tax_type": tax_type,
+        "tax_number": tax_number,
+        "split_tax": split_tax,
+    }
+    authRepo.update_tax_settings(salon_id, sanitized)
+    return jsonify({"success": True, "message": "Tax master settings saved.", "tax_settings": sanitized})
+
+
+# ================= RBAC: ROLES & PERMISSIONS API =================
+
+@app.get('/api/settings/permissions')
+@login_required
+def api_get_permissions():
+    """Return all atomic permissions categorized by module."""
+    perms = authRepo.get_permissions()
+    # Group by module
+    modules = {}
+    for p in perms:
+        mod = p.get("module", "General")
+        modules.setdefault(mod, []).append(p)
+    return jsonify({"success": True, "permissions": perms, "grouped": modules})
+
+
+@app.get('/api/settings/roles')
+@login_required
+def api_get_roles():
+    """List all custom & system roles for this salon with member counts and permissions."""
+    if not (has_permission("roles", "manage") or has_permission("accounts", "read") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied."}), 403
+    salon_id = session.get("id", 1)
+    roles = authRepo.get_roles(salon_id)
+    default_role_id = authRepo.get_default_role_id(salon_id)
+    return jsonify({"success": True, "roles": roles, "default_role_id": default_role_id})
+
+
+@app.post('/api/settings/roles')
+@login_required
+def api_create_role():
+    """Create a new custom role."""
+    if not (has_permission("roles", "manage") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Only administrators can manage roles."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = (data.get("role_name") or "").strip()
+    description = (data.get("description") or "").strip()
+    permissions = data.get("permissions") or []
+    res = authRepo.create_role(salon_id, name, description, permissions)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.patch('/api/settings/roles/<int:role_id>')
+@login_required
+def api_update_role(role_id):
+    """Update role details and assigned permission toggles."""
+    if not (has_permission("roles", "manage") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Only administrators can manage roles."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = (data.get("role_name") or "").strip()
+    description = (data.get("description") or "").strip()
+    permissions = data.get("permissions") or []
+    res = authRepo.update_role(salon_id, role_id, name, description, permissions)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.delete('/api/settings/roles/<int:role_id>')
+@login_required
+def api_delete_role(role_id):
+    """Delete a custom role (supports ?reassign_to=<id> if members are assigned)."""
+    if not (has_permission("roles", "manage") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Only administrators can delete roles."}), 403
+    salon_id = session.get("id", 1)
+    reassign_to = request.args.get("reassign_to")
+    if not reassign_to and request.is_json:
+        reassign_to = (request.get_json() or {}).get("reassign_to")
+    res = authRepo.delete_role(salon_id, role_id, reassign_to_role_id=reassign_to)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.put('/api/settings/default-role')
+@login_required
+def api_set_default_role():
+    """Set the fallback / default role for newly invited team members."""
+    if not (has_permission("roles", "manage") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Only administrators can configure default roles."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    role_id = data.get("role_id")
+    if not role_id:
+        return jsonify({"success": False, "message": "role_id is required."}), 400
+    res = authRepo.set_default_role_id(salon_id, int(role_id))
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+# ================= TEAM ACCOUNTS MANAGEMENT =================
+
 @app.get('/api/settings/accounts')
-@role_required("admin", "manager")
+@login_required
 def api_get_accounts():
+    if not (has_permission("accounts", "read") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied."}), 403
     salon_id = session.get("id", 1)
     accounts = [{**acc, "password": "********"} for acc in authRepo.get_accounts(salon_id)]
     tier, _salon = get_salon_tier(salon_id)
@@ -2538,16 +2779,18 @@ def api_get_accounts():
 @app.post('/api/settings/accounts')
 @login_required
 def api_add_account():
-    if session.get("auth_level") != "admin":
-        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    if not (has_permission("accounts", "write") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Insufficient permissions to add team accounts."}), 403
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
     tier, _salon = get_salon_tier(salon_id)
+    role_id = data.get("role_id")
     result = authRepo.add_account(
         salon_id,
         data.get("email", ""),
         data.get("password", ""),
-        data.get("auth_level", "cashier"),
+        auth_level=data.get("auth_level"),
+        role_id=role_id,
         seat_limit=get_seat_limit(tier),
     )
     return jsonify(result), (200 if result["success"] else 400)
@@ -2556,15 +2799,17 @@ def api_add_account():
 @app.patch('/api/settings/accounts/<int:row_id>')
 @login_required
 def api_update_account(row_id):
-    if session.get("auth_level") != "admin":
-        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    if not (has_permission("accounts", "write") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Insufficient permissions to modify team accounts."}), 403
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
     new_password = (data.get("password") or "").strip() or None
+    role_id = data.get("role_id")
     result = authRepo.update_account(
         salon_id, row_id,
         data.get("email", ""),
-        data.get("auth_level", "cashier"),
+        auth_level=data.get("auth_level"),
+        role_id=role_id,
         password=new_password,
     )
     if result["success"]:
@@ -2574,14 +2819,16 @@ def api_update_account(row_id):
             if new_password:
                 session["password"] = new_password
             session["auth_level"] = me["auth_level"]
+            session["role_id"] = me.get("role_id")
+            session["permissions"] = list(authRepo.get_account_permissions(salon_id, row_id))
     return jsonify(result), (200 if result["success"] else 400)
 
 
 @app.delete('/api/settings/accounts/<int:row_id>')
 @login_required
 def api_delete_account(row_id):
-    if session.get("auth_level") != "admin":
-        return jsonify({"success": False, "message": "Only the salon owner can manage team accounts."}), 403
+    if not (has_permission("accounts", "write") or session.get("auth_level") == "admin"):
+        return jsonify({"success": False, "message": "Insufficient permissions to delete team accounts."}), 403
     salon_id = session.get("id", 1)
     result = authRepo.delete_account(salon_id, row_id)
     return jsonify(result), (200 if result["success"] else 400)
@@ -2638,7 +2885,14 @@ def api_export_data(dataset):
             ["id", "client", "phone", "email", "service", "time", "date", "staff", "price", "duration", "status", "notes"],
             [[r["id"], r["client"], r["phone"], r["email"], r["service"], r["time"], r["date"], r["staff"], r["price"], r["duration"], r["status"], r["notes"]] for r in rows],
         )
-    if dataset == "bills":
+    if dataset == "staff":
+        rows = staffRepo.get_staff(salon_id)
+        return _csv_response(
+            f"staff-{stamp}.csv",
+            ["id", "name", "role", "phone", "gender", "email", "total_revenue", "services_done", "created_on"],
+            [[r["id"], r["name"], r["role"], r.get("phone", ""), r.get("gender", ""), r.get("email", ""), r.get("total_revenue", 0), r.get("services_done", 0), r.get("created_on", "")] for r in rows],
+        )
+    if dataset in ("bills", "invoices"):
         rows = billRepo.get_recent_bills(salon_id, limit=1000000)
         return _csv_response(
             f"invoices-{stamp}.csv",
@@ -2671,6 +2925,24 @@ def api_import_template(dataset):
                 ["Express Facial", "Spa & Facial", 900, 40, "Any Stylist", "", 1],
             ],
         )
+    if dataset == "staff":
+        return _csv_response(
+            "staff-upload-template.csv",
+            ["name", "role", "phone", "gender", "email"],
+            [
+                ["Marcus Vance", "Senior Stylist", "9876501234", "Male", "marcus@aurasalon.com"],
+                ["Priya Nair", "Colorist", "9876505678", "Female", "priya@aurasalon.com"],
+            ],
+        )
+    if dataset in ("invoices", "bills"):
+        return _csv_response(
+            "invoices-upload-template.csv",
+            ["id", "client_name", "client_phone", "subtotal", "discount", "tax", "grand_total", "payment_mode", "items", "created_at"],
+            [
+                ["AP-9801A1", "Ananya Sharma", "9876543210", 1200, 100, 198, 1298, "UPI", "Executive Men's Haircut, Luxury Organic Hair Spa", "2026-10-01"],
+                ["AP-9801A2", "Rahul Verma", "9811112222", 750, 0, 135, 885, "Cash", "Women's Signature Layer Cut", "2026-10-02"],
+            ],
+        )
     return jsonify({"success": False, "message": "Unknown template."}), 404
 
 
@@ -2678,7 +2950,7 @@ def api_import_template(dataset):
 @login_required
 @tier_required("studio")
 def api_import_data(dataset):
-    """Mass upload customers or services from a CSV file."""
+    """Mass upload customers, services, staff, or invoices from a CSV file."""
     if session.get("auth_level") != "admin":
         return jsonify({"success": False, "message": "Only the salon owner can import data."}), 403
     salon_id = session.get("id", 1)
@@ -2705,13 +2977,17 @@ def api_import_data(dataset):
         result = customerRepo.bulk_add_customers(salon_id, rows, mode=upload_mode)
     elif dataset == "services":
         result = serviceRepo.bulk_add_services(salon_id, rows)
+    elif dataset == "staff":
+        result = staffRepo.bulk_add_staff(salon_id, rows)
+    elif dataset in ("invoices", "bills"):
+        result = billRepo.bulk_add_bills(salon_id, rows)
     else:
         return jsonify({"success": False, "message": "Unknown dataset."}), 404
     mode_text = " (all previous customers replaced)" if (dataset == "customers" and upload_mode == "destructive") else ""
     message = f"Import complete{mode_text} — {result['added']} added, {result['skipped']} skipped."
     if result.get("categories_registered"):
         message += f" {result['categories_registered']} new service category(ies) registered."
-    if result["errors"]:
+    if result.get("errors"):
         message += " Issues: " + "; ".join(result["errors"][:3])
     return jsonify({"success": True, "message": message, **result})
 

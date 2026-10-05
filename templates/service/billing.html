@@ -383,10 +383,10 @@
             </div>
           </div>
 
-          <!-- GST (18%) -->
+          <!-- Tax Summary -->
           <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
             <span class="flex items-center gap-1">
-              <span>GST (18% : CGST 9% + SGST 9%)</span>
+              <span x-text="taxLabel"></span>
             </span>
             <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">₹<span x-text="taxAmount"></span></span>
           </div>
@@ -992,6 +992,9 @@
 
       <p class="text-[10px]">Date: <span x-text="printDate"></span></p>
       <p class="text-[10px]">Invoice: #<span x-text="printInvoiceId"></span></p>
+      <template x-if="taxSettings && taxSettings.tax_number">
+        <p class="text-[10px] font-mono">Tax / GSTIN: <span x-text="taxSettings.tax_number"></span></p>
+      </template>
     </div>
 
     {% if is_free %}
@@ -1032,7 +1035,10 @@
     <div class="py-2 text-[11px] space-y-0.5">
       <div class="flex justify-between"><span>Subtotal:</span><span>₹<span x-text="printSubtotal"></span></span></div>
       <div class="flex justify-between"><span>Discount:</span><span>₹<span x-text="printDiscount"></span></span></div>
-      <div class="flex justify-between"><span>GST (18%):</span><span>₹<span x-text="printTax"></span></span></div>
+      <div class="flex justify-between" x-show="taxSettings && taxSettings.enabled !== false && printTax > 0">
+        <span><span x-text="taxSettings && taxSettings.tax_name ? taxSettings.tax_name : 'Tax'"></span> (<span x-text="taxRate"></span>%):</span>
+        <span>₹<span x-text="printTax"></span></span>
+      </div>
       <div class="flex justify-between font-bold text-sm pt-1 border-t border-black">
         <span>TOTAL DUE:</span><span>₹<span x-text="printGrandTotal"></span></span>
       </div>
@@ -1793,6 +1799,7 @@
       paymentModes: ['UPI', 'Cash', 'Card'],
       paymentMethods: { upi: '', card_terminal: '', custom_methods: [] },
       customPaymentNote: '',
+      taxSettings: {{ tax_settings | tojson if tax_settings is defined and tax_settings else "{}" }},
 
 
       async init() {
@@ -1806,10 +1813,11 @@
 
         // Sync the POS catalog + category pills with the backend
         try {
-          const [svcRes, catRes, payRes] = await Promise.all([
+          const [svcRes, catRes, payRes, taxRes] = await Promise.all([
             fetch('/api/services'),
             fetch('/api/categories'),
-            fetch('/api/settings/payment-methods')
+            fetch('/api/settings/payment-methods'),
+            fetch('/api/settings/taxes')
           ]);
 
           if (svcRes.ok) {
@@ -1839,6 +1847,12 @@
             const custom = methods.custom_methods || [];
             this.paymentModes = ['UPI', 'Cash', 'Card', ...custom];
             this.availableSplitMethods = [...new Set(['UPI', 'Cash', 'Card', ...custom, 'Bank Transfer', 'Cheque', 'Gift Card'])];
+          }
+          if (taxRes && taxRes.ok) {
+            const taxData = await taxRes.json();
+            if (taxData && taxData.tax_settings) {
+              this.taxSettings = taxData.tax_settings;
+            }
           }
         } catch (e) {
           console.log("POS catalog sync failed — using cached fallback:", e);
@@ -2071,11 +2085,42 @@
         return Math.max(0, this.subtotal - this.discountAmount);
       },
 
+      get taxRate() {
+        if (!this.taxSettings || this.taxSettings.enabled === false) return 0;
+        return Number(this.taxSettings.tax_rate != null ? this.taxSettings.tax_rate : 18) || 0;
+      },
+
+      get taxLabel() {
+        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxRate === 0) {
+          return 'Tax (Exempt / 0%)';
+        }
+        const name = this.taxSettings.tax_name || 'GST';
+        const rate = this.taxRate;
+        const isIncl = this.taxSettings.tax_type === 'inclusive';
+        const suffix = isIncl ? ' (Incl.)' : '';
+        if (this.taxSettings.split_tax && name.toUpperCase().includes('GST')) {
+          const half = rate / 2;
+          const halfStr = Number.isInteger(half) ? half : half.toFixed(1);
+          return `${name} (${rate}% : CGST ${halfStr}% + SGST ${halfStr}%)${suffix}`;
+        }
+        return `${name} (${rate}%)${suffix}`;
+      },
+
       get taxAmount() {
-        return Math.round(this.taxableAmount * 0.18);
+        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxRate === 0) {
+          return 0;
+        }
+        if (this.taxSettings.tax_type === 'inclusive') {
+          const base = this.taxableAmount / (1 + (this.taxRate / 100));
+          return Math.round(this.taxableAmount - base);
+        }
+        return Math.round(this.taxableAmount * (this.taxRate / 100));
       },
 
       get grandTotal() {
+        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxSettings.tax_type === 'inclusive') {
+          return this.taxableAmount;
+        }
         return this.taxableAmount + this.taxAmount;
       },
 

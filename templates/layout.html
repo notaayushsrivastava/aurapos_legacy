@@ -411,7 +411,7 @@
             <span>Dashboard</span>
           </a>
 
-          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if has_permission('reports', 'read') or session.get('auth_level') == 'admin' %}
           {% if is_studio %}
           <a href="{{ url_for('reports_page') }}"
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
@@ -434,6 +434,7 @@
           {% endif %}
           {% endif %}
 
+          {% if has_permission('billing', 'read') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('billing') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/billing' %}
@@ -444,8 +445,9 @@
             <i data-lucide="receipt" class="w-4 h-4 transition-colors {% if request.path == '/billing' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>POS Billing</span>
           </a>
+          {% endif %}
 
-          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if has_permission('customers', 'read') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('customers_page') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/customers' %}
@@ -458,7 +460,7 @@
           </a>
           {% endif %}
 
-          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if has_permission('services', 'read') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('services') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/services' %}
@@ -471,6 +473,7 @@
           </a>
           {% endif %}
 
+          {% if has_permission('appointments', 'read') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('appointments') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/appointments' %}
@@ -481,8 +484,9 @@
             <i data-lucide="calendar-clock" class="w-4 h-4 transition-colors {% if request.path == '/appointments' %}text-violet-600 dark:text-neon-cyan{% else %}text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-300{% endif %}"></i>
             <span>Appointments</span>
           </a>
+          {% endif %}
 
-          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if has_permission('staff', 'read') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('staff_page') }}"
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/staff' %}
@@ -495,7 +499,7 @@
           </a>
           {% endif %}
 
-          {% if session.get('auth_level', 'admin') != 'cashier' %}
+          {% if has_permission('settings', 'read') or has_permission('accounts', 'read') or has_permission('roles', 'manage') or session.get('auth_level') == 'admin' %}
           <a href="{{ url_for('settings') }}" 
              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group
                {% if request.path == '/settings' %}
