@@ -46,6 +46,30 @@
     </div>
   </div>
 
+  <!-- Navigation Tabs: Analytics vs Invoices & Recoverables -->
+  <div data-anim="up" class="flex items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">
+    <button type="button" 
+            @click="activeTab = 'analytics'"
+            :class="activeTab === 'analytics' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-sm' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'"
+            class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer">
+      <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+      <span>Analytics &amp; Performance</span>
+    </button>
+    <button type="button" 
+            @click="activeTab = 'invoices'; if (invoices.length === 0) loadInvoices();"
+            :class="activeTab === 'invoices' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-sm' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'"
+            class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer">
+      <i data-lucide="receipt" class="w-4 h-4"></i>
+      <span>Invoices &amp; Recoverables</span>
+      <template x-if="totalDueBillsCount > 0">
+        <span class="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-bold" x-text="totalDueBillsCount"></span>
+      </template>
+    </button>
+  </div>
+
+  <!-- ================= TAB 1: ANALYTICS & PERFORMANCE ================= -->
+  <div x-show="activeTab === 'analytics'" class="space-y-6">
+
   <!-- Date Range Filter Toolbar -->
   <div data-anim="up" data-delay="50" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm p-4 sm:p-5 space-y-4">
     <!-- Preset Pills -->
@@ -626,10 +650,273 @@
       <div x-show="staffBoard.length === 0" class="col-span-full text-xs text-neutral-400 text-center py-6">
         No staff activity recorded in this timeframe.
       </div>
+  </div> <!-- Closes activeTab === 'analytics' -->
+
+  <!-- ================= TAB 2: INVOICES & RECOVERABLES EXPLORER ================= -->
+  <div x-show="activeTab === 'invoices'" class="space-y-6" x-cloak>
+    
+    <!-- Filter Toolbar -->
+    <div data-anim="up" class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm p-4 sm:p-5 space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        
+        <!-- Filter Pills: All, Paid, Partially Paid, Unpaid, Due -->
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mr-1 hidden sm:inline">Status:</span>
+          <template x-for="st in [
+            { key: 'all', label: 'All Invoices' },
+            { key: 'paid', label: 'Paid in Full' },
+            { key: 'partially_paid', label: 'Partially Paid' },
+            { key: 'unpaid', label: 'Unpaid / Credit' },
+            { key: 'due', label: 'Outstanding Dues' }
+          ]" :key="st.key">
+            <button type="button"
+                    @click="statusFilter = st.key; loadInvoices();"
+                    :class="statusFilter === st.key ? 'btn-brand text-white shadow-md shadow-orange-500/20' : 'bg-neutral-100 dark:bg-neutral-900/80 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'"
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    x-text="st.label"></button>
+          </template>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative flex items-center min-w-[260px]">
+          <div class="absolute left-3 text-neutral-400 pointer-events-none">
+            <i data-lucide="search" class="w-3.5 h-3.5"></i>
+          </div>
+          <input type="text" 
+                 x-model="invoiceSearchQuery" 
+                 @input.debounce.300ms="loadInvoices()"
+                 placeholder="Search Bill #, client name, phone..." 
+                 class="w-full pl-9 pr-8 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50">
+          <button x-show="invoiceSearchQuery" @click="invoiceSearchQuery = ''; loadInvoices();" class="absolute right-2.5 text-neutral-400 hover:text-neutral-600">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+      </div>
     </div>
+
+    <!-- Invoices Table -->
+    <div class="bg-white dark:bg-[#141210] rounded-2xl sm:rounded-3xl border border-neutral-200/80 dark:border-neutral-800/90 shadow-sm overflow-hidden">
+      <div class="p-4 sm:p-5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-neutral-900 dark:text-white">Customer Invoices &amp; Ledger</h3>
+          <p class="text-xs text-neutral-400">Track paid transactions, part payments, and outstanding balances.</p>
+        </div>
+        <button type="button" @click="loadInvoices()" class="px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs font-semibold flex items-center gap-1.5 hover:bg-neutral-200 transition-colors cursor-pointer">
+          <i data-lucide="refresh-cw" class="w-3 h-3" :class="loadingInvoices ? 'animate-spin' : ''"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-neutral-100 dark:border-neutral-800/80 bg-neutral-50/50 dark:bg-neutral-900/50 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+              <th class="py-3 px-4">Bill #</th>
+              <th class="py-3 px-4">Date &amp; Time</th>
+              <th class="py-3 px-4">Client</th>
+              <th class="py-3 px-4 text-right">Invoice Total</th>
+              <th class="py-3 px-4 text-right">Paid</th>
+              <th class="py-3 px-4 text-right">Due Balance</th>
+              <th class="py-3 px-4 text-center">Payment Status</th>
+              <th class="py-3 px-4">Tender</th>
+              <th class="py-3 px-4 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-medium">
+            <template x-if="loadingInvoices">
+              <tr>
+                <td colspan="9" class="py-8 text-center text-xs text-neutral-400">
+                  <i data-lucide="loader-2" class="w-5 h-5 mx-auto animate-spin mb-1 text-orange-500"></i>
+                  Loading invoices...
+                </td>
+              </tr>
+            </template>
+            <template x-if="!loadingInvoices && invoices.length === 0">
+              <tr>
+                <td colspan="9" class="py-8 text-center text-xs text-neutral-400">
+                  <i data-lucide="inbox" class="w-7 h-7 mx-auto mb-1 opacity-40"></i>
+                  No invoices found matching current filter or search.
+                </td>
+              </tr>
+            </template>
+            <template x-for="bill in invoices" :key="bill.id">
+              <tr class="hover:bg-neutral-50/80 dark:hover:bg-neutral-900/40 transition-colors">
+                <td class="py-3 px-4 font-mono-num font-bold text-neutral-900 dark:text-white" x-text="'#' + bill.id"></td>
+                <td class="py-3 px-4 text-neutral-500 font-mono-num text-[11px]" x-text="formatBillDate(bill.created_on)"></td>
+                <td class="py-3 px-4">
+                  <div class="font-bold text-neutral-900 dark:text-white" x-text="bill.client_name || 'Walk-in'"></div>
+                  <div class="text-[10px] text-neutral-400 font-mono-num" x-text="bill.client_phone || '—'"></div>
+                </td>
+                <td class="py-3 px-4 text-right font-mono-num font-bold text-neutral-900 dark:text-white">
+                  ₹<span x-text="bill.grand_total"></span>
+                </td>
+                <td class="py-3 px-4 text-right font-mono-num text-emerald-600 dark:text-emerald-400">
+                  ₹<span x-text="bill.amount_paid != null ? bill.amount_paid : bill.grand_total"></span>
+                </td>
+                <td class="py-3 px-4 text-right font-mono-num font-bold"
+                    :class="(Number(bill.due_amount) || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-neutral-400'">
+                  ₹<span x-text="bill.due_amount || 0"></span>
+                </td>
+                <td class="py-3 px-4 text-center">
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block"
+                        :class="getBillStatusBadgeClass(bill)">
+                    <span x-text="getBillStatusLabel(bill)"></span>
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-neutral-500 text-[11px] truncate max-w-[120px]" x-text="bill.payment_mode || 'UPI'"></td>
+                <td class="py-3 px-4 text-center">
+                  <button type="button" 
+                          @click="openInvoiceModal(bill)" 
+                          class="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-all cursor-pointer">
+                    <span x-text="(Number(bill.due_amount) || 0) > 0 ? 'Settle Due' : 'View Ledger'"></span>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
-</div>
+  <!-- ================= INVOICE DETAIL & SETTLEMENT MODAL ================= -->
+  <div x-show="showInvoiceModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+         @click.away="showInvoiceModal = false">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white" x-text="selectedInvoice ? 'Invoice #' + selectedInvoice.id : 'Invoice Details'"></h3>
+          <p class="text-xs text-neutral-400" x-text="selectedInvoice ? (selectedInvoice.client_name + ' · ' + (selectedInvoice.client_phone || 'Walk-in')) : ''"></p>
+        </div>
+        <button @click="showInvoiceModal = false" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Financial Snapshot -->
+      <template x-if="selectedInvoice">
+        <div class="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-center">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-neutral-400">Total</span>
+            <div class="text-sm font-extrabold font-mono-num text-neutral-900 dark:text-white mt-0.5">₹<span x-text="selectedInvoice.grand_total"></span></div>
+          </div>
+          <div>
+            <span class="text-[10px] uppercase font-bold text-neutral-400">Paid</span>
+            <div class="text-sm font-extrabold font-mono-num text-emerald-600 dark:text-emerald-400 mt-0.5">₹<span x-text="selectedInvoice.amount_paid != null ? selectedInvoice.amount_paid : selectedInvoice.grand_total"></span></div>
+          </div>
+          <div>
+            <span class="text-[10px] uppercase font-bold text-neutral-400">Due</span>
+            <div class="text-sm font-extrabold font-mono-num mt-0.5"
+                 :class="(Number(selectedInvoice.due_amount) || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-neutral-400'">
+              ₹<span x-text="selectedInvoice.due_amount || 0"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Line Items List -->
+      <template x-if="selectedInvoice && selectedInvoice.items && selectedInvoice.items.length > 0">
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1.5">Billed Services</h4>
+          <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+            <template x-for="item in selectedInvoice.items" :key="item.name">
+              <div class="flex items-center justify-between p-2 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-100 dark:border-neutral-800/80 text-xs">
+                <div>
+                  <span class="font-bold text-neutral-900 dark:text-white" x-text="item.name"></span>
+                  <span class="text-neutral-400 text-[10px]"> (x<span x-text="item.qty || 1"></span> · <span x-text="item.staff || 'Staff'"></span>)</span>
+                </div>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="(Number(item.price) || 0) * (Number(item.qty) || 1)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Payment Ledger / History -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1.5">Payment History</h4>
+        <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+          <template x-if="loadingPayments">
+            <p class="text-xs text-neutral-400 py-2 text-center">Loading payments...</p>
+          </template>
+          <template x-if="!loadingPayments && invoicePayments.length === 0">
+            <p class="text-xs text-neutral-400 py-2 text-center">No payment history recorded yet.</p>
+          </template>
+          <template x-for="p in invoicePayments" :key="p.id">
+            <div class="p-2 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between text-xs">
+              <div>
+                <span class="font-bold text-emerald-600 dark:text-emerald-400 font-mono-num">+₹<span x-text="p.amount"></span></span>
+                <span class="text-neutral-400 text-[10px] ml-1">via <span x-text="p.payment_mode"></span></span>
+                <span x-show="p.notes" class="text-[10px] text-neutral-500 block" x-text="p.notes"></span>
+              </div>
+              <span class="text-[10px] text-neutral-400 font-mono-num" x-text="formatBillDate(p.created_on)"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Settle Due Form (if bill has due amount > 0) -->
+      <template x-if="selectedInvoice && (Number(selectedInvoice.due_amount) || 0) > 0">
+        <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-amber-800 dark:text-amber-300">Record Due Settlement</span>
+            <span class="text-amber-700 dark:text-amber-400 text-[11px]">Due: <strong class="font-mono-num">₹<span x-text="selectedInvoice.due_amount"></span></strong></span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Payment Amount (₹)</label>
+              <input type="number" min="1" :max="selectedInvoice.due_amount"
+                     x-model.number="settleAmount"
+                     class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num font-bold text-neutral-900 dark:text-white">
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Payment Mode</label>
+              <select x-model="settleMode" class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-900 dark:text-white">
+                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="Card">Card</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cheque">Cheque</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Settlement Notes (Optional)</label>
+            <input type="text" x-model="settleNotes" placeholder="e.g. Paid via PhonePe / cash handoff"
+                   class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-900 dark:text-white">
+          </div>
+
+          <button type="button" 
+                  @click="recordInvoiceSettlement()"
+                  :disabled="processingSettle || !settleAmount || settleAmount <= 0"
+                  class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span x-text="processingSettle ? 'Recording Settlement…' : 'Record ₹' + settleAmount + ' Settlement'"></span>
+          </button>
+        </div>
+      </template>
+
+      <div class="flex justify-end pt-1">
+        <button type="button" @click="showInvoiceModal = false" class="px-4 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
 
 {% if not is_studio %}
 <!-- Studio-only gate: blurred page content behind an upgrade overlay -->
@@ -666,6 +953,7 @@
 <script>
   function reportsApp() {
     return {
+      activeTab: 'analytics',
       loading: {% if is_studio %}true{% else %}false{% endif %},
       fromDate: '',
       toDate: '',
@@ -682,6 +970,24 @@
       categorySplit: [],
       staffBoard: [],
       appointments: { total: 0, by_status: {} },
+
+      // Invoices & Recoverables state
+      invoices: [],
+      loadingInvoices: false,
+      statusFilter: 'all',
+      invoiceSearchQuery: '',
+      selectedInvoice: null,
+      showInvoiceModal: false,
+      invoicePayments: [],
+      loadingPayments: false,
+      settleAmount: 0,
+      settleMode: 'Cash',
+      settleNotes: '',
+      processingSettle: false,
+
+      get totalDueBillsCount() {
+        return (this.invoices || []).filter(b => (Number(b.due_amount) || 0) > 0).length;
+      },
 
       // Chart.js instance references
       chartInstances: {
@@ -710,6 +1016,7 @@
 
         {% if is_studio %}
         this.loadReport();
+        this.loadInvoices();
         {% endif %}
       },
 
@@ -1205,6 +1512,146 @@
             }
           }
         });
+      },
+
+      // Invoices & Recoverables methods
+      async loadInvoices() {
+        this.loadingInvoices = true;
+        try {
+          let url = '/api/bills?status=' + encodeURIComponent(this.statusFilter);
+          if (this.invoiceSearchQuery && this.invoiceSearchQuery.trim()) {
+            url += '&q=' + encodeURIComponent(this.invoiceSearchQuery.trim());
+          }
+          const res = await fetch(url);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Failed to load invoices');
+          this.invoices = data.bills || [];
+          this.$nextTick(() => {
+            if (window.lucide) lucide.createIcons();
+          });
+        } catch (e) {
+          console.error(e);
+          if (window.uiToast) window.uiToast('Could not load invoices: ' + (e.message || e), 'error');
+        } finally {
+          this.loadingInvoices = false;
+        }
+      },
+
+      formatBillDate(ts) {
+        if (!ts) return '—';
+        try {
+          const d = new Date(ts);
+          if (isNaN(d.getTime())) return ts;
+          return d.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }) + ', ' + d.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          });
+        } catch (_) {
+          return ts;
+        }
+      },
+
+      getBillStatusLabel(bill) {
+        if (!bill) return '—';
+        const st = String(bill.payment_status || 'PAID').toUpperCase();
+        if (st === 'PAID') return 'Paid';
+        if (st === 'PARTIALLY_PAID') return 'Partially Paid';
+        if (st === 'UNPAID') return 'Unpaid';
+        return bill.payment_status;
+      },
+
+      getBillStatusBadgeClass(bill) {
+        const st = String(bill ? bill.payment_status : 'PAID').toUpperCase();
+        if (st === 'PAID') {
+          return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+        }
+        if (st === 'PARTIALLY_PAID') {
+          return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+        }
+        return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20';
+      },
+
+      async openInvoiceModal(bill) {
+        this.selectedInvoice = bill;
+        this.settleAmount = Number(bill.due_amount) || 0;
+        this.settleMode = 'Cash';
+        this.settleNotes = '';
+        this.showInvoiceModal = true;
+        this.$nextTick(() => {
+          if (window.lucide) lucide.createIcons();
+        });
+        await this.loadInvoicePayments(bill.id);
+      },
+
+      async loadInvoicePayments(billId) {
+        if (!billId) return;
+        this.loadingPayments = true;
+        this.invoicePayments = [];
+        try {
+          const res = await fetch('/api/bills/' + billId + '/payments');
+          const data = await res.json();
+          this.invoicePayments = data.payments || [];
+        } catch (e) {
+          console.error(e);
+        } finally {
+          this.loadingPayments = false;
+        }
+      },
+
+      async recordInvoiceSettlement() {
+        if (!this.selectedInvoice) return;
+        const due = Number(this.selectedInvoice.due_amount) || 0;
+        const amt = Number(this.settleAmount) || 0;
+        if (amt <= 0) {
+          if (window.uiToast) window.uiToast('Please enter a valid settlement amount.', 'warning');
+          return;
+        }
+        if (amt > due) {
+          if (window.uiToast) window.uiToast('Settlement amount cannot exceed outstanding due of ₹' + due, 'warning');
+          return;
+        }
+
+        this.processingSettle = true;
+        try {
+          const res = await fetch('/api/bills/' + this.selectedInvoice.id + '/pay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: amt,
+              payment_mode: this.settleMode || 'Cash',
+              notes: this.settleNotes || ''
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Settlement failed');
+
+          if (window.uiToast) window.uiToast('Recorded ₹' + amt + ' settlement successfully!', 'success');
+          
+          if (data.bill) {
+            this.selectedInvoice.amount_paid = data.bill.amount_paid;
+            this.selectedInvoice.due_amount = data.bill.due_amount;
+            this.selectedInvoice.payment_status = data.bill.payment_status;
+          } else {
+            this.selectedInvoice.amount_paid = (Number(this.selectedInvoice.amount_paid) || 0) + amt;
+            this.selectedInvoice.due_amount = Math.max(0, due - amt);
+            this.selectedInvoice.payment_status = this.selectedInvoice.due_amount === 0 ? 'PAID' : 'PARTIALLY_PAID';
+          }
+          this.settleAmount = Number(this.selectedInvoice.due_amount) || 0;
+          this.settleNotes = '';
+
+          await this.loadInvoicePayments(this.selectedInvoice.id);
+          await this.loadInvoices();
+        } catch (e) {
+          console.error(e);
+          if (window.uiToast) window.uiToast(e.message || 'Error recording settlement', 'error');
+        } finally {
+          this.processingSettle = false;
+        }
       },
 
       printReport() {

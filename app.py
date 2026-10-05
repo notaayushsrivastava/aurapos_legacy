@@ -312,6 +312,11 @@ _METADATA_CACHE_TTL = 10.0
 
 
 def _cached_setting(key, default=None):
+    if app.config.get("TESTING"):
+        try:
+            return adminRepo.get_setting(key, default)
+        except Exception:
+            return default
     now = time.monotonic()
     hit = _SETTING_CACHE.get(key)
     if hit and now - hit[0] < _METADATA_CACHE_TTL:
@@ -1659,6 +1664,7 @@ def billing():
         account_id=session.get("account_id", 0),
         account_username=session.get("username", "Staff"),
         tax_settings=authRepo.get_tax_settings(salon_id),
+        printer_settings=authRepo.get_printer_settings(salon_id),
     )
 
 
@@ -1978,6 +1984,9 @@ def api_get_customer_analytics():
 @login_required
 @limiter.limit("60 per minute")
 def api_create_bill():
+    if not (has_permission("billing", "write") or session.get("auth_level") in ("admin", "manager", "cashier")):
+        return jsonify({"success": False, "message": "Permission denied: billing:write required."}), 403
+
     salon_id = session.get("id", 1)
     data = request.get_json() or {}
 
@@ -1986,6 +1995,17 @@ def api_create_bill():
         discount = max(0, int(float(data.get("discount", 0) or 0)))
         tax = max(0, int(float(data.get("tax", 0) or 0)))
         grand_total = max(0, int(float(data.get("grand_total", 0) or 0)))
+        raw_paid = data.get("amount_paid")
+        if raw_paid is not None and str(raw_paid).strip() != "":
+            amount_paid = max(0, min(grand_total, int(float(str(raw_paid)))))
+        else:
+            amount_paid = grand_total
+        due_amount = max(0, grand_total - amount_paid)
+        payment_status = "PAID" if due_amount == 0 else ("UNPAID" if amount_paid == 0 else "PARTIALLY_PAID")
+        tax_enabled = 1 if data.get("tax_enabled", True) else 0
+        tax_inclusive = 1 if data.get("tax_inclusive", False) else 0
+        tax_rate = float(data.get("tax_rate", 18.0) or 18.0)
+        tax_amount = tax
     except (ValueError, TypeError):
         return jsonify({"success": False, "message": "Invalid numeric figures in invoice."}), 400
 
@@ -2020,17 +2040,46 @@ def api_create_bill():
         tax=tax,
         grand_total=grand_total,
         payment_mode=payment_mode,
-        items_json=json.dumps(items)
+        items_json=json.dumps(items),
+        amount_paid=amount_paid,
+        due_amount=due_amount,
+        payment_status=payment_status,
+        tax_enabled=tax_enabled,
+        tax_inclusive=tax_inclusive,
+        tax_rate=tax_rate,
+        tax_amount=tax_amount
     )
 
-    # Record stylist sales for leaderboard
+    # Record stylist sales for leaderboard (supporting two-staff revenue splits)
     for item in items:
         if isinstance(item, dict):
-            staff_name = item.get("staff")
-            if staff_name:
+            splits = item.get("staff_split")
+            if isinstance(splits, list) and len(splits) > 0:
+                for sp in splits:
+                    if isinstance(sp, dict):
+                        s_name = sp.get("name") or sp.get("staff")
+                        s_amt = int(float(sp.get("amount", 0) or 0))
+                        if s_name and s_amt > 0:
+                            staffRepo.record_sale(s_name, salon_id, s_amt)
+            elif isinstance(splits, dict) and splits.get("enabled"):
+                st1 = splits.get("stylist1")
+                st2 = splits.get("stylist2")
+                r1 = float(splits.get("ratio1", 50) or 50)
                 price = int(float(item.get("price", 0) or 0))
                 qty = int(float(item.get("qty", 1) or 1))
-                staffRepo.record_sale(staff_name, salon_id, price * qty)
+                line_total = price * qty
+                amt1 = int(round(line_total * r1 / 100.0))
+                amt2 = max(0, line_total - amt1)
+                if st1 and amt1 > 0:
+                    staffRepo.record_sale(st1, salon_id, amt1)
+                if st2 and amt2 > 0:
+                    staffRepo.record_sale(st2, salon_id, amt2)
+            else:
+                staff_name = item.get("staff")
+                if staff_name:
+                    price = int(float(item.get("price", 0) or 0))
+                    qty = int(float(item.get("qty", 1) or 1))
+                    staffRepo.record_sale(staff_name, salon_id, price * qty)
 
     # Auto-clean cloud terminal draft if completed from a terminal
     terminal_id = data.get("terminal_id")
@@ -2042,16 +2091,120 @@ def api_create_bill():
         except Exception:
             pass
 
-    return jsonify({"success": True, "bill_id": bill_id})
+    return jsonify({
+        "success": True,
+        "bill_id": bill_id,
+        "grand_total": grand_total,
+        "amount_paid": amount_paid,
+        "due_amount": due_amount,
+        "payment_status": payment_status
+    })
 
 
 @app.get('/api/bills')
 @login_required
 def api_get_bills():
     salon_id = session.get("id", 1)
-    limit = min(max(1, request.args.get("limit", 10, type=int)), 100)
+    status = request.args.get("status")
+    q = request.args.get("q")
+    limit = min(max(1, request.args.get("limit", 20, type=int)), 100)
     offset = max(0, request.args.get("offset", 0, type=int))
-    return jsonify(billRepo.get_recent_bills(salon_id, limit=limit, offset=offset))
+    return jsonify(billRepo.get_bills_filtered(salon_id, status=status, q=q, limit=limit, offset=offset))
+
+
+@app.post('/api/bills/<bill_id>/pay')
+@login_required
+def api_settle_bill_due(bill_id):
+    if not (has_permission("billing", "write") or session.get("auth_level") in ("admin", "manager", "cashier")):
+        return jsonify({"success": False, "message": "Permission denied: billing:write required."}), 403
+
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    try:
+        amount = int(float(data.get("amount", 0) or 0))
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "Invalid settlement amount."}), 400
+
+    if amount <= 0:
+        return jsonify({"success": False, "message": "Settlement amount must be greater than zero."}), 400
+
+    payment_mode = str(data.get("payment_mode", "Cash") or "Cash").strip()
+    notes = str(data.get("notes", "Due settlement") or "Due settlement").strip()
+    received_by = session.get("username", "Staff")
+
+    res = billRepo.record_payment(
+        bill_id=bill_id,
+        account_id=salon_id,
+        amount=amount,
+        payment_mode=payment_mode,
+        received_by=received_by,
+        notes=notes
+    )
+    if not res.get("success"):
+        return jsonify(res), 400
+    return jsonify(res)
+
+
+@app.get('/api/bills/<bill_id>/payments')
+@login_required
+def api_get_bill_payments(bill_id):
+    salon_id = session.get("id", 1)
+    payments = billRepo.get_bill_payments(bill_id, salon_id)
+    return jsonify({"success": True, "bill_id": bill_id, "payments": payments})
+
+
+@app.get('/api/customers/<phone>/dues')
+@login_required
+def api_get_customer_dues(phone):
+    salon_id = session.get("id", 1)
+    dues = billRepo.get_customer_dues(salon_id, phone)
+    total_due = sum(int(d.get("due_amount", 0) or 0) for d in dues)
+    return jsonify({"success": True, "phone": phone, "dues": dues, "total_due": total_due})
+
+
+@app.route('/api/settings/printer', methods=['GET', 'POST', 'PUT', 'PATCH'])
+@login_required
+def api_settings_printer():
+    salon_id = session.get("id", 1)
+    if request.method == 'GET':
+        return jsonify({"success": True, "printer_settings": authRepo.get_printer_settings(salon_id)})
+    
+    if not (has_permission("settings", "write") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: settings:write required."}), 403
+
+    data = request.get_json() or {}
+    clean_settings = {
+        "paper_width": str(data.get("paper_width", "3inch")).strip().lower(),
+        "auto_cut": bool(data.get("auto_cut", True)),
+        "header_text": str(data.get("header_text", "") or "").strip(),
+        "footer_text": str(data.get("footer_text", "") or "").strip(),
+    }
+    if clean_settings["paper_width"] not in ("2inch", "3inch", "4inch"):
+        clean_settings["paper_width"] = "3inch"
+
+    authRepo.update_printer_settings(salon_id, clean_settings)
+    return jsonify({"success": True, "message": "Printer settings saved.", "printer_settings": clean_settings})
+
+
+@app.route('/api/settings/whatsapp', methods=['GET', 'POST', 'PUT', 'PATCH'])
+@login_required
+def api_settings_whatsapp():
+    salon_id = session.get("id", 1)
+    if request.method == 'GET':
+        return jsonify({"success": True, "whatsapp_settings": authRepo.get_whatsapp_settings(salon_id)})
+    
+    if not (has_permission("settings", "write") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: settings:write required."}), 403
+
+    data = request.get_json() or {}
+    clean_settings = {
+        "enabled": bool(data.get("enabled", True)),
+        "provider": str(data.get("provider", "mock")).strip().lower(),
+        "sender_phone": str(data.get("sender_phone", "") or "").strip(),
+        "template_id": str(data.get("template_id", "booking_confirmation") or "booking_confirmation").strip(),
+    }
+    authRepo.update_whatsapp_settings(salon_id, clean_settings)
+    return jsonify({"success": True, "message": "WhatsApp notification settings saved.", "whatsapp_settings": clean_settings})
 
 
 # ================= POS TERMINAL MANAGEMENT & MULTI-TERMINAL APIS =================
@@ -2401,6 +2554,16 @@ def api_public_booking():
         status="Confirmed",
         notes=data.get("notes", "")
     )
+
+    # Trigger WhatsApp confirmation notice abstraction
+    try:
+        from whatsapp import send_booking_confirmation
+        salon_obj = authRepo.get_salon(salon_id)
+        salon_data = asdict(salon_obj) if salon_obj else {}
+        send_booking_confirmation(data, salon_data)
+    except Exception as exc:
+        logger.warning(f"WhatsApp confirmation trigger failed: {exc}")
+
     return jsonify({"success": True, "booking_id": f"BK-{new_id:04d}"})
 
 
@@ -2450,6 +2613,8 @@ def settings():
         can_manage_roles=has_permission("roles", "manage") or session.get("auth_level") == "admin",
         can_manage_accounts=has_permission("accounts", "write") or session.get("auth_level") == "admin",
         tax_settings=authRepo.get_tax_settings(salon_id),
+        printer_settings=authRepo.get_printer_settings(salon_id),
+        whatsapp_settings=authRepo.get_whatsapp_settings(salon_id),
     )
 
 

@@ -94,55 +94,114 @@
           <p class="text-xs text-neutral-500 dark:text-neutral-400">Select one or more services you would like to book.</p>
         </div>
 
+        <!-- Real-time Service Search -->
+        <div class="relative flex items-center">
+          <div class="absolute left-3.5 text-neutral-400 pointer-events-none">
+            <i data-lucide="search" class="w-4 h-4"></i>
+          </div>
+          <input type="text"
+                 x-model="searchQuery"
+                 placeholder="Search services by name, category, or description..."
+                 class="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/60 dark:focus:ring-neon-cyan/50">
+          <button type="button" 
+                  x-show="searchQuery" 
+                  @click="searchQuery = ''" 
+                  class="absolute right-3 text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
         <!-- Category Pills -->
         <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
           <template x-for="cat in categories" :key="cat">
             <button @click="selectedCategory = cat"
-                    :class="selectedCategory === cat ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400'"
-                    class="px-3.5 py-1.5 rounded-lg whitespace-nowrap transition-colors"
+                    :class="selectedCategory === cat ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-xs' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'"
+                    class="px-3.5 py-1.5 rounded-xl whitespace-nowrap transition-colors cursor-pointer"
                     x-text="cat">
             </button>
           </template>
         </div>
 
-        <!-- Services List -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
-          <template x-for="s in filteredServices" :key="s.id">
-            <div @click="toggleService(s)" 
-                 :class="isServiceSelected(s.id) ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#181512]'"
-                 class="p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between hover:border-violet-400">
-              
-              <div>
-                <div class="flex justify-between items-start">
-                  <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400" x-text="s.category"></span>
-                  <span class="text-[11px] text-neutral-400 font-mono-num" x-text="s.duration + ' mins'"></span>
+        <!-- Services List & Empty State -->
+        <div class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+            <template x-for="s in filteredServices" :key="s.id">
+              <div @click="toggleService(s)" 
+                   :class="isServiceSelected(s.id) ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-950/20 ring-2 ring-violet-500/20' : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#181512]'"
+                   class="p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between hover:border-violet-400">
+                
+                <div>
+                  <div class="flex justify-between items-start">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400" x-text="s.category"></span>
+                    <span class="text-[11px] text-neutral-400 font-mono-num" x-text="s.duration + ' mins'"></span>
+                  </div>
+                  <h4 class="text-sm font-bold text-neutral-900 dark:text-white mt-1" x-text="s.name"></h4>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2" x-text="s.desc"></p>
                 </div>
-                <h4 class="text-sm font-bold text-neutral-900 dark:text-white mt-1" x-text="s.name"></h4>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-1" x-text="s.desc"></p>
-              </div>
 
-              <div class="mt-3 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
-                <span class="text-sm font-extrabold font-mono-num text-neutral-900 dark:text-white">₹<span x-text="s.price"></span></span>
-                <span class="text-xs font-bold" :class="isServiceSelected(s.id) ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'" x-text="isServiceSelected(s.id) ? '✓ Selected' : '+ Select'"></span>
-              </div>
+                <div class="mt-3 pt-2 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+                  <span class="text-sm font-extrabold font-mono-num text-neutral-900 dark:text-white">₹<span x-text="s.price"></span></span>
+                  <span class="text-xs font-bold" :class="isServiceSelected(s.id) ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'" x-text="isServiceSelected(s.id) ? '✓ Selected' : '+ Select'"></span>
+                </div>
 
-            </div>
-          </template>
+              </div>
+            </template>
+          </div>
+
+          <!-- Empty Search State -->
+          <div x-show="filteredServices.length === 0" class="p-8 text-center rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800 space-y-2">
+            <i data-lucide="search-x" class="w-8 h-8 mx-auto text-neutral-400"></i>
+            <p class="text-xs font-bold text-neutral-800 dark:text-neutral-200">No services match '<span x-text="searchQuery"></span>'</p>
+            <p class="text-[11px] text-neutral-400">Try searching for haircut, facial, massage or clear search query.</p>
+            <button type="button" @click="searchQuery = ''; selectedCategory = 'All';" class="mt-2 px-3.5 py-1.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 text-xs font-semibold hover:bg-neutral-300">
+              Clear Filter
+            </button>
+          </div>
+        </div>
+
+        <!-- Selected Services Summary Card (Sticky/Prominent) -->
+        <div x-show="selectedServices.length > 0" class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/70 border border-violet-500/30 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-neon-cyan flex items-center gap-1.5">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+              <span>Selected Services (<span x-text="selectedServices.length"></span>)</span>
+            </span>
+            <span class="text-[11px] text-neutral-400 font-mono-num" x-text="totalDuration + ' mins total duration'"></span>
+          </div>
+
+          <!-- Selected service pills with remove (x) button -->
+          <div class="flex flex-wrap gap-2">
+            <template x-for="item in selectedServices" :key="item.id">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 text-xs font-semibold text-neutral-800 dark:text-neutral-200 shadow-xs">
+                <span x-text="item.name"></span>
+                <span class="text-neutral-400 font-mono-num text-[11px]">₹<span x-text="item.price"></span></span>
+                <button type="button" @click.stop="toggleService(item)" class="text-neutral-400 hover:text-rose-500 transition-colors ml-0.5">
+                  <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <!-- Mandatory Footnote -->
+        <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+          <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5 text-amber-500"></i>
+          <span>Note: Final price and slot duration are subject to re-confirmation upon arrival or confirmation call.</span>
         </div>
 
         <!-- Next Step Button -->
         <div class="pt-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
           <div>
-            <span class="text-xs text-neutral-400">Selected Services:</span>
-            <div class="text-sm font-bold text-neutral-900 dark:text-white">
-              <span x-text="selectedServices.length"></span> items (₹<span x-text="totalPrice"></span>)
+            <span class="text-xs text-neutral-400">Total Estimate:</span>
+            <div class="text-base font-black font-mono-num text-neutral-900 dark:text-white">
+              ₹<span x-text="totalPrice"></span> <span class="text-xs font-normal text-neutral-400 font-sans">· <span x-text="selectedServices.length"></span> items</span>
             </div>
           </div>
 
           <button @click="nextStep()" 
                   :disabled="selectedServices.length === 0"
-                  class="px-6 py-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center gap-1.5">
-            <span>Continue to Stylist &amp; Time</span>
+                  class="px-6 py-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-orange-500/20">
+            <span x-text="'Continue with ' + selectedServices.length + ' service' + (selectedServices.length === 1 ? '' : 's')"></span>
             <i data-lucide="arrow-right" class="w-4 h-4"></i>
           </button>
         </div>
@@ -261,6 +320,12 @@
             </div>
           </div>
 
+          <!-- Mandatory Footnote -->
+          <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5 text-amber-500"></i>
+            <span>Note: Final price and slot duration are subject to re-confirmation upon arrival or confirmation call.</span>
+          </div>
+
           <!-- Submit Buttons -->
           <div class="pt-3 flex justify-between">
             <button type="button" @click="step = 2" class="px-5 py-2.5 rounded-xl border text-xs font-semibold">
@@ -314,6 +379,12 @@
         A confirmation message has been queued for WhatsApp. Pay upon arrival at the salon.
       </p>
 
+      <!-- Mandatory Footnote -->
+      <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-800 dark:text-amber-300 flex items-center gap-2 text-left">
+        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 text-amber-500"></i>
+        <span>Note: Final price and slot duration are subject to re-confirmation upon arrival or confirmation call.</span>
+      </div>
+
       <button @click="resetFlow()" class="w-full py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 text-xs font-bold">
         Done / Book Another
       </button>
@@ -353,6 +424,7 @@
     return {
       salonId: salonId || 1,
       step: 1,
+      searchQuery: '',
       selectedCategory: 'All',
       selectedStylist: 'Any Available Stylist',
       bookingDate: new Date().toISOString().split('T')[0],
@@ -412,7 +484,15 @@
       selectedServices: parsedServices.length ? [parsedServices[0]] : [],
 
       get filteredServices() {
-        return this.services.filter(s => this.selectedCategory === 'All' || s.category === this.selectedCategory);
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.services.filter(s => {
+          const matchCat = this.selectedCategory === 'All' || s.category === this.selectedCategory;
+          if (!matchCat) return false;
+          if (!q) return true;
+          return (s.name && s.name.toLowerCase().includes(q)) ||
+                 (s.category && s.category.toLowerCase().includes(q)) ||
+                 (s.desc && s.desc.toLowerCase().includes(q));
+        });
       },
 
       isServiceSelected(id) {
@@ -426,22 +506,28 @@
         } else {
           this.selectedServices.push(service);
         }
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
 
       get totalPrice() {
-        return this.selectedServices.reduce((acc, s) => acc + s.price, 0);
+        return this.selectedServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+      },
+
+      get totalDuration() {
+        return this.selectedServices.reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
       },
 
       nextStep() {
         if (this.selectedServices.length > 0) {
           this.step = 2;
+          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
         }
       },
 
       async confirmBooking() {
         try {
           const serviceNames = this.selectedServices.map(s => s.name).join(' + ');
-          const totalDur = this.selectedServices.reduce((acc, s) => acc + s.duration, 0);
+          const totalDur = this.totalDuration;
           const res = await fetch('/api/public/booking', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -467,12 +553,15 @@
           console.error("Booking error:", e);
         }
         this.showSuccessModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
 
       resetFlow() {
         this.showSuccessModal = false;
         this.step = 1;
+        this.searchQuery = '';
         this.client = { name: '', phone: '', email: '', notes: '' };
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       }
     };
   }

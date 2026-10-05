@@ -3,7 +3,7 @@ import json
 import io
 from datetime import datetime
 from uuid import uuid4
-from app import app, authRepo, billRepo, staffRepo
+from app import app, authRepo, billRepo, staffRepo, reportRepo
 
 class TestAllFeatures(unittest.TestCase):
     def setUp(self):
@@ -238,6 +238,7 @@ class TestAllFeatures(unittest.TestCase):
         b_data = b_res.get_json()
         self.assertTrue(b_data['success'])
     def test_dynamic_rbac_system(self):
+        authRepo.update_salon_plan(1, "studio", "yearly", int(datetime.now().timestamp()) + 86400 * 365)
         # 1. Fetch system permissions
         with self.client.session_transaction() as sess:
             sess['id'] = 1
@@ -263,8 +264,11 @@ class TestAllFeatures(unittest.TestCase):
         self.assertIn("Billing Desk", role_names)
 
         # 3. Create a custom role
+        role_tag = uuid4().hex[:6]
+        role_name_1 = f"Shift Lead {role_tag}"
+        role_name_2 = f"Senior Lead {role_tag}"
         custom_role_payload = {
-            "role_name": "Weekend Shift Lead",
+            "role_name": role_name_1,
             "description": "Can process POS bills and manage appointments, but cannot edit inventory or view financial reports",
             "permissions": ["billing:read", "billing:write", "billing:discount", "appointments:read", "appointments:write"]
         }
@@ -280,7 +284,7 @@ class TestAllFeatures(unittest.TestCase):
 
         # 4. Update the custom role
         update_payload = {
-            "role_name": "Weekend Senior Lead",
+            "role_name": role_name_2,
             "description": "Updated shift lead description",
             "permissions": ["billing:read", "billing:write", "billing:discount", "appointments:read", "appointments:write", "customers:read"]
         }
@@ -305,8 +309,9 @@ class TestAllFeatures(unittest.TestCase):
         self.assertIn("System-critical", res.get_json()['message'])
 
         # 7. Add account with the custom role
+        unique_email = f"shiftlead_{uuid4().hex[:6]}@aurasalon.com"
         acc_payload = {
-            "email": "shiftlead@aurasalon.com",
+            "email": unique_email,
             "password": "Password123!",
             "role_id": created_role_id
         }
@@ -318,9 +323,9 @@ class TestAllFeatures(unittest.TestCase):
         res = self.client.get('/api/settings/accounts')
         self.assertEqual(res.status_code, 200)
         accs = res.get_json()['accounts']
-        lead_acc = next(a for a in accs if a['username'] == 'shiftlead@aurasalon.com')
+        lead_acc = next(a for a in accs if a['username'] == unique_email)
         self.assertEqual(lead_acc['role_id'], created_role_id)
-        self.assertEqual(lead_acc['role_name'], "Weekend Senior Lead")
+        self.assertEqual(lead_acc['role_name'], role_name_2)
 
         # 8. Deletion with active members check (Reassignment requirement)
         del_res = self.client.delete(f'/api/settings/roles/{created_role_id}')
@@ -335,7 +340,7 @@ class TestAllFeatures(unittest.TestCase):
 
         # Verify lead account was reassigned
         res = self.client.get('/api/settings/accounts')
-        lead_acc_after = next(a for a in res.get_json()['accounts'] if a['username'] == 'shiftlead@aurasalon.com')
+        lead_acc_after = next(a for a in res.get_json()['accounts'] if a['username'] == unique_email)
         self.assertEqual(lead_acc_after['role_id'], billing_desk_role['id'])
 
         # Clean up created account
@@ -492,12 +497,229 @@ class TestAllFeatures(unittest.TestCase):
         result_dup = res.get_json()
         self.assertEqual(result_dup['added'], 0)
         self.assertEqual(result_dup['skipped'], 2)
-        self.assertEqual(result_dup['added'], 0)
-        self.assertEqual(result_dup['skipped'], 2)
+
+    def test_billing_editable_price_and_inclusive_tax(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # Test line item with custom edited price & tax inclusive calculation
+        # Subtotal: 1000, Discount: 0, Tax Inclusive 18% -> grand_total MUST be 1000
+        # Taxable amount = 1000 / 1.18 = 847.46, Tax = 152.54
+        payload = {
+            'client_name': 'Aarav Mehta',
+            'client_phone': '9811122233',
+            'subtotal': 1000,
+            'discount': 0,
+            'tax': 153,
+            'grand_total': 1000,  # Grand total does not increase when tax is inclusive
+            'tax_enabled': True,
+            'tax_inclusive': True,
+            'tax_rate': 18.0,
+            'tax_amount': 153,
+            'amount_paid': 1000,
+            'payment_mode': 'UPI',
+            'items': [
+                {
+                    'name': 'Custom Styled Haircut',
+                    'price': 1000,
+                    'catalog_price': 1200,  # Edited down from 1200
+                    'qty': 1,
+                    'staff': 'Alex Rivera'
+                }
+            ]
+        }
+        res = self.client.post('/api/bills', json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['grand_total'], 1000)
+        self.assertEqual(data.get('payment_status'), 'PAID')
+
+    def test_part_payments_and_due_recoverable_flow(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        test_phone = f"99{str(uuid4().int)[:8]}"
+
+        # 1. Create a bill with part payment: Grand total 3000, Paid 1000, Due 2000
+        bill_payload = {
+            'client_name': 'Meera Kapoor',
+            'client_phone': test_phone,
+            'subtotal': 3000,
+            'discount': 0,
+            'tax': 0,
+            'grand_total': 3000,
+            'amount_paid': 1000,
+            'payment_mode': 'Cash',
+            'items': [
+                {'name': 'Balayage Color', 'price': 3000, 'qty': 1, 'staff': 'Priya Nair'}
+            ]
+        }
+        res = self.client.post('/api/bills', json=bill_payload)
+        self.assertEqual(res.status_code, 200)
+        created = res.get_json()
+        bill_id = created['bill_id']
+        self.assertEqual(created['due_amount'], 2000)
+        self.assertEqual(created['payment_status'], 'PARTIALLY_PAID')
+
+        # 2. Check customer outstanding dues API
+        res_dues = self.client.get(f'/api/customers/{test_phone}/dues')
+        self.assertEqual(res_dues.status_code, 200)
+        dues_data = res_dues.get_json()
+        self.assertEqual(dues_data['total_due'], 2000)
+        self.assertTrue(any(d['id'] == bill_id for d in dues_data['dues']))
+
+        # 3. Check bill payment history
+        res_history = self.client.get(f'/api/bills/{bill_id}/payments')
+        self.assertEqual(res_history.status_code, 200)
+        payments_data = res_history.get_json()
+        self.assertEqual(len(payments_data['payments']), 1)
+        self.assertEqual(payments_data['payments'][0]['amount'], 1000)
+
+        # 4. Settle another part payment of ₹1500
+        pay_res = self.client.post(f'/api/bills/{bill_id}/pay', json={
+            'amount': 1500,
+            'payment_mode': 'UPI',
+            'notes': 'Online settlement'
+        })
+        self.assertEqual(pay_res.status_code, 200)
+        pay_data = pay_res.get_json()
+        self.assertTrue(pay_data['success'])
+        self.assertEqual(pay_data['bill']['amount_paid'], 2500)
+        self.assertEqual(pay_data['bill']['due_amount'], 500)
+        self.assertEqual(pay_data['bill']['payment_status'], 'PARTIALLY_PAID')
+
+        # 5. Settle the remaining ₹500 to fully clear the bill
+        pay_final = self.client.post(f'/api/bills/{bill_id}/pay', json={
+            'amount': 500,
+            'payment_mode': 'Cash',
+            'notes': 'Full clearance'
+        })
+        self.assertEqual(pay_final.status_code, 200)
+        final_data = pay_final.get_json()
+        self.assertEqual(final_data['bill']['amount_paid'], 3000)
+        self.assertEqual(final_data['bill']['due_amount'], 0)
+        self.assertEqual(final_data['bill']['payment_status'], 'PAID')
+
+        # 6. Verify customer dues are now 0
+        res_dues_after = self.client.get(f'/api/customers/{test_phone}/dues')
+        self.assertEqual(res_dues_after.get_json()['total_due'], 0)
+
+    def test_staff_revenue_split_attribution(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # Bill with 2 stylists sharing attribution on a line item
+        split_bill = {
+            'client_name': 'Kavita Singh',
+            'client_phone': '9822233344',
+            'subtotal': 2000,
+            'discount': 0,
+            'tax': 0,
+            'grand_total': 2000,
+            'amount_paid': 2000,
+            'payment_mode': 'Card',
+            'items': [
+                {
+                    'name': 'Keratin Therapy',
+                    'price': 2000,
+                    'qty': 1,
+                    'staff': 'Alex Rivera',
+                    'staff_split': {
+                        'enabled': True,
+                        'stylist1': 'Alex Rivera',
+                        'ratio1': 60,
+                        'stylist2': 'Priya Nair',
+                        'ratio2': 40
+                    }
+                }
+            ]
+        }
+        res = self.client.post('/api/bills', json=split_bill)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+
+        # Leaderboard should reflect both stylists receiving attribution
+        now_ts = int(datetime.now().timestamp())
+        leaderboard = reportRepo.staff_leaderboard(1, 0, now_ts + 3600)
+        stylist_names = [st['name'] for st in leaderboard]
+        self.assertIn('Alex Rivera', stylist_names)
+        self.assertIn('Priya Nair', stylist_names)
+
+    def test_printer_and_whatsapp_settings_api(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # 1. Printer settings
+        printer_update = {
+            'paper_width': '2inch',
+            'auto_cut': True,
+            'header_text': 'Welcome to Aura',
+            'footer_text': 'Visit again!'
+        }
+        p_res = self.client.post('/api/settings/printer', json=printer_update)
+        self.assertEqual(p_res.status_code, 200)
+        p_data = p_res.get_json()
+        self.assertTrue(p_data['success'])
+        self.assertEqual(p_data['printer_settings']['paper_width'], '2inch')
+
+        # Read back printer settings
+        p_get = self.client.get('/api/settings/printer')
+        self.assertEqual(p_get.status_code, 200)
+        self.assertEqual(p_get.get_json()['printer_settings']['paper_width'], '2inch')
+
+        # 2. WhatsApp settings
+        whatsapp_update = {
+            'enabled': True,
+            'provider': 'mock',
+            'sender_phone': '+91 9988776655',
+            'template_id': 'booking_confirmation'
+        }
+        w_res = self.client.post('/api/settings/whatsapp', json=whatsapp_update)
+        self.assertEqual(w_res.status_code, 200)
+        w_data = w_res.get_json()
+        self.assertTrue(w_data['success'])
+        self.assertEqual(w_data['whatsapp_settings']['sender_phone'], '+91 9988776655')
+
+        # Read back WhatsApp settings
+        w_get = self.client.get('/api/settings/whatsapp')
+        self.assertEqual(w_get.status_code, 200)
+        self.assertEqual(w_get.get_json()['whatsapp_settings']['sender_phone'], '+91 9988776655')
+
+    def test_public_booking_with_whatsapp_confirmation(self):
+        # Public booking endpoint sends booking and triggers WhatsApp confirmation dispatcher
+        booking_payload = {
+            'salon_id': 1,
+            'name': 'Tanvi Sharma',
+            'phone': '9876501234',
+            'email': 'tanvi@example.com',
+            'service': 'Express Blow Dry + Head Massage',
+            'slot': '11:00 AM',
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'stylist': 'Alex Rivera',
+            'price': 1500,
+            'duration': 60,
+            'notes': 'Allergic to strong fragrances'
+        }
+        res = self.client.post('/api/public/booking', json=booking_payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get('success'))
+        self.assertIn('booking_id', data)
 
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

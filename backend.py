@@ -381,17 +381,55 @@ def ensure_schema_upgrades():
     if accounts_columns and "role_id" not in accounts_columns:
         cur.execute("ALTER TABLE accounts ADD COLUMN role_id INTEGER")
 
-    # Add default_role_id and tax_settings columns to salon_settings if they don't exist
+    # Add default_role_id, tax_settings, printer_settings, whatsapp_settings to salon_settings if they don't exist
     settings_cols = {r["name"] for r in cur.execute("PRAGMA table_info(salon_settings)").fetchall()}
     if settings_cols and "default_role_id" not in settings_cols:
         cur.execute("ALTER TABLE salon_settings ADD COLUMN default_role_id INTEGER")
     if settings_cols and "tax_settings" not in settings_cols:
         cur.execute("ALTER TABLE salon_settings ADD COLUMN tax_settings TEXT DEFAULT '{}'")
+    if settings_cols and "printer_settings" not in settings_cols:
+        cur.execute("ALTER TABLE salon_settings ADD COLUMN printer_settings TEXT DEFAULT '{}'")
+    if settings_cols and "whatsapp_settings" not in settings_cols:
+        cur.execute("ALTER TABLE salon_settings ADD COLUMN whatsapp_settings TEXT DEFAULT '{}'")
+
+    # Add payment tracking and per-bill tax configuration to bills if they don't exist
+    bills_cols = {r["name"] for r in cur.execute("PRAGMA table_info(bills)").fetchall()}
+    if bills_cols:
+        if "amount_paid" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN amount_paid INTEGER DEFAULT 0")
+        if "due_amount" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN due_amount INTEGER DEFAULT 0")
+        if "payment_status" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN payment_status TEXT DEFAULT 'PAID'")
+        if "tax_enabled" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN tax_enabled INTEGER DEFAULT 1")
+        if "tax_inclusive" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN tax_inclusive INTEGER DEFAULT 0")
+        if "tax_rate" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN tax_rate REAL DEFAULT 18.0")
+        if "tax_amount" not in bills_cols:
+            cur.execute("ALTER TABLE bills ADD COLUMN tax_amount INTEGER DEFAULT 0")
+
+    # Create bill_payments table for payment history and recoverable settlements
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bill_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bill_id TEXT NOT NULL,
+            account_id INTEGER NOT NULL,
+            amount INTEGER NOT NULL,
+            payment_mode TEXT DEFAULT 'Cash',
+            received_by TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at INTEGER NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_payments_bill ON bill_payments(bill_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_payments_account ON bill_payments(account_id)")
 
     # Automatically sync PostgreSQL auto-increment sequences to max(id) to avoid
     # unique constraint violations if rows were seeded or imported with explicit IDs.
     if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
-        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings", "roles", "role_permissions"]
+        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings", "roles", "role_permissions", "bill_payments"]
         for tbl in sync_tables:
             try:
                 cur.execute(f"SELECT pg_get_serial_sequence('{tbl}', 'id') AS seq")
@@ -762,6 +800,78 @@ class AuthorizationRepository:
             cur.execute("UPDATE salon_settings SET tax_settings = ?, updated_at = ? WHERE salon_id = ?", (settings_json, now, salon_id))
         else:
             cur.execute("INSERT INTO salon_settings (salon_id, tax_settings, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, settings_json, now, now))
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_printer_settings(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        defaults = {
+            "paper_width": "3inch",  # '2inch' (58mm), '3inch' (80mm), '4inch' (104mm)
+            "auto_cut": True,
+            "header_text": "",
+            "footer_text": "Thank you for visiting! Have a glowing day.",
+        }
+        try:
+            row = cur.execute("SELECT printer_settings FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+            if row and row["printer_settings"]:
+                val = row["printer_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception:
+            pass
+        finally:
+            conn.close()
+        return defaults
+
+    def update_printer_settings(self, salon_id, settings):
+        conn = get_db()
+        cur = conn.cursor()
+        settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET printer_settings = ?, updated_at = ? WHERE salon_id = ?", (settings_json, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, printer_settings, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, settings_json, now, now))
+        conn.commit()
+        conn.close()
+        return True
+
+    def get_whatsapp_settings(self, salon_id):
+        conn = get_db()
+        cur = conn.cursor()
+        defaults = {
+            "enabled": True,
+            "provider": "mock",
+            "sender_phone": "",
+            "template_id": "booking_confirmation",
+        }
+        try:
+            row = cur.execute("SELECT whatsapp_settings FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+            if row and row["whatsapp_settings"]:
+                val = row["whatsapp_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception:
+            pass
+        finally:
+            conn.close()
+        return defaults
+
+    def update_whatsapp_settings(self, salon_id, settings):
+        conn = get_db()
+        cur = conn.cursor()
+        settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+        now = int(datetime.now().timestamp())
+        existing = cur.execute("SELECT id FROM salon_settings WHERE salon_id = ?", (salon_id,)).fetchone()
+        if existing:
+            cur.execute("UPDATE salon_settings SET whatsapp_settings = ?, updated_at = ? WHERE salon_id = ?", (settings_json, now, salon_id))
+        else:
+            cur.execute("INSERT INTO salon_settings (salon_id, whatsapp_settings, created_at, updated_at) VALUES (?, ?, ?, ?)", (salon_id, settings_json, now, now))
         conn.commit()
         conn.close()
         return True
@@ -2009,27 +2119,236 @@ class BillRepository:
                 payment_mode TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 items_json TEXT NOT NULL,
+                amount_paid INTEGER DEFAULT 0,
+                due_amount INTEGER DEFAULT 0,
+                payment_status TEXT DEFAULT 'PAID',
+                tax_enabled INTEGER DEFAULT 1,
+                tax_inclusive INTEGER DEFAULT 0,
+                tax_rate REAL DEFAULT 18.0,
+                tax_amount INTEGER DEFAULT 0,
                 FOREIGN KEY (account_id) REFERENCES salons(id)
             );
+            CREATE TABLE IF NOT EXISTS bill_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bill_id TEXT NOT NULL,
+                account_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                payment_mode TEXT DEFAULT 'Cash',
+                received_by TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_bill_payments_bill ON bill_payments(bill_id);
+            CREATE INDEX IF NOT EXISTS idx_bill_payments_account ON bill_payments(account_id);
             """
         )
         conn.commit()
         conn.close()
 
-    def create_bill(self, bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, items_json):
+    def create_bill(self, bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, items_json, amount_paid=None, due_amount=None, payment_status=None, tax_enabled=1, tax_inclusive=0, tax_rate=18.0, tax_amount=None, created_at=None):
         conn = get_db()
         cur = conn.cursor()
-        created_at = int(datetime.now().timestamp())
+        if created_at is None:
+            created_at = int(datetime.now().timestamp())
+        subtotal = int(subtotal)
+        discount = int(discount)
+        tax = int(tax)
+        grand_total = int(grand_total)
+
+        if amount_paid is None:
+            amount_paid = grand_total
+        else:
+            amount_paid = max(0, min(grand_total, int(amount_paid)))
+
+        if due_amount is None:
+            due_amount = max(0, grand_total - amount_paid)
+        else:
+            due_amount = max(0, int(due_amount))
+
+        if not payment_status:
+            if amount_paid >= grand_total:
+                payment_status = "PAID"
+            elif amount_paid == 0:
+                payment_status = "UNPAID"
+            else:
+                payment_status = "PARTIALLY_PAID"
+
+        if tax_amount is None:
+            tax_amount = tax
+
         cur.execute(
             """
-            INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json, amount_paid, due_amount, payment_status, tax_enabled, tax_inclusive, tax_rate, tax_amount)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (bill_id, account_id, client_name, client_phone, int(subtotal), int(discount), int(tax), int(grand_total), payment_mode, created_at, items_json),
+            (bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json, amount_paid, due_amount, payment_status, int(tax_enabled), int(tax_inclusive), float(tax_rate), int(tax_amount)),
         )
+
+        # Record initial ledger payment entry if funds were received
+        if amount_paid > 0:
+            cur.execute(
+                """
+                INSERT INTO bill_payments(bill_id, account_id, amount, payment_mode, received_by, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (bill_id, account_id, amount_paid, payment_mode, "Cashier", "Initial invoice payment", created_at),
+            )
+
         conn.commit()
         conn.close()
         return bill_id
+
+    def record_payment(self, bill_id, account_id, amount, payment_mode="Cash", received_by="Cashier", notes=""):
+        """Record an incremental payment against an invoice and update recoverable due."""
+        amount = int(amount)
+        if amount <= 0:
+            return {"success": False, "message": "Payment amount must be greater than zero."}
+
+        conn = get_db()
+        cur = conn.cursor()
+        bill = cur.execute("SELECT * FROM bills WHERE id = ? AND account_id = ?", (bill_id, account_id)).fetchone()
+        if not bill:
+            conn.close()
+            return {"success": False, "message": "Invoice not found."}
+
+        current_due = int(bill["due_amount"] if bill["due_amount"] is not None else max(0, bill["grand_total"] - (bill["amount_paid"] or 0)))
+        if current_due <= 0:
+            conn.close()
+            return {"success": False, "message": "Invoice is already fully paid."}
+
+        pay_amount = min(amount, current_due)
+        now = int(datetime.now().timestamp())
+        new_paid = (bill["amount_paid"] or 0) + pay_amount
+        new_due = max(0, bill["grand_total"] - new_paid)
+        new_status = "PAID" if new_due == 0 else "PARTIALLY_PAID"
+
+        cur.execute(
+            """
+            UPDATE bills
+            SET amount_paid = ?, due_amount = ?, payment_status = ?
+            WHERE id = ? AND account_id = ?
+            """,
+            (new_paid, new_due, new_status, bill_id, account_id),
+        )
+
+        cur.execute(
+            """
+            INSERT INTO bill_payments(bill_id, account_id, amount, payment_mode, received_by, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (bill_id, account_id, pay_amount, payment_mode, received_by or "Cashier", notes or "Due settlement", now),
+        )
+        payment_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+
+        return {
+            "success": True,
+            "bill_id": bill_id,
+            "amount_paid": new_paid,
+            "due_amount": new_due,
+            "payment_status": new_status,
+            "payment_id": payment_id,
+            "settled_amount": pay_amount,
+            "bill": {
+                "id": bill_id,
+                "amount_paid": new_paid,
+                "due_amount": new_due,
+                "payment_status": new_status,
+            },
+            "message": f"Successfully received ₹{pay_amount:,} towards invoice {bill_id}."
+        }
+
+    def get_bill_payments(self, bill_id, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT * FROM bill_payments WHERE bill_id = ? AND account_id = ? ORDER BY created_at ASC",
+            (bill_id, account_id),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_customer_dues(self, account_id, phone):
+        phone_clean = str(phone or "").strip()
+        if not phone_clean:
+            return []
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, client_name, client_phone, grand_total, amount_paid, due_amount, payment_status, created_at
+            FROM bills
+            WHERE account_id = ? AND client_phone = ? AND due_amount > 0
+            ORDER BY created_at DESC
+            """,
+            (account_id, phone_clean),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_bills_filtered(self, account_id, status=None, q=None, limit=50, offset=0):
+        self.seed_defaults_if_empty(account_id)
+        conn = get_db()
+        cur = conn.cursor()
+        conditions = ["account_id = ?"]
+        params = [account_id]
+
+        if status:
+            status_lower = status.strip().lower()
+            if status_lower in ("due", "partially_paid", "partial"):
+                conditions.append("due_amount > 0")
+            elif status_lower == "paid":
+                conditions.append("(due_amount = 0 OR payment_status = 'PAID')")
+            elif status_lower == "unpaid":
+                conditions.append("(amount_paid = 0 OR payment_status = 'UNPAID')")
+
+        if q:
+            term = f"%{q.strip()}%"
+            conditions.append("(id LIKE ? OR client_name LIKE ? OR client_phone LIKE ?)")
+            params.extend([term, term, term])
+
+        where_clause = " WHERE " + " AND ".join(conditions)
+
+        count_row = cur.execute(f"SELECT COUNT(*) as c FROM bills {where_clause}", params).fetchone()
+        total_count = count_row["c"] if count_row else 0
+
+        kpi_row = cur.execute(
+            f"""
+            SELECT SUM(grand_total) as total_invoiced,
+                   SUM(amount_paid) as total_paid,
+                   SUM(due_amount) as total_due
+            FROM bills {where_clause}
+            """,
+            params,
+        ).fetchone()
+
+        query = f"SELECT * FROM bills {where_clause} ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        rows = cur.execute(query, params + [int(limit), int(offset)]).fetchall()
+        conn.close()
+
+        bills = []
+        for r in rows:
+            d = dict(r)
+            try:
+                items = json.loads(d.pop("items_json") or "[]")
+            except Exception:
+                items = []
+            d["items"] = items if isinstance(items, list) else []
+            d.setdefault("amount_paid", d.get("grand_total", 0))
+            d.setdefault("due_amount", 0)
+            d.setdefault("payment_status", "PAID" if d.get("due_amount", 0) == 0 else "PARTIALLY_PAID")
+            bills.append(d)
+
+        return {
+            "bills": bills,
+            "total": total_count,
+            "summary": {
+                "total_invoiced": int(kpi_row["total_invoiced"] or 0) if kpi_row else 0,
+                "total_paid": int(kpi_row["total_paid"] or 0) if kpi_row else 0,
+                "total_due": int(kpi_row["total_due"] or 0) if kpi_row else 0,
+            }
+        }
 
     def bulk_add_bills(self, account_id, rows):
         """Mass-insert bills/invoices from uploaded CSV rows."""
@@ -2066,6 +2385,15 @@ class BillRepository:
                     grand_total = max(0, int(float(str(raw_grand_total))))
                 else:
                     grand_total = max(0, subtotal - discount + tax)
+
+                raw_paid = row.get("amount_paid") or row.get("paid")
+                if raw_paid is not None and str(raw_paid).strip() != "":
+                    amount_paid = max(0, min(grand_total, int(float(str(raw_paid)))))
+                else:
+                    amount_paid = grand_total
+
+                due_amount = max(0, grand_total - amount_paid)
+                payment_status = "PAID" if due_amount == 0 else ("UNPAID" if amount_paid == 0 else "PARTIALLY_PAID")
             except (ValueError, TypeError):
                 errors.append(f"Row {idx}: Invalid numeric figures.")
                 skipped += 1
@@ -2116,11 +2444,19 @@ class BillRepository:
             try:
                 cur.execute(
                     """
-                    INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO bills(id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, items_json, amount_paid, due_amount, payment_status, tax_enabled, tax_inclusive, tax_rate, tax_amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 18.0, ?)
                     """,
-                    (bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, json.dumps(items_list)),
+                    (bill_id, account_id, client_name, client_phone, subtotal, discount, tax, grand_total, payment_mode, created_at, json.dumps(items_list), amount_paid, due_amount, payment_status, tax),
                 )
+                if amount_paid > 0:
+                    cur.execute(
+                        """
+                        INSERT INTO bill_payments(bill_id, account_id, amount, payment_mode, received_by, notes, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (bill_id, account_id, amount_paid, payment_mode, "Import", "CSV Bulk Import", created_at),
+                    )
                 existing_ids.add(bill_id)
                 added += 1
             except sql.Error as e:
@@ -2151,7 +2487,19 @@ class BillRepository:
             (account_id, int(limit), int(offset)),
         ).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+        bills = []
+        for r in rows:
+            d = dict(r)
+            try:
+                items = json.loads(d.pop("items_json") or "[]")
+            except Exception:
+                items = []
+            d["items"] = items if isinstance(items, list) else []
+            d.setdefault("amount_paid", d.get("grand_total", 0))
+            d.setdefault("due_amount", 0)
+            d.setdefault("payment_status", "PAID" if d.get("due_amount", 0) == 0 else "PARTIALLY_PAID")
+            bills.append(d)
+        return bills
 
     def get_metrics(self, account_id, start_ts=None, end_ts=None):
         """Aggregate bill KPIs for a time window (defaults to all-time).
@@ -2962,16 +3310,53 @@ class ReportRepository:
         return services[:limit]
 
     def staff_leaderboard(self, account_id, start_ts, end_ts):
-        rows = self._item_rows(account_id, start_ts, end_ts)
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
         agg = {}
-        for r in rows:
-            base = self._base(r["staff"])
-            if not base:
-                continue
-            if base not in agg:
-                agg[base] = {"name": base, "revenue": 0, "services": 0}
-            agg[base]["revenue"] += r["revenue"]
-            agg[base]["services"] += r["qty"]
+        for b in bills:
+            for it in b.get("items", []):
+                if not isinstance(it, dict):
+                    continue
+                price = int(float(it.get("price", 0) or 0))
+                qty = int(float(it.get("qty", 1) or 1))
+                line_total = price * qty
+                splits = it.get("staff_split")
+                if isinstance(splits, list) and len(splits) > 0:
+                    for sp in splits:
+                        if isinstance(sp, dict):
+                            s_name = sp.get("name") or sp.get("staff")
+                            s_base = self._base(s_name)
+                            if not s_base:
+                                continue
+                            s_amt = int(float(sp.get("amount", 0) or 0))
+                            if s_base not in agg:
+                                agg[s_base] = {"name": s_base, "revenue": 0, "services": 0}
+                            agg[s_base]["revenue"] += s_amt
+                            agg[s_base]["services"] += 1
+                elif isinstance(splits, dict) and splits.get("enabled"):
+                    st1 = self._base(splits.get("stylist1"))
+                    st2 = self._base(splits.get("stylist2"))
+                    r1 = float(splits.get("ratio1", 50) or 50)
+                    amt1 = int(round(line_total * r1 / 100.0))
+                    amt2 = max(0, line_total - amt1)
+                    if st1:
+                        if st1 not in agg:
+                            agg[st1] = {"name": st1, "revenue": 0, "services": 0}
+                        agg[st1]["revenue"] += amt1
+                        agg[st1]["services"] += 1
+                    if st2:
+                        if st2 not in agg:
+                            agg[st2] = {"name": st2, "revenue": 0, "services": 0}
+                        agg[st2]["revenue"] += amt2
+                        agg[st2]["services"] += 1
+                else:
+                    staff = str(it.get("staff", "") or "").strip()
+                    base = self._base(staff)
+                    if base:
+                        if base not in agg:
+                            agg[base] = {"name": base, "revenue": 0, "services": 0}
+                        agg[base]["revenue"] += line_total
+                        agg[base]["services"] += qty
+
         staff_list = StaffRepository().get_staff(account_id)
         known = {StaffRepository.base_name(s["name"]): s["role"] for s in staff_list}
         # Include roster members who made no sales in the window (they rank last).

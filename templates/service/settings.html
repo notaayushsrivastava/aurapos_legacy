@@ -122,6 +122,33 @@
       {% endif %}
 
       {% if is_admin %}
+      <button @click="tab = 'printer'"
+              :class="tab === 'printer' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
+              class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
+        <span class="flex items-center gap-3">
+          <i data-lucide="printer" class="w-4 h-4" :class="tab === 'printer' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
+          <span>Thermal Printer</span>
+        </span>
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 font-mono-num"
+              x-text="printerSettings.paper_width === '2inch' ? '58mm' : (printerSettings.paper_width === '4inch' ? '104mm' : '80mm')"></span>
+      </button>
+      {% endif %}
+
+      {% if is_admin %}
+      <button @click="tab = 'whatsapp'"
+              :class="tab === 'whatsapp' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
+              class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
+        <span class="flex items-center gap-3">
+          <i data-lucide="message-square" class="w-4 h-4" :class="tab === 'whatsapp' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
+          <span>WhatsApp Alerts</span>
+        </span>
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+              :class="whatsappSettings.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'"
+              x-text="whatsappSettings.enabled ? 'Active' : 'Off'"></span>
+      </button>
+      {% endif %}
+
+      {% if is_admin %}
       <button @click="tab = 'data'"
               :class="tab === 'data' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
@@ -1661,6 +1688,288 @@
 
       </section>
 
+      <!-- ============ CATEGORY: THERMAL PRINTER SETUP ============ -->
+      <section x-show="tab === 'printer'" x-cloak class="space-y-6">
+
+        <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white">Thermal Receipt Printer Setup</h3>
+                <p class="text-xs text-neutral-400">Configure POS roll paper width, automatic cutter commands, and receipt header/footer</p>
+              </div>
+            </div>
+            <button type="button" 
+                    @click="savePrinterSettings()" 
+                    :disabled="savingPrinter"
+                    class="px-4 py-2 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-orange-500/20 hover:opacity-95 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
+              <i data-lucide="save" class="w-3.5 h-3.5" :class="savingPrinter ? 'animate-spin' : ''"></i>
+              <span x-text="savingPrinter ? 'Saving…' : 'Save Printer Settings'"></span>
+            </button>
+          </div>
+
+          <!-- Paper Width Selector -->
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-neutral-900 dark:text-white">Roll Paper Width</label>
+              <p class="text-[11px] text-neutral-400 mt-0.5">Select the paper roll specification of your connected receipt printer.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <!-- 2 Inch / 58mm -->
+              <label class="cursor-pointer relative p-4 rounded-2xl border transition-all flex flex-col justify-between"
+                     :class="printerSettings.paper_width === '2inch' ? 'border-orange-500 bg-orange-500/5 ring-2 ring-orange-500/30' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 hover:border-neutral-300 dark:hover:border-neutral-700'">
+                <input type="radio" name="printer_paper_width" value="2inch" x-model="printerSettings.paper_width" class="sr-only">
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">2" (58mm)</span>
+                    <span class="w-4 h-4 rounded-full border flex items-center justify-center"
+                          :class="printerSettings.paper_width === '2inch' ? 'border-orange-500 bg-orange-500' : 'border-neutral-300 dark:border-neutral-700'">
+                      <span class="w-1.5 h-1.5 rounded-full bg-white" x-show="printerSettings.paper_width === '2inch'"></span>
+                    </span>
+                  </div>
+                  <p class="text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">Pocket &amp; Bluetooth</p>
+                  <p class="text-[10px] text-neutral-400 mt-1 leading-snug">Compact handheld mPOS devices &amp; portable battery printers.</p>
+                </div>
+              </label>
+
+              <!-- 3 Inch / 80mm (Standard) -->
+              <label class="cursor-pointer relative p-4 rounded-2xl border transition-all flex flex-col justify-between"
+                     :class="printerSettings.paper_width === '3inch' ? 'border-orange-500 bg-orange-500/5 ring-2 ring-orange-500/30' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 hover:border-neutral-300 dark:hover:border-neutral-700'">
+                <input type="radio" name="printer_paper_width" value="3inch" x-model="printerSettings.paper_width" class="sr-only">
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">3" (80mm)</span>
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider btn-brand text-white">Standard</span>
+                    </div>
+                    <span class="w-4 h-4 rounded-full border flex items-center justify-center"
+                          :class="printerSettings.paper_width === '3inch' ? 'border-orange-500 bg-orange-500' : 'border-neutral-300 dark:border-neutral-700'">
+                      <span class="w-1.5 h-1.5 rounded-full bg-white" x-show="printerSettings.paper_width === '3inch'"></span>
+                    </span>
+                  </div>
+                  <p class="text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">Standard Salon POS</p>
+                  <p class="text-[10px] text-neutral-400 mt-1 leading-snug">Epson, TVS, Star Micronics, Posiflex desktop thermal printers.</p>
+                </div>
+              </label>
+
+              <!-- 4 Inch / 104mm -->
+              <label class="cursor-pointer relative p-4 rounded-2xl border transition-all flex flex-col justify-between"
+                     :class="printerSettings.paper_width === '4inch' ? 'border-orange-500 bg-orange-500/5 ring-2 ring-orange-500/30' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 hover:border-neutral-300 dark:hover:border-neutral-700'">
+                <input type="radio" name="printer_paper_width" value="4inch" x-model="printerSettings.paper_width" class="sr-only">
+                <div>
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-black font-mono-num text-neutral-900 dark:text-white">4" (104mm)</span>
+                    <span class="w-4 h-4 rounded-full border flex items-center justify-center"
+                          :class="printerSettings.paper_width === '4inch' ? 'border-orange-500 bg-orange-500' : 'border-neutral-300 dark:border-neutral-700'">
+                      <span class="w-1.5 h-1.5 rounded-full bg-white" x-show="printerSettings.paper_width === '4inch'"></span>
+                    </span>
+                  </div>
+                  <p class="text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">Wide Format Roll</p>
+                  <p class="text-[10px] text-neutral-400 mt-1 leading-snug">High-volume kiosk receipts, label slips, and detailed statements.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Auto Cut Toggle -->
+          <div class="flex items-center justify-between p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/80">
+            <div>
+              <p class="text-xs font-bold text-neutral-900 dark:text-white">Automatic Paper Cutter</p>
+              <p class="text-[11px] text-neutral-400 mt-0.5">Send GS V / ESC i auto-cut instruction after receipt finishes printing.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" x-model="printerSettings.auto_cut" class="sr-only peer">
+              <div class="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-neutral-600 peer-checked:bg-orange-500"></div>
+            </label>
+          </div>
+
+          <!-- Header & Footer Text -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Receipt Header Greeting (Optional)</label>
+              <input type="text" x-model="printerSettings.header_text" placeholder="e.g. Welcome to luxury wellness"
+                     class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Receipt Footer Message</label>
+              <input type="text" x-model="printerSettings.footer_text" placeholder="e.g. Thank you for your visit! Follow @aurasalon"
+                     class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50">
+            </div>
+          </div>
+
+          <!-- Live Receipt Preview Container -->
+          <div class="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="eye" class="w-3.5 h-3.5 text-neutral-400"></i>
+                <span>Live Thermal Ticket Simulation</span>
+              </span>
+              <span class="text-[10px] font-mono-num text-neutral-400"
+                    x-text="'Simulated width: ' + (printerSettings.paper_width === '2inch' ? '58mm (~48mm printable)' : (printerSettings.paper_width === '4inch' ? '104mm (~96mm printable)' : '80mm (~72mm printable)'))"></span>
+            </div>
+
+            <div class="p-6 rounded-2xl bg-neutral-100 dark:bg-neutral-950/80 border border-neutral-200/80 dark:border-neutral-800 flex justify-center overflow-x-auto">
+              <div class="bg-white text-black p-4 font-mono text-[11px] leading-tight shadow-md rounded border border-neutral-200 transition-all duration-300"
+                   :style="printerSettings.paper_width === '2inch' ? 'width: 220px;' : (printerSettings.paper_width === '4inch' ? 'width: 380px;' : 'width: 290px;')">
+                
+                <div class="text-center pb-2 border-b border-dashed border-neutral-300 space-y-0.5">
+                  <div class="font-bold text-sm tracking-wide" x-text="salon.salon_name || 'Aura Salon'"></div>
+                  <div class="text-[9px] text-neutral-600" x-text="salon.phone || '+91 98765 43210'"></div>
+                  <div x-show="printerSettings.header_text" class="text-[9px] italic text-neutral-500 pt-0.5" x-text="printerSettings.header_text"></div>
+                </div>
+
+                <div class="py-2 border-b border-dashed border-neutral-300 space-y-0.5 text-[10px]">
+                  <div class="flex justify-between">
+                    <span>Invoice: #1042</span>
+                    <span>14:35 PM</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Client: Walk-in Client</span>
+                    <span>PAID</span>
+                  </div>
+                </div>
+
+                <div class="py-2 border-b border-dashed border-neutral-300 space-y-1 text-[10px]">
+                  <div class="flex justify-between font-bold">
+                    <span>Item</span>
+                    <span>Amt</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Hair Styling &amp; Cut</span>
+                    <span>₹850.00</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>Express Hair Spa</span>
+                    <span>₹1,200.00</span>
+                  </div>
+                </div>
+
+                <div class="py-2 border-b border-dashed border-neutral-300 space-y-0.5 text-[10px]">
+                  <div class="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span>₹2,050.00</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span>GST (18% Incl.):</span>
+                    <span>₹312.71</span>
+                  </div>
+                  <div class="flex justify-between font-bold text-xs pt-1">
+                    <span>GRAND TOTAL:</span>
+                    <span>₹2,050.00</span>
+                  </div>
+                  <div class="flex justify-between text-emerald-700 font-semibold">
+                    <span>Amount Paid (UPI):</span>
+                    <span>₹2,050.00</span>
+                  </div>
+                  <div class="flex justify-between text-neutral-500">
+                    <span>Balance Due:</span>
+                    <span>₹0.00</span>
+                  </div>
+                </div>
+
+                <div class="text-center pt-2 text-[9px] text-neutral-600 space-y-0.5">
+                  <div x-text="printerSettings.footer_text || 'Thank you for your visit!'"></div>
+                  <div class="text-[8px] text-neutral-400">Powered by AuraPOS</div>
+                </div>
+
+                <template x-if="printerSettings.auto_cut">
+                  <div class="mt-3 pt-1 border-t border-dotted border-rose-300 text-center text-[8px] text-rose-500 font-sans uppercase tracking-widest">
+                    --- AUTO CUT LINE ---
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ============ CATEGORY: WHATSAPP NOTIFICATIONS SETUP ============ -->
+      <section x-show="tab === 'whatsapp'" x-cloak class="space-y-6">
+
+        <div data-anim="up" data-delay="120" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <i data-lucide="message-square" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white">WhatsApp Booking Dispatcher</h3>
+                <p class="text-xs text-neutral-400">Instant booking confirmations dispatched to clients over WhatsApp</p>
+              </div>
+            </div>
+            <button type="button" 
+                    @click="saveWhatsappSettings()" 
+                    :disabled="savingWhatsapp"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 hover:opacity-95 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
+              <i data-lucide="save" class="w-3.5 h-3.5" :class="savingWhatsapp ? 'animate-spin' : ''"></i>
+              <span x-text="savingWhatsapp ? 'Saving…' : 'Save WhatsApp Settings'"></span>
+            </button>
+          </div>
+
+          <!-- Status Card -->
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-emerald-900 dark:text-emerald-200">Zero-Config AuraPOS Dispatch Service</h4>
+                <p class="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">Every verified public booking triggers an automatic WhatsApp booking confirmation ticket.</p>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" x-model="whatsappSettings.enabled" class="sr-only peer">
+              <div class="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-neutral-600 peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <!-- Dispatcher Inputs -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Dedicated Salon Sender Phone / WhatsApp Business</label>
+              <input type="text" x-model="whatsappSettings.sender_phone" placeholder="e.g. +91 98765 43210"
+                     class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50">
+              <p class="text-[10px] text-neutral-400 mt-1">If blank, defaults to the salon profile primary phone.</p>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">Provider Mode</label>
+              <select x-model="whatsappSettings.provider"
+                      class="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50">
+                <option value="mock">Built-in Dispatcher (Logs &amp; Webhook ready)</option>
+                <option value="meta">Meta Cloud WhatsApp API</option>
+                <option value="twilio">Twilio Programmable Messaging</option>
+              </select>
+              <p class="text-[10px] text-neutral-400 mt-1">Provider-agnostic driver defined in whatsapp.py.</p>
+            </div>
+          </div>
+
+          <!-- Preview of Template Message -->
+          <div class="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-2">Message Template Preview</label>
+            <div class="p-4 rounded-2xl bg-neutral-900 text-white font-mono text-xs leading-relaxed max-w-xl space-y-2 border border-neutral-800">
+              <div class="text-emerald-400 font-bold">✨ [Salon Name] Booking Confirmation</div>
+              <div>Dear [Client Name], your appointment has been received!</div>
+              <div class="text-neutral-300 text-[11px] pl-2 border-l border-emerald-500/50 space-y-0.5">
+                <div>📅 Date &amp; Time: [Selected Slot]</div>
+                <div>✂️ Services: [Selected Services Summary]</div>
+                <div>👤 Stylist: [Assigned Stylist]</div>
+              </div>
+              <div class="pt-2 text-[10px] text-amber-300 border-t border-neutral-800 font-sans">
+                ⚠️ Note: Final price and slot duration are subject to re-confirmation upon arrival or confirmation call.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
     </div>
 
   </div>
@@ -1693,6 +2002,8 @@
     permissions: {{ system_permissions|tojson if system_permissions is defined else '[]' }},
     default_role_id: {{ default_role_id|tojson if default_role_id is defined else 'null' }},
     tax_settings: {{ tax_settings|tojson if tax_settings is defined else '{}' }},
+    printer_settings: {{ printer_settings|tojson if printer_settings is defined else '{}' }},
+    whatsapp_settings: {{ whatsapp_settings|tojson if whatsapp_settings is defined else '{}' }},
     can_manage_roles: {{ 'true' if can_manage_roles else 'false' }},
     can_manage_accounts: {{ 'true' if can_manage_accounts else 'false' }},
   };
@@ -1701,7 +2012,7 @@
     return {
       tab: (() => {
         const hash = (window.location.hash || '').replace('#', '');
-        const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'data', 'subscription'];
+        const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'printer', 'whatsapp', 'data', 'subscription'];
         return valid.includes(hash) ? hash : 'profile';
       })(),
       is_admin: SETTINGS_BOOT.is_admin,
@@ -1749,7 +2060,7 @@
       async init() {
         window.addEventListener('hashchange', () => {
           const hash = (window.location.hash || '').replace('#', '');
-          const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'data', 'subscription'];
+          const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'printer', 'whatsapp', 'data', 'subscription'];
           if (valid.includes(hash)) this.tab = hash;
         });
 
@@ -2126,6 +2437,56 @@
           this.notify('Network error — please retry.', 'error');
         }
         this.savingTax = false;
+      },
+
+      // ---------- Thermal Printer Settings ----------
+      printerSettings: (() => {
+        const d = { paper_width: '3inch', auto_cut: true, header_text: '', footer_text: 'Thank you for your visit!' };
+        return { ...d, ...(SETTINGS_BOOT.printer_settings || {}) };
+      })(),
+      savingPrinter: false,
+      async savePrinterSettings() {
+        this.savingPrinter = true;
+        try {
+          const res = await fetch('/api/settings/printer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.printerSettings)
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data && data.printer_settings) {
+            this.printerSettings = { ...this.printerSettings, ...data.printer_settings };
+          }
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+        this.savingPrinter = false;
+      },
+
+      // ---------- WhatsApp Notifications Settings ----------
+      whatsappSettings: (() => {
+        const d = { enabled: true, provider: 'mock', sender_phone: '', template_id: 'booking_confirmation' };
+        return { ...d, ...(SETTINGS_BOOT.whatsapp_settings || {}) };
+      })(),
+      savingWhatsapp: false,
+      async saveWhatsappSettings() {
+        this.savingWhatsapp = true;
+        try {
+          const res = await fetch('/api/settings/whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.whatsappSettings)
+          });
+          const data = await res.json();
+          this.notify(data.message, data.success ? 'success' : 'error');
+          if (data && data.whatsapp_settings) {
+            this.whatsappSettings = { ...this.whatsappSettings, ...data.whatsapp_settings };
+          }
+        } catch (e) {
+          this.notify('Network error — please retry.', 'error');
+        }
+        this.savingWhatsapp = false;
       },
 
       // ---------- RBAC: Roles & Permissions ----------

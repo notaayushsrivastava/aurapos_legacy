@@ -301,6 +301,25 @@
             <button @click="clearCustomer()" class="ml-auto text-[10px] font-bold text-neutral-400 hover:text-rose-500 shrink-0 transition-colors">Change</button>
           </div>
           <p x-show="!customer.id" class="text-[10px] text-neutral-400">No customer selected — the bill will be recorded as a Walk-in.</p>
+
+          <!-- Customer Outstanding Dues Banner -->
+          <template x-if="customerDues && customerDues.total_due > 0">
+            <div class="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2 shadow-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-amber-500 shrink-0"></i>
+                <div class="text-[11px] min-w-0">
+                  <span class="font-bold">Past Due:</span>
+                  <span class="font-mono-num font-bold text-amber-600 dark:text-amber-400">₹<span x-text="customerDues.total_due"></span></span>
+                  <span class="text-neutral-500 dark:text-neutral-400 text-[10px]">(<span x-text="customerDues.dues.length"></span> bill<span x-text="customerDues.dues.length > 1 ? 's' : ''"></span>)</span>
+                </div>
+              </div>
+              <button type="button" 
+                      @click="openSettleDuesModal()" 
+                      class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] uppercase tracking-wider shrink-0 transition-all active:scale-95 cursor-pointer shadow-xs">
+                Settle Dues
+              </button>
+            </div>
+          </template>
         </div>
 
         <!-- Selected Line Items List -->
@@ -317,15 +336,31 @@
           <template x-for="(item, index) in billItems" :key="item.cartId">
             <div class="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80 space-y-2">
               
-              <!-- Item Header & Price -->
+              <!-- Item Header & Rate -->
               <div class="flex items-start justify-between gap-2">
-                <div class="truncate">
+                <div class="truncate flex-1 min-w-0">
                   <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="item.name"></p>
-                  <p class="text-[10px] text-neutral-500 font-mono-num">₹<span x-text="item.price"></span> each</p>
+                  
+                  <!-- Editable Unit Price & Catalog Price Badge -->
+                  <div class="flex items-center gap-1.5 mt-1">
+                    <span class="text-[10px] text-neutral-400 font-mono-num">Rate: ₹</span>
+                    <input type="number" 
+                           min="0"
+                           x-model.number="item.price" 
+                           @input="saveCurrentTerminalDraft()"
+                           class="w-20 px-1.5 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
+                    <template x-if="item.catalogPrice != null && Number(item.price) !== Number(item.catalogPrice)">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold"
+                            :title="'Catalog Price: ₹' + item.catalogPrice">
+                        Modified
+                      </span>
+                    </template>
+                  </div>
                 </div>
-                <div class="flex items-center gap-2">
+
+                <div class="flex items-center gap-2 shrink-0">
                   <span class="text-xs font-bold font-mono-num text-neutral-900 dark:text-white">
-                    ₹<span x-text="item.price * item.qty"></span>
+                    ₹<span x-text="Math.round(item.price * item.qty)"></span>
                   </span>
                   <button @click="removeItem(index)" class="text-neutral-400 hover:text-rose-500 transition-colors p-0.5">
                     <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -335,10 +370,10 @@
 
               <!-- Staff Assignment & Quantity Adjuster -->
               <div class="flex items-center justify-between gap-2 pt-1">
-                
                 <!-- Staff Assignment Dropdown -->
                 <div class="flex-1 min-w-0">
                   <select x-model="item.staff" 
+                          @change="saveCurrentTerminalDraft()"
                           class="w-full px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-[11px] font-medium text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
                     <template x-for="st in staffList" :key="st">
                       <option :value="st" x-text="st"></option>
@@ -347,12 +382,67 @@
                 </div>
 
                 <!-- Quantity Controls -->
-                <div class="flex items-center border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-lg p-0.5">
+                <div class="flex items-center border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-lg p-0.5 shrink-0">
                   <button @click="decrementItem(index)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">-</button>
                   <span class="px-2 text-xs font-bold font-mono-num text-neutral-900 dark:text-white" x-text="item.qty"></span>
                   <button @click="incrementItem(index)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">+</button>
                 </div>
+              </div>
 
+              <!-- Staff Split Toggle & Configuration -->
+              <div class="pt-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                <div class="flex items-center justify-between">
+                  <button type="button" 
+                          @click="item.isSplitStaff = !item.isSplitStaff; if (item.isSplitStaff && !item.staff2) item.staff2 = (staffList.find(s => s !== item.staff) || staffList[0] || 'Unassigned'); saveCurrentTerminalDraft(); $nextTick(() => { if (window.lucide) lucide.createIcons(); });"
+                          class="text-[10px] text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-1 font-semibold cursor-pointer">
+                    <i data-lucide="users" class="w-3 h-3"></i>
+                    <span x-text="item.isSplitStaff ? 'Remove Stylist Split' : 'Split Stylists (60/40)'"></span>
+                  </button>
+                  <template x-if="item.isSplitStaff">
+                    <span class="text-[10px] font-mono-num text-neutral-400">
+                      ₹<span x-text="Math.round(item.price * item.qty * ((item.splitRatio1 || 50) / 100))"></span> / ₹<span x-text="Math.round(item.price * item.qty * ((100 - (item.splitRatio1 || 50)) / 100))"></span>
+                    </span>
+                  </template>
+                </div>
+
+                <template x-if="item.isSplitStaff">
+                  <div class="p-2 mt-1.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/50 space-y-1.5 text-xs">
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 min-w-0">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Stylist 1</label>
+                        <select x-model="item.staff" @change="saveCurrentTerminalDraft()" class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] text-neutral-900 dark:text-white">
+                          <template x-for="st in staffList" :key="'s1_'+st">
+                            <option :value="st" x-text="st"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div class="w-16">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Share %</label>
+                        <input type="number" min="0" max="100" 
+                               x-model.number="item.splitRatio1" 
+                               @input="item.splitRatio2 = Math.max(0, 100 - (Number(item.splitRatio1) || 0)); saveCurrentTerminalDraft();" 
+                               class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] font-mono-num text-right text-neutral-900 dark:text-white">
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 min-w-0">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Stylist 2</label>
+                        <select x-model="item.staff2" @change="saveCurrentTerminalDraft()" class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] text-neutral-900 dark:text-white">
+                          <template x-for="st in staffList" :key="'s2_'+st">
+                            <option :value="st" x-text="st"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div class="w-16">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Share %</label>
+                        <input type="number" min="0" max="100" 
+                               x-model.number="item.splitRatio2" 
+                               @input="item.splitRatio1 = Math.max(0, 100 - (Number(item.splitRatio2) || 0)); saveCurrentTerminalDraft();" 
+                               class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] font-mono-num text-right text-neutral-900 dark:text-white">
+                      </div>
+                    </div>
+                  </div>
+                </template>
               </div>
 
             </div>
@@ -383,17 +473,69 @@
             </div>
           </div>
 
-          <!-- Tax Summary -->
-          <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
-            <span class="flex items-center gap-1">
-              <span x-text="taxLabel"></span>
-            </span>
-            <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">₹<span x-text="taxAmount"></span></span>
+          <!-- Optional & Editable Tax Controls -->
+          <div class="pt-1.5 border-t border-neutral-200/70 dark:border-neutral-800/70 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" x-model="taxEnabled" class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500">
+                <span class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Apply Tax</span>
+              </label>
+
+              <!-- Inclusive vs Exclusive Selector -->
+              <div x-show="taxEnabled" class="inline-flex rounded-lg bg-neutral-200/80 dark:bg-neutral-800 p-0.5 text-[10px] font-bold">
+                <button type="button" 
+                        @click="taxInclusive = false" 
+                        :class="!taxInclusive ? 'bg-white dark:bg-[#141210] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                        class="px-2 py-0.5 rounded-md transition-all">
+                  Exclusive (+Tax)
+                </button>
+                <button type="button" 
+                        @click="taxInclusive = true" 
+                        :class="taxInclusive ? 'bg-white dark:bg-[#141210] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                        class="px-2 py-0.5 rounded-md transition-all">
+                  Inclusive (In Price)
+                </button>
+              </div>
+            </div>
+
+            <!-- Tax Rate & Presets (when enabled) -->
+            <div x-show="taxEnabled" class="flex items-center justify-between gap-2 pt-0.5">
+              <div class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                <template x-for="r in [0, 5, 12, 18, 28]" :key="r">
+                  <button type="button" 
+                          @click="taxRateInput = r" 
+                          :class="Number(taxRateInput) === r ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-200/60 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'"
+                          class="px-1.5 py-0.5 rounded text-[10px] font-mono-num transition-all"
+                          x-text="r + '%'"></button>
+                </template>
+              </div>
+              <div class="flex items-center gap-1 w-20 shrink-0">
+                <input type="number" min="0" max="100" step="0.5"
+                       x-model.number="taxRateInput"
+                       class="w-full text-right px-1.5 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num focus:outline-none focus:ring-1 focus:ring-violet-500 text-neutral-900 dark:text-white">
+                <span class="text-xs text-neutral-400">%</span>
+              </div>
+            </div>
+
+            <!-- Tax Summary Line -->
+            <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
+              <span class="flex items-center gap-1">
+                <span x-text="taxLabel"></span>
+              </span>
+              <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">
+                ₹<span x-text="taxAmount"></span>
+              </span>
+            </div>
           </div>
 
-          <!-- Grand Total -->
+          <!-- Grand Total Payable -->
           <div class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-base font-extrabold text-neutral-900 dark:text-white">
-            <span>Total Payable</span>
+            <div>
+              <span>Total Payable</span>
+              <span x-show="taxEnabled && taxInclusive" class="block text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                (Inclusive of ₹<span x-text="taxAmount"></span> tax)
+              </span>
+            </div>
             <span class="font-mono-num text-lg text-violet-600 dark:text-neon-cyan">₹<span x-text="grandTotal"></span></span>
           </div>
 
@@ -480,6 +622,41 @@
         <span class="text-xs text-violet-700 dark:text-neon-cyan font-semibold">Total Amount Due</span>
         <div class="text-3xl font-black font-mono-num text-violet-600 dark:text-neon-cyan mt-0.5">
           ₹<span x-text="grandTotal"></span>
+        </div>
+      </div>
+
+      <!-- Amount Received & Part-Payment Status -->
+      <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-neutral-800 dark:text-neutral-200">Amount Received Today (₹)</label>
+          <div class="flex items-center gap-1.5">
+            <button type="button" @click="amountReceived = grandTotal" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 transition-colors">
+              Full Pay
+            </button>
+            <button type="button" @click="amountReceived = 0" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 transition-colors">
+              Credit / Unpaid
+            </button>
+          </div>
+        </div>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num font-bold pointer-events-none">₹</span>
+          <input type="number" min="0" :max="grandTotal" x-model.number="amountReceived" 
+                 class="w-full pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-base font-bold font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+        </div>
+
+        <div class="flex items-center justify-between text-xs pt-0.5">
+          <div class="text-neutral-500 dark:text-neutral-400">
+            <template x-if="dueAmount > 0">
+              <span>Balance Due: <strong class="font-mono-num font-bold text-rose-600 dark:text-rose-400">₹<span x-text="dueAmount"></span></strong></span>
+            </template>
+            <template x-if="dueAmount === 0">
+              <span>Paid in full</span>
+            </template>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                :class="paymentStatus === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20')"
+                x-text="paymentStatus === 'PAID' ? 'Full Payment' : (paymentStatus === 'PARTIALLY_PAID' ? 'Part Payment' : 'Unpaid Bill')">
+          </span>
         </div>
       </div>
 
@@ -769,7 +946,7 @@
           Cancel
         </button>
         <button @click="finalizePayment()" 
-                :disabled="processingPayment || (isSplitMode && splitRemaining !== 0) || (!isSplitMode && selectedPaymentMode === 'Cash' && cashReceived < grandTotal)"
+                :disabled="processingPayment || (isSplitMode && splitRemaining !== 0) || (!isSplitMode && selectedPaymentMode === 'Cash' && amountReceived > 0 && cashReceived < amountReceived)"
                 class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
           <i data-lucide="check" class="w-4 h-4" :class="processingPayment ? 'animate-pulse' : ''"></i>
           <span x-text="processingPayment ? 'Saving Invoice…' : 'Confirm & Complete'"></span>
@@ -778,6 +955,102 @@
 
     </div>
 
+  </div>
+
+  <!-- ================= SETTLE OUTSTANDING DUES MODAL ================= -->
+  <div x-show="showSettleDuesModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+         @click.away="showSettleDuesModal = false">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Settle Outstanding Customer Dues</h3>
+          <p class="text-xs text-neutral-400" x-text="(customer.name || 'Client') + (customer.phone ? ' (' + customer.phone + ')' : '')"></p>
+        </div>
+        <button @click="showSettleDuesModal = false" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Dues List -->
+      <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+        <template x-if="!customerDues || !customerDues.dues || customerDues.dues.length === 0">
+          <p class="text-xs text-neutral-400 text-center py-4">No outstanding due bills found for this customer.</p>
+        </template>
+        <template x-for="bill in (customerDues ? customerDues.dues : [])" :key="bill.id">
+          <div class="p-3 rounded-2xl border transition-all cursor-pointer"
+               :class="selectedDueBill && selectedDueBill.id === bill.id ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-500/40' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60'"
+               @click="selectDueBillToSettle(bill)">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold font-mono-num text-neutral-900 dark:text-white" x-text="'Bill #' + bill.id"></span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                    :class="bill.payment_status === 'PARTIALLY_PAID' ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'"
+                    x-text="bill.payment_status"></span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-neutral-500 mt-1">
+              <span>Total: ₹<span class="font-mono-num" x-text="bill.grand_total"></span> · Paid: ₹<span class="font-mono-num" x-text="bill.amount_paid"></span></span>
+              <span class="font-bold font-mono-num text-rose-600 dark:text-rose-400">Due: ₹<span x-text="bill.due_amount"></span></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Settlement Form (when a bill is selected) -->
+      <template x-if="selectedDueBill">
+        <div class="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-neutral-700 dark:text-neutral-300">Settling Bill #<span x-text="selectedDueBill.id"></span></span>
+            <span class="text-neutral-500">Max Due: ₹<span class="font-mono-num font-bold text-rose-600" x-text="selectedDueBill.due_amount"></span></span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Settlement Amount (₹)</label>
+              <input type="number" min="1" :max="selectedDueBill.due_amount"
+                     x-model.number="settlePaymentAmount"
+                     class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num font-bold text-neutral-900 dark:text-white">
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Payment Method</label>
+              <select x-model="settlePaymentMode" class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-900 dark:text-white">
+                <template x-for="m in paymentModes" :key="'sp_'+m">
+                  <option :value="m" x-text="m"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Notes / Ref # (Optional)</label>
+            <input type="text" x-model="settlePaymentNotes" placeholder="e.g. Cleared by GPay ref 9812..."
+                   class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-900 dark:text-white">
+          </div>
+
+          <button type="button" 
+                  @click="recordSettlementPayment()" 
+                  :disabled="processingSettlement || settlePaymentAmount <= 0"
+                  class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span x-text="processingSettlement ? 'Recording Payment…' : 'Record ₹' + settlePaymentAmount + ' Settlement'"></span>
+          </button>
+        </div>
+      </template>
+
+      <div class="flex justify-end pt-1">
+        <button type="button" @click="showSettleDuesModal = false" class="px-4 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold">
+          Close
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- ================= BILL SAVED SUCCESS & PRINT POPUP ================= -->
@@ -971,8 +1244,17 @@
     </div>
   </div>
 
-  <!-- ================= PRINTABLE 80MM THERMAL RECEIPT ================= -->
-  <div id="printable-receipt" class="hidden print:block font-mono text-black">
+  <!-- ================= PRINTABLE THERMAL RECEIPT ================= -->
+  <style>
+    @media print {
+      .paper-2inch { width: 58mm !important; max-width: 58mm !important; font-size: 10px !important; margin: 0 auto !important; }
+      .paper-3inch { width: 80mm !important; max-width: 80mm !important; font-size: 12px !important; margin: 0 auto !important; }
+      .paper-4inch { width: 104mm !important; max-width: 104mm !important; font-size: 13px !important; margin: 0 auto !important; }
+    }
+  </style>
+  <div id="printable-receipt" 
+       :class="(printerSettings && printerSettings.paper_width === '2inch') ? 'paper-2inch' : ((printerSettings && printerSettings.paper_width === '4inch') ? 'paper-4inch' : 'paper-3inch')"
+       class="hidden print:block font-mono text-black">
     <div class="text-center pb-2 border-b border-black">
       {% if is_studio and salon and salon.logo %}
       <div class="flex justify-center mb-2">
@@ -1035,13 +1317,19 @@
     <div class="py-2 text-[11px] space-y-0.5">
       <div class="flex justify-between"><span>Subtotal:</span><span>₹<span x-text="printSubtotal"></span></span></div>
       <div class="flex justify-between"><span>Discount:</span><span>₹<span x-text="printDiscount"></span></span></div>
-      <div class="flex justify-between" x-show="taxSettings && taxSettings.enabled !== false && printTax > 0">
-        <span><span x-text="taxSettings && taxSettings.tax_name ? taxSettings.tax_name : 'Tax'"></span> (<span x-text="taxRate"></span>%):</span>
+      <div class="flex justify-between" x-show="taxEnabled && printTax > 0">
+        <span><span x-text="taxSettings && taxSettings.tax_name ? taxSettings.tax_name : 'Tax'"></span> (<span x-text="taxRate"></span>%<span x-text="taxInclusive ? ' Incl.' : ''"></span>):</span>
         <span>₹<span x-text="printTax"></span></span>
       </div>
       <div class="flex justify-between font-bold text-sm pt-1 border-t border-black">
-        <span>TOTAL DUE:</span><span>₹<span x-text="printGrandTotal"></span></span>
+        <span>TOTAL INVOICE:</span><span>₹<span x-text="printGrandTotal"></span></span>
       </div>
+      <template x-if="printDueAmount > 0">
+        <div class="pt-1 space-y-0.5 border-t border-dashed border-black text-[11px]">
+          <div class="flex justify-between"><span>Amount Paid:</span><span>₹<span x-text="printAmountPaid"></span></span></div>
+          <div class="flex justify-between font-bold"><span>BALANCE DUE:</span><span>₹<span x-text="printDueAmount"></span></span></div>
+        </div>
+      </template>
     </div>
 
     <div class="text-center pt-3 text-[10px] border-t border-dashed border-black">
@@ -1053,6 +1341,7 @@
       <p>Book online at aurapos3.vercel.app/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}</p>
       {% endif %}
     </div>
+  </div>
   <!-- ================= TERMINAL LOCKOUT BARRIER (Cross-Tab Concurrency Guard) ================= -->
   <div x-show="tabBlocked" 
        x-transition:enter="transition ease-out duration-300" 
@@ -1756,6 +2045,7 @@
       discountType: 'percent', // 'percent' or 'flat'
       discountValue: 0,
       cashReceived: 0,
+      amountReceived: 0,
       showPaymentModal: false,
       showCustomItemModal: false,
       processingPayment: false,
@@ -1770,6 +2060,15 @@
         { method: 'Cash', amount: 0 }
       ],
       availableSplitMethods: ['UPI', 'Cash', 'Card', 'Bank Transfer', 'Cheque', 'Gift Card'],
+
+      // Customer outstanding dues state
+      customerDues: null,
+      showSettleDuesModal: false,
+      selectedDueBill: null,
+      settlePaymentAmount: 0,
+      settlePaymentMode: 'Cash',
+      settlePaymentNotes: '',
+      processingSettlement: false,
 
       customer: {
         name: '',
@@ -1800,6 +2099,10 @@
       paymentMethods: { upi: '', card_terminal: '', custom_methods: [] },
       customPaymentNote: '',
       taxSettings: {{ tax_settings | tojson if tax_settings is defined and tax_settings else "{}" }},
+      printerSettings: {{ printer_settings | tojson if printer_settings is defined and printer_settings else "{}" }},
+      taxEnabled: true,
+      taxInclusive: false,
+      taxRateInput: 18,
 
 
       async init() {
@@ -1854,6 +2157,11 @@
               this.taxSettings = taxData.tax_settings;
             }
           }
+          if (this.taxSettings) {
+            this.taxEnabled = this.taxSettings.enabled !== false;
+            this.taxInclusive = this.taxSettings.tax_type === 'inclusive';
+            this.taxRateInput = Number(this.taxSettings.tax_rate != null ? this.taxSettings.tax_rate : 18) || 18;
+          }
         } catch (e) {
           console.log("POS catalog sync failed — using cached fallback:", e);
         } finally {
@@ -1871,6 +2179,7 @@
       // ---------- Customer lookup ----------
       onCustomerInput() {
         this.customer = { id: null, name: '', phone: '' };
+        this.customerDues = null;
         this.showCustomerResults = true;
         clearTimeout(this.customerSearchTimer);
         const q = this.customerQuery.trim();
@@ -1898,6 +2207,7 @@
         this.customerQuery = c.name;
         this.showCustomerResults = false;
         this.customerResults = [];
+        this.fetchCustomerDues(c.phone);
         this.saveCurrentTerminalDraft();
       },
 
@@ -1906,7 +2216,72 @@
         this.customerQuery = '';
         this.customerResults = [];
         this.showCustomerResults = false;
+        this.customerDues = null;
         this.saveCurrentTerminalDraft();
+      },
+
+      async fetchCustomerDues(phone) {
+        if (!phone) { this.customerDues = null; return; }
+        try {
+          const res = await fetch('/api/customers/' + encodeURIComponent(phone) + '/dues');
+          if (res.ok) {
+            const data = await res.json();
+            this.customerDues = data;
+          } else {
+            this.customerDues = null;
+          }
+        } catch (e) {
+          this.customerDues = null;
+        }
+      },
+
+      openSettleDuesModal() {
+        if (!this.customerDues || !this.customerDues.dues || this.customerDues.dues.length === 0) {
+          window.uiToast('No past due bills found for this customer.', 'info');
+          return;
+        }
+        this.selectDueBillToSettle(this.customerDues.dues[0]);
+        this.showSettleDuesModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      selectDueBillToSettle(bill) {
+        this.selectedDueBill = bill;
+        this.settlePaymentAmount = bill.due_amount;
+        this.settlePaymentNotes = '';
+        this.settlePaymentMode = 'Cash';
+      },
+
+      async recordSettlementPayment() {
+        if (!this.selectedDueBill || !this.settlePaymentAmount || this.settlePaymentAmount <= 0) return;
+        if (this.processingSettlement) return;
+        this.processingSettlement = true;
+        try {
+          const res = await fetch(`/api/bills/${this.selectedDueBill.id}/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: Number(this.settlePaymentAmount),
+              payment_mode: this.settlePaymentMode,
+              notes: this.settlePaymentNotes
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            window.uiToast(`Settlement of ₹${this.settlePaymentAmount} recorded for Bill #${this.selectedDueBill.id}!`, 'success');
+            await this.fetchCustomerDues(this.customer.phone);
+            if (this.customerDues && this.customerDues.dues && this.customerDues.dues.length > 0) {
+              this.selectDueBillToSettle(this.customerDues.dues[0]);
+            } else {
+              this.showSettleDuesModal = false;
+            }
+          } else {
+            window.uiToast((data && data.message) || 'Failed to record settlement.', 'error');
+          }
+        } catch (e) {
+          window.uiToast('Network error recording settlement.', 'error');
+        }
+        this.processingSettlement = false;
       },
 
 
@@ -1992,9 +2367,14 @@
             cartId: Date.now() + Math.random(),
             id: service.id,
             name: service.name,
-            price: service.price,
+            catalogPrice: Number(service.price),
+            price: Number(service.price),
             qty: 1,
-            staff: this.staffList[0]
+            staff: this.staffList[0] || 'Unassigned',
+            isSplitStaff: false,
+            staff2: this.staffList[1] || this.staffList[0] || 'Unassigned',
+            splitRatio1: 50,
+            splitRatio2: 50
           });
         }
         this.saveCurrentTerminalDraft();
@@ -2056,9 +2436,14 @@
           cartId: Date.now(),
           id: Date.now(),
           name: this.customItem.name,
-          price: this.customItem.price,
+          catalogPrice: Number(this.customItem.price),
+          price: Number(this.customItem.price),
           qty: 1,
-          staff: this.customItem.staff
+          staff: this.customItem.staff || 'Unassigned',
+          isSplitStaff: false,
+          staff2: 'Unassigned',
+          splitRatio1: 50,
+          splitRatio2: 50
         });
         this.customItem.name = '';
         this.showCustomItemModal = false;
@@ -2086,19 +2471,18 @@
       },
 
       get taxRate() {
-        if (!this.taxSettings || this.taxSettings.enabled === false) return 0;
-        return Number(this.taxSettings.tax_rate != null ? this.taxSettings.tax_rate : 18) || 0;
+        if (!this.taxEnabled) return 0;
+        return Number(this.taxRateInput) || 0;
       },
 
       get taxLabel() {
-        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxRate === 0) {
+        if (!this.taxEnabled || this.taxRate === 0) {
           return 'Tax (Exempt / 0%)';
         }
-        const name = this.taxSettings.tax_name || 'GST';
+        const name = (this.taxSettings && this.taxSettings.tax_name) || 'GST';
         const rate = this.taxRate;
-        const isIncl = this.taxSettings.tax_type === 'inclusive';
-        const suffix = isIncl ? ' (Incl.)' : '';
-        if (this.taxSettings.split_tax && name.toUpperCase().includes('GST')) {
+        const suffix = this.taxInclusive ? ' (Incl. in Total)' : '';
+        if (this.taxSettings && this.taxSettings.split_tax && name.toUpperCase().includes('GST')) {
           const half = rate / 2;
           const halfStr = Number.isInteger(half) ? half : half.toFixed(1);
           return `${name} (${rate}% : CGST ${halfStr}% + SGST ${halfStr}%)${suffix}`;
@@ -2107,10 +2491,10 @@
       },
 
       get taxAmount() {
-        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxRate === 0) {
+        if (!this.taxEnabled || this.taxRate === 0) {
           return 0;
         }
-        if (this.taxSettings.tax_type === 'inclusive') {
+        if (this.taxInclusive) {
           const base = this.taxableAmount / (1 + (this.taxRate / 100));
           return Math.round(this.taxableAmount - base);
         }
@@ -2118,10 +2502,22 @@
       },
 
       get grandTotal() {
-        if (!this.taxSettings || this.taxSettings.enabled === false || this.taxSettings.tax_type === 'inclusive') {
+        if (!this.taxEnabled || this.taxInclusive) {
           return this.taxableAmount;
         }
         return this.taxableAmount + this.taxAmount;
+      },
+
+      get dueAmount() {
+        const rec = Number(this.amountReceived);
+        return Math.max(0, this.grandTotal - (isNaN(rec) ? 0 : rec));
+      },
+
+      get paymentStatus() {
+        const rec = Number(this.amountReceived) || 0;
+        if (rec >= this.grandTotal && this.grandTotal > 0) return 'PAID';
+        if (rec > 0) return 'PARTIALLY_PAID';
+        return 'UNPAID';
       },
 
       // Split Payment Calculations & Helpers
@@ -2182,6 +2578,7 @@
       },
 
       openPaymentModal() {
+        this.amountReceived = this.grandTotal;
         this.cashReceived = this.grandTotal;
         const half = Math.floor(this.grandTotal / 2);
         this.splitRows = [
@@ -2197,8 +2594,8 @@
           window.uiToast('Add at least one service before collecting payment.', 'warning');
           return;
         }
-        if (!this.isSplitMode && this.selectedPaymentMode === 'Cash' && (this.cashReceived < this.grandTotal)) {
-          window.uiToast('Cash received is less than the total due.', 'error');
+        if (!this.isSplitMode && this.selectedPaymentMode === 'Cash' && this.amountReceived > 0 && (this.cashReceived < this.amountReceived)) {
+          window.uiToast('Cash received is less than the amount being paid today.', 'error');
           return;
         }
         if (this.isSplitMode) {
@@ -2238,13 +2635,29 @@
             discount: this.discountAmount,
             tax: this.taxAmount,
             grand_total: this.grandTotal,
+            amount_paid: Number(this.amountReceived) || 0,
+            due_amount: this.dueAmount,
+            payment_status: this.paymentStatus,
+            tax_enabled: this.taxEnabled,
+            tax_inclusive: this.taxInclusive,
+            tax_rate: this.taxRate,
             payment_mode: modeString,
             splits: splitsData,
             items: this.billItems.map(i => ({
               name: i.name,
-              price: i.price,
+              catalog_price: Number(i.catalogPrice != null ? i.catalogPrice : i.price),
+              price: Number(i.price),
+              unit_price: Number(i.price),
               qty: i.qty,
-              staff: i.staff || 'Unassigned'
+              staff: i.staff || 'Unassigned',
+              staff2: i.isSplitStaff ? i.staff2 : null,
+              split_ratio: i.isSplitStaff ? i.splitRatio1 : null,
+              staff_split: i.isSplitStaff ? {
+                staff1: i.staff,
+                ratio1: i.splitRatio1,
+                staff2: i.staff2,
+                ratio2: i.splitRatio2
+              } : null
             }))
           };
 
@@ -2264,6 +2677,9 @@
               discount: this.discountAmount,
               tax: this.taxAmount,
               grand_total: this.grandTotal,
+              amount_paid: payload.amount_paid,
+              due_amount: payload.due_amount,
+              payment_status: payload.payment_status,
               payment_mode: modeString,
               splits: splitsData,
               date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
@@ -2278,6 +2694,7 @@
             this.billItems = [];
             this.customer = { name: '', phone: '' };
             this.customerQuery = '';
+            this.customerDues = null;
             this.discountValue = 0;
             this.customPaymentNote = '';
             if (this.tier === 'studio') {
@@ -2332,6 +2749,14 @@
       get printGrandTotal() {
         if (this.billItems && this.billItems.length > 0) return this.grandTotal;
         return this.lastSavedBill ? this.lastSavedBill.grand_total : 0;
+      },
+      get printAmountPaid() {
+        if (this.lastSavedBill && this.lastSavedBill.amount_paid != null) return this.lastSavedBill.amount_paid;
+        return Number(this.amountReceived) || 0;
+      },
+      get printDueAmount() {
+        if (this.lastSavedBill && this.lastSavedBill.due_amount != null) return this.lastSavedBill.due_amount;
+        return this.dueAmount;
       },
       get printCustomer() {
         if (this.billItems && this.billItems.length > 0) return this.customer;

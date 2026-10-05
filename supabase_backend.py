@@ -826,6 +826,110 @@ class AuthorizationRepository:
             _warn(f"update_tax_settings({salon_id}) failed: {exc}")
             return False
 
+    def get_printer_settings(self, salon_id):
+        defaults = {
+            "paper_width": "3inch",
+            "auto_cut": True,
+            "header_text": "",
+            "footer_text": "Thank you for visiting! Have a glowing day.",
+        }
+        try:
+            row = _data(
+                _sb().table("salon_settings")
+                .select("printer_settings")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            if row and row.get("printer_settings"):
+                val = row["printer_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception as exc:
+            _warn(f"get_printer_settings({salon_id}) failed: {exc}")
+        return defaults
+
+    def update_printer_settings(self, salon_id, settings):
+        try:
+            settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+            existing = _data(
+                _sb().table("salon_settings")
+                .select("id")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            now = int(datetime.now().timestamp())
+            if existing:
+                _sb().table("salon_settings").update({
+                    "printer_settings": settings_json,
+                    "updated_at": now,
+                }).eq("salon_id", salon_id).execute()
+            else:
+                _sb().table("salon_settings").insert({
+                    "salon_id": salon_id,
+                    "printer_settings": settings_json,
+                    "created_at": now,
+                    "updated_at": now,
+                }).execute()
+            return True
+        except Exception as exc:
+            _warn(f"update_printer_settings({salon_id}) failed: {exc}")
+            return False
+
+    def get_whatsapp_settings(self, salon_id):
+        defaults = {
+            "enabled": True,
+            "provider": "mock",
+            "sender_phone": "",
+            "template_id": "booking_confirmation",
+        }
+        try:
+            row = _data(
+                _sb().table("salon_settings")
+                .select("whatsapp_settings")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            if row and row.get("whatsapp_settings"):
+                val = row["whatsapp_settings"]
+                res = json.loads(val) if isinstance(val, str) else val
+                if isinstance(res, dict):
+                    defaults.update(res)
+        except Exception as exc:
+            _warn(f"get_whatsapp_settings({salon_id}) failed: {exc}")
+        return defaults
+
+    def update_whatsapp_settings(self, salon_id, settings):
+        try:
+            settings_json = json.dumps(settings) if isinstance(settings, dict) else str(settings)
+            existing = _data(
+                _sb().table("salon_settings")
+                .select("id")
+                .eq("salon_id", salon_id)
+                .maybe_single()
+                .execute()
+            )
+            now = int(datetime.now().timestamp())
+            if existing:
+                _sb().table("salon_settings").update({
+                    "whatsapp_settings": settings_json,
+                    "updated_at": now,
+                }).eq("salon_id", salon_id).execute()
+            else:
+                _sb().table("salon_settings").insert({
+                    "salon_id": salon_id,
+                    "whatsapp_settings": settings_json,
+                    "created_at": now,
+                    "updated_at": now,
+                }).execute()
+            return True
+        except Exception as exc:
+            _warn(f"update_whatsapp_settings({salon_id}) failed: {exc}")
+            return False
+
     def create_account(self, auth_id, username, password, auth_level="admin", role_id=None):
         """Create a local AuraPOS account in the database.
 
@@ -2146,23 +2250,190 @@ class BillRepository:
         pass
 
     def create_bill(self, bill_id, account_id, client_name, client_phone, subtotal,
-                    discount, tax, grand_total, payment_mode, items_json, created_at=None):
+                    discount, tax, grand_total, payment_mode, items_json, amount_paid=None,
+                    due_amount=None, payment_status=None, tax_enabled=1, tax_inclusive=0,
+                    tax_rate=18.0, tax_amount=None, created_at=None):
         if created_at is None:
             created_at = int(datetime.now().timestamp())
+        subtotal = int(subtotal)
+        discount = int(discount)
+        tax = int(tax)
+        grand_total = int(grand_total)
+
+        if amount_paid is None:
+            amount_paid = grand_total
+        else:
+            amount_paid = max(0, min(grand_total, int(amount_paid)))
+
+        if due_amount is None:
+            due_amount = max(0, grand_total - amount_paid)
+        else:
+            due_amount = max(0, int(due_amount))
+
+        if not payment_status:
+            if amount_paid >= grand_total:
+                payment_status = "PAID"
+            elif amount_paid == 0:
+                payment_status = "UNPAID"
+            else:
+                payment_status = "PARTIALLY_PAID"
+
+        if tax_amount is None:
+            tax_amount = tax
+
         _sb().table("bills").insert({
             "id": bill_id,
             "account_id": account_id,
             "client_name": client_name,
             "client_phone": client_phone,
-            "subtotal": int(subtotal),
-            "discount": int(discount),
-            "tax": int(tax),
-            "grand_total": int(grand_total),
+            "subtotal": subtotal,
+            "discount": discount,
+            "tax": tax,
+            "grand_total": grand_total,
             "payment_mode": payment_mode,
             "created_at": created_at,
             "items_json": items_json,
+            "amount_paid": amount_paid,
+            "due_amount": due_amount,
+            "payment_status": payment_status,
+            "tax_enabled": int(tax_enabled),
+            "tax_inclusive": int(tax_inclusive),
+            "tax_rate": float(tax_rate),
+            "tax_amount": int(tax_amount),
         }).execute()
+
+        if amount_paid > 0:
+            try:
+                _sb().table("bill_payments").insert({
+                    "bill_id": bill_id,
+                    "account_id": account_id,
+                    "amount": amount_paid,
+                    "payment_mode": payment_mode,
+                    "received_by": "Cashier",
+                    "notes": "Initial invoice payment",
+                    "created_at": created_at,
+                }).execute()
+            except Exception as exc:
+                _warn(f"Initial payment log failed for bill {bill_id}: {exc}")
+
         return bill_id
+
+    def record_payment(self, bill_id, account_id, amount, payment_mode="Cash", received_by="Cashier", notes=""):
+        amount = int(amount)
+        if amount <= 0:
+            return {"success": False, "message": "Payment amount must be greater than zero."}
+        try:
+            res = _sb().table("bills").select("*").eq("id", bill_id).eq("account_id", account_id).maybe_single().execute()
+            bill = res.data if res else None
+            if not bill:
+                return {"success": False, "message": "Invoice not found."}
+            current_due = int(bill.get("due_amount") if bill.get("due_amount") is not None else max(0, bill["grand_total"] - (bill.get("amount_paid") or 0)))
+            if current_due <= 0:
+                return {"success": False, "message": "Invoice is already fully paid."}
+
+            pay_amount = min(amount, current_due)
+            now = int(datetime.now().timestamp())
+            new_paid = (bill.get("amount_paid") or 0) + pay_amount
+            new_due = max(0, bill["grand_total"] - new_paid)
+            new_status = "PAID" if new_due == 0 else "PARTIALLY_PAID"
+
+            _sb().table("bills").update({
+                "amount_paid": new_paid,
+                "due_amount": new_due,
+                "payment_status": new_status,
+            }).eq("id", bill_id).eq("account_id", account_id).execute()
+
+            pay_res = _sb().table("bill_payments").insert({
+                "bill_id": bill_id,
+                "account_id": account_id,
+                "amount": pay_amount,
+                "payment_mode": payment_mode,
+                "received_by": received_by or "Cashier",
+                "notes": notes or "Due settlement",
+                "created_at": now,
+            }).execute()
+            payment_id = pay_res.data[0]["id"] if (pay_res and pay_res.data) else 0
+
+            return {
+                "success": True,
+                "bill_id": bill_id,
+                "amount_paid": new_paid,
+                "due_amount": new_due,
+                "payment_status": new_status,
+                "payment_id": payment_id,
+                "settled_amount": pay_amount,
+                "message": f"Successfully received ₹{pay_amount:,} towards invoice {bill_id}."
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def get_bill_payments(self, bill_id, account_id):
+        try:
+            res = _sb().table("bill_payments").select("*").eq("bill_id", bill_id).eq("account_id", account_id).order("created_at", desc=False).execute()
+            return res.data or []
+        except Exception:
+            return []
+
+    def get_customer_dues(self, account_id, phone):
+        phone_clean = str(phone or "").strip()
+        if not phone_clean:
+            return []
+        try:
+            res = _sb().table("bills").select("id, client_name, client_phone, grand_total, amount_paid, due_amount, payment_status, created_at").eq("account_id", account_id).eq("client_phone", phone_clean).gt("due_amount", 0).order("created_at", desc=True).execute()
+            return res.data or []
+        except Exception:
+            return []
+
+    def get_bills_filtered(self, account_id, status=None, q=None, limit=50, offset=0):
+        self.seed_defaults_if_empty(account_id)
+        try:
+            query = _sb().table("bills").select("*", count="exact").eq("account_id", account_id)
+            if status:
+                s_lower = status.strip().lower()
+                if s_lower in ("due", "partially_paid", "partial"):
+                    query = query.gt("due_amount", 0)
+                elif s_lower == "paid":
+                    query = query.eq("payment_status", "PAID")
+                elif s_lower == "unpaid":
+                    query = query.eq("payment_status", "UNPAID")
+            if q and q.strip():
+                term = f"%{q.strip()}%"
+                query = query.or_(f"id.ilike.{term},client_name.ilike.{term},client_phone.ilike.{term}")
+
+            query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+            res = query.execute()
+            rows = res.data or []
+            total_count = res.count if res.count is not None else len(rows)
+
+            bills = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    items = json.loads(d.pop("items_json") or "[]")
+                except Exception:
+                    items = []
+                d["items"] = items if isinstance(items, list) else []
+                d.setdefault("amount_paid", d.get("grand_total", 0))
+                d.setdefault("due_amount", 0)
+                d.setdefault("payment_status", "PAID" if d.get("due_amount", 0) == 0 else "PARTIALLY_PAID")
+                bills.append(d)
+
+            total_invoiced = sum(b.get("grand_total", 0) for b in bills)
+            total_paid = sum(b.get("amount_paid", 0) for b in bills)
+            total_due = sum(b.get("due_amount", 0) for b in bills)
+
+            return {
+                "bills": bills,
+                "total": total_count,
+                "summary": {
+                    "total_invoiced": total_invoiced,
+                    "total_paid": total_paid,
+                    "total_due": total_due,
+                }
+            }
+        except Exception as exc:
+            _warn(f"get_bills_filtered failed: {exc}")
+            return {"bills": [], "total": 0, "summary": {"total_invoiced": 0, "total_paid": 0, "total_due": 0}}
 
     def bulk_add_bills(self, account_id, rows):
         """Mass-insert bills/invoices from uploaded CSV rows."""
@@ -2753,16 +3024,37 @@ class ReportRepository:
         return services[:limit]
 
     def staff_leaderboard(self, account_id, start_ts, end_ts):
-        rows = self._item_rows(account_id, start_ts, end_ts)
+        bills = self.bills_in_range(account_id, start_ts, end_ts)
         agg = {}
-        for r in rows:
-            base = self._base(r["staff"])
-            if not base:
-                continue
-            if base not in agg:
-                agg[base] = {"name": base, "revenue": 0, "services": 0}
-            agg[base]["revenue"] += r["revenue"]
-            agg[base]["services"] += r["qty"]
+        for b in bills:
+            for it in b.get("items", []):
+                if not isinstance(it, dict):
+                    continue
+                price = int(float(it.get("price", 0) or 0))
+                qty = int(float(it.get("qty", 1) or 1))
+                line_total = price * qty
+                splits = it.get("staff_split")
+                if isinstance(splits, list) and len(splits) > 0:
+                    for sp in splits:
+                        if isinstance(sp, dict):
+                            s_name = sp.get("name") or sp.get("staff")
+                            s_base = self._base(s_name)
+                            if not s_base:
+                                continue
+                            s_amt = int(float(sp.get("amount", 0) or 0))
+                            if s_base not in agg:
+                                agg[s_base] = {"name": s_base, "revenue": 0, "services": 0}
+                            agg[s_base]["revenue"] += s_amt
+                            agg[s_base]["services"] += 1
+                else:
+                    staff = str(it.get("staff", "") or "").strip()
+                    base = self._base(staff)
+                    if base:
+                        if base not in agg:
+                            agg[base] = {"name": base, "revenue": 0, "services": 0}
+                        agg[base]["revenue"] += line_total
+                        agg[base]["services"] += qty
+
         staff_list = StaffRepository().get_staff(account_id)
         known = {StaffRepository.base_name(s["name"]): s["role"] for s in staff_list}
         # Include roster members who made no sales in the window (they rank last).
