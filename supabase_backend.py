@@ -160,6 +160,13 @@ SYSTEM_PERMISSIONS = [
     {"key": "settings:read", "module": "Settings", "name": "View Salon Settings", "description": "View salon profile, hours, and preferences"},
     {"key": "settings:write", "module": "Settings", "name": "Edit Salon Settings", "description": "Update salon profile, schedule, and payment options"},
     {"key": "data:import_export", "module": "Settings", "name": "Import & Backup Data", "description": "Mass import CSV records and download backups"},
+
+    # Inventory & Retail Products
+    {"key": "inventory:read", "module": "Products & Retail", "name": "View Product Inventory", "description": "Browse retail products, stock levels and pricing"},
+    {"key": "inventory:write", "module": "Products & Retail", "name": "Manage Products & Stock", "description": "Add, edit, adjust stock and manage product catalog"},
+
+    # Customer Memberships
+    {"key": "memberships:manage", "module": "Memberships", "name": "Manage Memberships & Tiers", "description": "Configure membership tiers, pricing, discounts and assign perks"},
 ]
 
 ALL_PERMISSION_KEYS = [p["key"] for p in SYSTEM_PERMISSIONS]
@@ -2010,6 +2017,295 @@ class ServiceRepository:
             _sb().table("services").insert(rows).execute()
         except Exception as exc:
             _warn(f"service seed skipped: {exc}")
+
+
+class ProductRepository:
+    """Retail product inventory, pricing, stock levels and tax rates in Supabase."""
+
+    DEFAULTS = [
+        ("Moroccan Argan Hair Serum (100ml)", "Haircare", "ARG-100", 850, 450, 24, 18.0, "Deep repair nourishing argan oil serum for frizz control.", 1),
+        ("Keratin Thermal Protection Spray", "Styling", "KTS-200", 620, 320, 18, 18.0, "Heat defense spray up to 230°C before blowdrying.", 1),
+        ("Organic Shea Butter Body Polish", "Skincare", "SBP-150", 790, 410, 15, 18.0, "Exfoliating glow scrub enriched with vitamin E.", 1),
+        ("Matte Finish Strong Hold Clay", "Styling", "MHC-050", 490, 250, 30, 18.0, "Pliable clay pomade with textured natural matte finish.", 1),
+    ]
+
+    def get_products(self, account_id, active_only=False):
+        self.seed_defaults_if_empty(account_id)
+        q = _sb().table("products").select("*").eq("account_id", account_id)
+        if active_only:
+            q = q.eq("active", 1)
+        res = q.order("id", desc=True).execute()
+        rows = res.data or []
+        for r in rows:
+            r["stock_quantity"] = r.get("stock", 0)
+        return rows
+
+    def get_product(self, product_id, account_id):
+        res = _sb().table("products").select("*").eq("id", product_id).eq("account_id", account_id).limit(1).execute()
+        if not res.data:
+            return None
+        row = res.data[0]
+        row["stock_quantity"] = row.get("stock", 0)
+        return row
+
+    def add_product(self, account_id, name, category="Retail", sku="", barcode="", price=0, cost_price=0, stock=0, tax_rate=18.0, description="", active=1):
+        now = int(time.time())
+        row = {
+            "account_id": account_id,
+            "name": name.strip(),
+            "category": (category or "Retail").strip(),
+            "sku": (sku or "").strip(),
+            "barcode": (barcode or "").strip(),
+            "price": max(0, int(price)),
+            "cost_price": max(0, int(cost_price)),
+            "stock": max(0, int(stock)),
+            "tax_rate": float(tax_rate or 0.0),
+            "description": (description or "").strip(),
+            "active": 1 if active else 0,
+            "created_at": now,
+        }
+        res = _sb().table("products").insert(row).execute()
+        return res.data[0]["id"] if res.data else None
+
+    def update_product(self, product_id, account_id, name, category="Retail", sku="", barcode="", price=0, cost_price=0, stock=0, tax_rate=18.0, description="", active=1):
+        payload = {
+            "name": name.strip(),
+            "category": (category or "Retail").strip(),
+            "sku": (sku or "").strip(),
+            "barcode": (barcode or "").strip(),
+            "price": max(0, int(price)),
+            "cost_price": max(0, int(cost_price)),
+            "stock": max(0, int(stock)),
+            "tax_rate": float(tax_rate or 0.0),
+            "description": (description or "").strip(),
+            "active": 1 if active else 0,
+        }
+        res = _sb().table("products").update(payload).eq("id", product_id).eq("account_id", account_id).execute()
+        return bool(res.data)
+
+    def adjust_stock(self, product_id, account_id, delta):
+        prod = self.get_product(product_id, account_id)
+        if not prod:
+            return False
+        new_stock = max(0, int(prod.get("stock", 0) or 0) + int(delta))
+        res = _sb().table("products").update({"stock": new_stock}).eq("id", product_id).eq("account_id", account_id).execute()
+        return bool(res.data)
+
+    def delete_product(self, product_id, account_id):
+        res = _sb().table("products").delete().eq("id", product_id).eq("account_id", account_id).execute()
+        return bool(res.data)
+
+    def get_categories(self, account_id):
+        res = _sb().table("products").select("category").eq("account_id", account_id).execute()
+        cats = sorted(list({r["category"] for r in (res.data or []) if r.get("category")}))
+        return cats if cats else ["Retail", "Haircare", "Skincare", "Styling"]
+
+    def seed_defaults_if_empty(self, account_id):
+        count = (
+            _sb().table("products")
+            .select("id", count="exact")
+            .eq("account_id", account_id)
+            .execute()
+        ).count or 0
+        if count:
+            return
+        now = int(time.time())
+        rows = [
+            {
+                "account_id": account_id,
+                "name": d[0],
+                "category": d[1],
+                "sku": d[2],
+                "price": d[3],
+                "cost_price": d[4],
+                "stock": d[5],
+                "tax_rate": d[6],
+                "description": d[7],
+                "active": d[8],
+                "created_at": now,
+            }
+            for d in self.DEFAULTS
+        ]
+        try:
+            _sb().table("products").insert(rows).execute()
+        except Exception as exc:
+            _warn(f"product seed skipped: {exc}")
+
+
+class MembershipRepository:
+    """Membership tiers and customer memberships in Supabase."""
+
+    DEFAULTS = [
+        ("Silver Tier", "Essential salon membership with standard service discounts.", 1999, 365, 10.0, 5.0,
+         ["10% off all haircuts & hair treatments", "5% off retail products", "Priority weekend slot bookings"], "#94a3b8", 1),
+        ("Gold Privilege", "Our most popular salon membership with premium perks and free blowdrys.", 4999, 365, 15.0, 10.0,
+         ["15% off all salon services", "10% off retail products", "1 complimentary Hair Spa per quarter", "Free beverage on visits"], "#eab308", 1),
+        ("Platinum VIP Club", "Ultimate luxury membership with maximum discounts and concierge booking.", 9999, 365, 20.0, 15.0,
+         ["20% off all services & treatments", "15% off all retail products", "Unlimited free hair washes & styling", "Family member sharing allowed", "Personal master stylist reservation"], "#7928ca", 1),
+    ]
+
+    def get_tiers(self, account_id, active_only=False):
+        self.seed_defaults_if_empty(account_id)
+        q = _sb().table("membership_tiers").select("*").eq("account_id", account_id)
+        if active_only:
+            q = q.eq("active", 1)
+        res = q.order("price", desc=False).execute()
+        tiers = []
+        for r in (res.data or []):
+            d = dict(r)
+            try:
+                perks = json.loads(d.get("perks_json") or "[]")
+            except Exception:
+                perks = []
+            d["perks"] = perks if isinstance(perks, list) else []
+            tiers.append(d)
+        return tiers
+
+    def get_tier(self, tier_id, account_id):
+        res = _sb().table("membership_tiers").select("*").eq("id", tier_id).eq("account_id", account_id).limit(1).execute()
+        if not res.data:
+            return None
+        d = dict(res.data[0])
+        try:
+            d["perks"] = json.loads(d.get("perks_json") or "[]")
+        except Exception:
+            d["perks"] = []
+        return d
+
+    def add_tier(self, account_id, name, description="", price=0, duration_days=365, service_discount_pct=10.0, product_discount_pct=5.0, perks=None, color="#7928ca", active=1):
+        if perks is None:
+            perks = []
+        now = int(time.time())
+        row = {
+            "account_id": account_id,
+            "name": name.strip(),
+            "description": (description or "").strip(),
+            "price": max(0, int(price)),
+            "duration_days": max(1, int(duration_days)),
+            "service_discount_pct": float(service_discount_pct or 0.0),
+            "product_discount_pct": float(product_discount_pct or 0.0),
+            "perks_json": json.dumps(perks if isinstance(perks, list) else []),
+            "color": color or "#7928ca",
+            "active": 1 if active else 0,
+            "created_at": now,
+        }
+        res = _sb().table("membership_tiers").insert(row).execute()
+        return res.data[0]["id"] if res.data else None
+
+    def update_tier(self, tier_id, account_id, name, description="", price=0, duration_days=365, service_discount_pct=10.0, product_discount_pct=5.0, perks=None, color="#7928ca", active=1):
+        if perks is None:
+            perks = []
+        payload = {
+            "name": name.strip(),
+            "description": (description or "").strip(),
+            "price": max(0, int(price)),
+            "duration_days": max(1, int(duration_days)),
+            "service_discount_pct": float(service_discount_pct or 0.0),
+            "product_discount_pct": float(product_discount_pct or 0.0),
+            "perks_json": json.dumps(perks if isinstance(perks, list) else []),
+            "color": color or "#7928ca",
+            "active": 1 if active else 0,
+        }
+        res = _sb().table("membership_tiers").update(payload).eq("id", tier_id).eq("account_id", account_id).execute()
+        return bool(res.data)
+
+    def delete_tier(self, tier_id, account_id):
+        res = _sb().table("membership_tiers").delete().eq("id", tier_id).eq("account_id", account_id).execute()
+        return bool(res.data)
+
+    def assign_membership(self, account_id, customer_id, tier_id, price_paid=None, bill_id=""):
+        tier = self.get_tier(tier_id, account_id)
+        if not tier:
+            return None
+        now = int(time.time())
+        duration_days = int(tier.get("duration_days", 365) or 365)
+        expires_at = now + (duration_days * 86400)
+        paid = int(price_paid if price_paid is not None else tier.get("price", 0))
+
+        _sb().table("customers").update({
+            "membership_tier_id": tier_id,
+            "membership_tier_name": tier["name"],
+            "membership_expires_at": expires_at
+        }).eq("id", customer_id).eq("account_id", account_id).execute()
+
+        log_res = _sb().table("customer_memberships").insert({
+            "account_id": account_id,
+            "customer_id": customer_id,
+            "tier_id": tier_id,
+            "tier_name": tier["name"],
+            "price_paid": paid,
+            "bill_id": bill_id or "",
+            "starts_at": now,
+            "expires_at": expires_at,
+            "status": "ACTIVE",
+            "created_at": now
+        }).execute()
+
+        rec_id = log_res.data[0]["id"] if log_res.data else None
+        return {
+            "id": rec_id,
+            "tier_id": tier_id,
+            "tier_name": tier["name"],
+            "starts_at": now,
+            "expires_at": expires_at,
+            "service_discount_pct": tier.get("service_discount_pct", 0),
+            "product_discount_pct": tier.get("product_discount_pct", 0),
+            "perks": tier.get("perks", [])
+        }
+
+    def get_customer_membership(self, account_id, customer_id):
+        res = _sb().table("customers").select("membership_tier_id, membership_tier_name, membership_expires_at").eq("id", customer_id).eq("account_id", account_id).limit(1).execute()
+        if not res.data or not res.data[0].get("membership_tier_id"):
+            return None
+        cust = res.data[0]
+        tier = self.get_tier(cust["membership_tier_id"], account_id)
+        now = int(time.time())
+        expires_at = int(cust.get("membership_expires_at") or 0)
+        is_active = expires_at > now
+        service_disc = float(tier.get("service_discount_pct", 0) if tier else 0)
+        product_disc = float(tier.get("product_discount_pct", 0) if tier else 0)
+        perks = tier.get("perks", []) if tier else []
+        return {
+            "tier_id": cust["membership_tier_id"],
+            "tier_name": cust.get("membership_tier_name") or (tier["name"] if tier else ""),
+            "expires_at": expires_at,
+            "is_active": is_active,
+            "service_discount_pct": service_disc,
+            "product_discount_pct": product_disc,
+            "perks": perks,
+            "tier": tier
+        }
+
+    def seed_defaults_if_empty(self, account_id):
+        count = (
+            _sb().table("membership_tiers")
+            .select("id", count="exact")
+            .eq("account_id", account_id)
+            .execute()
+        ).count or 0
+        if count:
+            return
+        now = int(time.time())
+        rows = [
+            {
+                "account_id": account_id,
+                "name": d[0],
+                "description": d[1],
+                "price": d[2],
+                "duration_days": d[3],
+                "service_discount_pct": d[4],
+                "product_discount_pct": d[5],
+                "perks_json": json.dumps(d[6]),
+                "color": d[7],
+                "active": d[8],
+                "created_at": now,
+            }
+            for d in self.DEFAULTS
+        ]
+        try:
+            _sb().table("membership_tiers").insert(rows).execute()
+        except Exception as exc:
+            _warn(f"membership seed skipped: {exc}")
 
 
 class StaffRepository:

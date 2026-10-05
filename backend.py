@@ -132,6 +132,13 @@ SYSTEM_PERMISSIONS = [
     {"key": "settings:read", "module": "Settings", "name": "View Salon Settings", "description": "View salon profile, hours, and preferences"},
     {"key": "settings:write", "module": "Settings", "name": "Edit Salon Settings", "description": "Update salon profile, schedule, and payment options"},
     {"key": "data:import_export", "module": "Settings", "name": "Import & Backup Data", "description": "Mass import CSV records and download backups"},
+
+    # Inventory & Retail Products
+    {"key": "inventory:read", "module": "Products & Retail", "name": "View Product Inventory", "description": "Browse retail products, stock levels and pricing"},
+    {"key": "inventory:write", "module": "Products & Retail", "name": "Manage Products & Stock", "description": "Add, edit, adjust stock and manage product catalog"},
+
+    # Customer Memberships
+    {"key": "memberships:manage", "module": "Memberships", "name": "Manage Memberships & Tiers", "description": "Configure membership tiers, pricing, discounts and assign perks"},
 ]
 
 ALL_PERMISSION_KEYS = [p["key"] for p in SYSTEM_PERMISSIONS]
@@ -426,10 +433,82 @@ def ensure_schema_upgrades():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_payments_bill ON bill_payments(bill_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_payments_account ON bill_payments(account_id)")
 
+    # ================= PRODUCTS & INVENTORY TABLE =================
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            category TEXT DEFAULT 'Retail',
+            sku TEXT DEFAULT '',
+            barcode TEXT DEFAULT '',
+            price INTEGER NOT NULL DEFAULT 0,
+            cost_price INTEGER DEFAULT 0,
+            stock INTEGER NOT NULL DEFAULT 0,
+            tax_rate REAL DEFAULT 18.0,
+            description TEXT DEFAULT '',
+            active INTEGER DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_products_account ON products(account_id)")
+
+    # ================= MEMBERSHIP TIERS & CUSTOMER MEMBERSHIPS =================
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS membership_tiers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            price INTEGER NOT NULL DEFAULT 0,
+            duration_days INTEGER NOT NULL DEFAULT 365,
+            service_discount_pct REAL DEFAULT 10.0,
+            product_discount_pct REAL DEFAULT 5.0,
+            perks_json TEXT DEFAULT '[]',
+            color TEXT DEFAULT '#7928ca',
+            active INTEGER DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_membership_tiers_account ON membership_tiers(account_id)")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS customer_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            customer_id INTEGER NOT NULL,
+            tier_id INTEGER NOT NULL,
+            tier_name TEXT NOT NULL,
+            price_paid INTEGER DEFAULT 0,
+            bill_id TEXT DEFAULT '',
+            starts_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            status TEXT DEFAULT 'ACTIVE',
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE,
+            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+            FOREIGN KEY (tier_id) REFERENCES membership_tiers(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_cust_memberships_cust ON customer_memberships(customer_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_cust_memberships_account ON customer_memberships(account_id)")
+
+    # Add membership columns to customers table if not already present
+    cust_cols = {r["name"] for r in cur.execute("PRAGMA table_info(customers)").fetchall()}
+    if cust_cols:
+        if "membership_tier_id" not in cust_cols:
+            cur.execute("ALTER TABLE customers ADD COLUMN membership_tier_id INTEGER")
+        if "membership_tier_name" not in cust_cols:
+            cur.execute("ALTER TABLE customers ADD COLUMN membership_tier_name TEXT DEFAULT ''")
+        if "membership_expires_at" not in cust_cols:
+            cur.execute("ALTER TABLE customers ADD COLUMN membership_expires_at INTEGER")
+
     # Automatically sync PostgreSQL auto-increment sequences to max(id) to avoid
     # unique constraint violations if rows were seeded or imported with explicit IDs.
     if os.environ.get("USE_POSTGRES") or os.environ.get("DATABASE_URL"):
-        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings", "roles", "role_permissions", "bill_payments"]
+        sync_tables = ["salons", "accounts", "appointments", "services", "staff", "customers", "categories", "terminal_sessions", "terminal_drafts", "salon_settings", "roles", "role_permissions", "bill_payments", "products", "membership_tiers", "customer_memberships"]
         for tbl in sync_tables:
             try:
                 cur.execute(f"SELECT pg_get_serial_sequence('{tbl}', 'id') AS seq")
@@ -1818,6 +1897,371 @@ class ServiceRepository:
                 """,
                 [(account_id, *d) for d in defaults],
             )
+            conn.commit()
+        conn.close()
+
+
+class ProductRepository:
+    """Manages retail product inventory, pricing, stock levels, and tax rates."""
+    def __init__(self):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT DEFAULT 'Retail',
+                sku TEXT DEFAULT '',
+                barcode TEXT DEFAULT '',
+                price INTEGER NOT NULL DEFAULT 0,
+                cost_price INTEGER DEFAULT 0,
+                stock INTEGER NOT NULL DEFAULT 0,
+                tax_rate REAL DEFAULT 18.0,
+                description TEXT DEFAULT '',
+                active INTEGER DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def get_products(self, account_id, active_only=False):
+        self.seed_defaults_if_empty(account_id)
+        conn = get_db()
+        cur = conn.cursor()
+        if active_only:
+            rows = cur.execute(
+                "SELECT * FROM products WHERE account_id = ? AND active = 1 ORDER BY name COLLATE NOCASE",
+                (account_id,)
+            ).fetchall()
+        else:
+            rows = cur.execute(
+                "SELECT * FROM products WHERE account_id = ? ORDER BY id DESC",
+                (account_id,)
+            ).fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["stock_quantity"] = d.get("stock", 0)
+            result.append(d)
+        return result
+
+    def get_product(self, product_id, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT * FROM products WHERE id = ? AND account_id = ?",
+            (product_id, account_id)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        d["stock_quantity"] = d.get("stock", 0)
+        return d
+
+    def add_product(self, account_id, name, category="Retail", sku="", barcode="", price=0, cost_price=0, stock=0, tax_rate=18.0, description="", active=1):
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+        cur.execute("""
+            INSERT INTO products (account_id, name, category, sku, barcode, price, cost_price, stock, tax_rate, description, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (account_id, name.strip(), (category or "Retail").strip(), (sku or "").strip(), (barcode or "").strip(),
+              max(0, int(price)), max(0, int(cost_price)), max(0, int(stock)), float(tax_rate or 0.0),
+              (description or "").strip(), 1 if active else 0, now))
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+
+    def update_product(self, product_id, account_id, name, category="Retail", sku="", barcode="", price=0, cost_price=0, stock=0, tax_rate=18.0, description="", active=1):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE products
+            SET name = ?, category = ?, sku = ?, barcode = ?, price = ?, cost_price = ?, stock = ?, tax_rate = ?, description = ?, active = ?
+            WHERE id = ? AND account_id = ?
+        """, (name.strip(), (category or "Retail").strip(), (sku or "").strip(), (barcode or "").strip(),
+              max(0, int(price)), max(0, int(cost_price)), max(0, int(stock)), float(tax_rate or 0.0),
+              (description or "").strip(), 1 if active else 0, product_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def adjust_stock(self, product_id, account_id, delta):
+        """Increase or decrease inventory stock count atomically."""
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE products
+            SET stock = CASE WHEN stock + ? < 0 THEN 0 ELSE stock + ? END
+            WHERE id = ? AND account_id = ?
+        """, (int(delta), int(delta), product_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def delete_product(self, product_id, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM products WHERE id = ? AND account_id = ?", (product_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def get_categories(self, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT DISTINCT category FROM products WHERE account_id = ? AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category",
+            (account_id,)
+        ).fetchall()
+        conn.close()
+        cats = [r["category"] for r in rows if r["category"]]
+        return cats if cats else ["Retail", "Haircare", "Skincare", "Styling"]
+
+    def seed_defaults_if_empty(self, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        count = cur.execute("SELECT COUNT(*) as c FROM products WHERE account_id = ?", (account_id,)).fetchone()["c"]
+        if count == 0:
+            now = int(datetime.now().timestamp())
+            defaults = [
+                ("Moroccan Argan Hair Serum (100ml)", "Haircare", "ARG-100", 850, 450, 24, 18.0, "Deep repair nourishing argan oil serum for frizz control.", 1),
+                ("Keratin Thermal Protection Spray", "Styling", "KTS-200", 620, 320, 18, 18.0, "Heat defense spray up to 230°C before blowdrying.", 1),
+                ("Organic Shea Butter Body Polish", "Skincare", "SBP-150", 790, 410, 15, 18.0, "Exfoliating glow scrub enriched with vitamin E.", 1),
+                ("Matte Finish Strong Hold Clay", "Styling", "MHC-050", 490, 250, 30, 18.0, "Pliable clay pomade with textured natural matte finish.", 1),
+            ]
+            cur.executemany("""
+                INSERT INTO products (account_id, name, category, sku, price, cost_price, stock, tax_rate, description, active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [(account_id, *d[:9], now) for d in defaults])
+            conn.commit()
+        conn.close()
+
+
+class MembershipRepository:
+    """Manages subscription/membership tiers with perks, discounts, and customer assignments."""
+    def __init__(self):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS membership_tiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                price INTEGER NOT NULL DEFAULT 0,
+                duration_days INTEGER NOT NULL DEFAULT 365,
+                service_discount_pct REAL DEFAULT 10.0,
+                product_discount_pct REAL DEFAULT 5.0,
+                perks_json TEXT DEFAULT '[]',
+                color TEXT DEFAULT '#7928ca',
+                active INTEGER DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS customer_memberships (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                customer_id INTEGER NOT NULL,
+                tier_id INTEGER NOT NULL,
+                tier_name TEXT NOT NULL,
+                price_paid INTEGER DEFAULT 0,
+                bill_id TEXT DEFAULT '',
+                starts_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                status TEXT DEFAULT 'ACTIVE',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES salons(id) ON DELETE CASCADE,
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                FOREIGN KEY (tier_id) REFERENCES membership_tiers(id) ON DELETE CASCADE
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def get_tiers(self, account_id, active_only=False):
+        self.seed_defaults_if_empty(account_id)
+        conn = get_db()
+        cur = conn.cursor()
+        if active_only:
+            rows = cur.execute(
+                "SELECT * FROM membership_tiers WHERE account_id = ? AND active = 1 ORDER BY price ASC",
+                (account_id,)
+            ).fetchall()
+        else:
+            rows = cur.execute(
+                "SELECT * FROM membership_tiers WHERE account_id = ? ORDER BY price ASC",
+                (account_id,)
+            ).fetchall()
+        conn.close()
+        tiers = []
+        for r in rows:
+            d = dict(r)
+            try:
+                perks = json.loads(d.get("perks_json") or "[]")
+            except Exception:
+                perks = []
+            d["perks"] = perks if isinstance(perks, list) else []
+            tiers.append(d)
+        return tiers
+
+    def get_tier(self, tier_id, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT * FROM membership_tiers WHERE id = ? AND account_id = ?",
+            (tier_id, account_id)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["perks"] = json.loads(d.get("perks_json") or "[]")
+        except Exception:
+            d["perks"] = []
+        return d
+
+    def add_tier(self, account_id, name, description="", price=0, duration_days=365, service_discount_pct=10.0, product_discount_pct=5.0, perks=None, color="#7928ca", active=1):
+        if perks is None:
+            perks = []
+        conn = get_db()
+        cur = conn.cursor()
+        now = int(datetime.now().timestamp())
+        cur.execute("""
+            INSERT INTO membership_tiers (account_id, name, description, price, duration_days, service_discount_pct, product_discount_pct, perks_json, color, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (account_id, name.strip(), (description or "").strip(), max(0, int(price)),
+              max(1, int(duration_days)), float(service_discount_pct or 0.0), float(product_discount_pct or 0.0),
+              json.dumps(perks if isinstance(perks, list) else []), color or "#7928ca", 1 if active else 0, now))
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return new_id
+
+    def update_tier(self, tier_id, account_id, name, description="", price=0, duration_days=365, service_discount_pct=10.0, product_discount_pct=5.0, perks=None, color="#7928ca", active=1):
+        if perks is None:
+            perks = []
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE membership_tiers
+            SET name = ?, description = ?, price = ?, duration_days = ?, service_discount_pct = ?, product_discount_pct = ?, perks_json = ?, color = ?, active = ?
+            WHERE id = ? AND account_id = ?
+        """, (name.strip(), (description or "").strip(), max(0, int(price)),
+              max(1, int(duration_days)), float(service_discount_pct or 0.0), float(product_discount_pct or 0.0),
+              json.dumps(perks if isinstance(perks, list) else []), color or "#7928ca", 1 if active else 0, tier_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def delete_tier(self, tier_id, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM membership_tiers WHERE id = ? AND account_id = ?", (tier_id, account_id))
+        affected = cur.rowcount
+        conn.commit()
+        conn.close()
+        return affected > 0
+
+    def assign_membership(self, account_id, customer_id, tier_id, price_paid=None, bill_id=""):
+        """Assign or renew a membership tier for a customer and record the audit log."""
+        tier = self.get_tier(tier_id, account_id)
+        if not tier:
+            return None
+        now = int(datetime.now().timestamp())
+        duration_days = int(tier.get("duration_days", 365) or 365)
+        expires_at = now + (duration_days * 86400)
+        paid = int(price_paid if price_paid is not None else tier.get("price", 0))
+
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Update customer profile
+        cur.execute("""
+            UPDATE customers
+            SET membership_tier_id = ?, membership_tier_name = ?, membership_expires_at = ?
+            WHERE id = ? AND account_id = ?
+        """, (tier_id, tier["name"], expires_at, customer_id, account_id))
+
+        # Record history ledger
+        cur.execute("""
+            INSERT INTO customer_memberships (account_id, customer_id, tier_id, tier_name, price_paid, bill_id, starts_at, expires_at, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+        """, (account_id, customer_id, tier_id, tier["name"], paid, bill_id or "", now, expires_at, now))
+        membership_record_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return {
+            "id": membership_record_id,
+            "tier_id": tier_id,
+            "tier_name": tier["name"],
+            "starts_at": now,
+            "expires_at": expires_at,
+            "service_discount_pct": tier.get("service_discount_pct", 0),
+            "product_discount_pct": tier.get("product_discount_pct", 0),
+            "perks": tier.get("perks", [])
+        }
+
+    def get_customer_membership(self, account_id, customer_id):
+        """Fetch active membership details for a customer."""
+        conn = get_db()
+        cur = conn.cursor()
+        cust = cur.execute(
+            "SELECT membership_tier_id, membership_tier_name, membership_expires_at FROM customers WHERE id = ? AND account_id = ?",
+            (customer_id, account_id)
+        ).fetchone()
+        conn.close()
+        if not cust or not cust["membership_tier_id"]:
+            return None
+        tier = self.get_tier(cust["membership_tier_id"], account_id)
+        now = int(datetime.now().timestamp())
+        expires_at = int(cust["membership_expires_at"] or 0)
+        is_active = expires_at > now
+        service_disc = float(tier.get("service_discount_pct", 0) if tier else 0)
+        product_disc = float(tier.get("product_discount_pct", 0) if tier else 0)
+        perks = tier.get("perks", []) if tier else []
+        return {
+            "tier_id": cust["membership_tier_id"],
+            "tier_name": cust["membership_tier_name"] or (tier["name"] if tier else ""),
+            "expires_at": expires_at,
+            "is_active": is_active,
+            "service_discount_pct": service_disc,
+            "product_discount_pct": product_disc,
+            "perks": perks,
+            "tier": tier
+        }
+
+    def seed_defaults_if_empty(self, account_id):
+        conn = get_db()
+        cur = conn.cursor()
+        count = cur.execute("SELECT COUNT(*) as c FROM membership_tiers WHERE account_id = ?", (account_id,)).fetchone()["c"]
+        if count == 0:
+            now = int(datetime.now().timestamp())
+            defaults = [
+                ("Silver Tier", "Essential salon membership with standard service discounts.", 1999, 365, 10.0, 5.0,
+                 ["10% off all haircuts & hair treatments", "5% off retail products", "Priority weekend slot bookings"], "#94a3b8", 1),
+                ("Gold Privilege", "Our most popular salon membership with premium perks and free blowdrys.", 4999, 365, 15.0, 10.0,
+                 ["15% off all salon services", "10% off retail products", "1 complimentary Hair Spa per quarter", "Free beverage on visits"], "#eab308", 1),
+                ("Platinum VIP Club", "Ultimate luxury membership with maximum discounts and concierge booking.", 9999, 365, 20.0, 15.0,
+                 ["20% off all services & treatments", "15% off all retail products", "Unlimited free hair washes & styling", "Family member sharing allowed", "Personal master stylist reservation"], "#7928ca", 1),
+            ]
+            cur.executemany("""
+                INSERT INTO membership_tiers (account_id, name, description, price, duration_days, service_discount_pct, product_discount_pct, perks_json, color, active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [(account_id, d[0], d[1], d[2], d[3], d[4], d[5], json.dumps(d[6]), d[7], d[8], now) for d in defaults])
             conn.commit()
         conn.close()
 

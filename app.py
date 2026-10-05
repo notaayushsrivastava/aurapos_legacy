@@ -302,6 +302,8 @@ categoryRepo = CategoryRepository()
 reportRepo = ReportRepository()
 adminRepo = AdminRepository()
 terminalRepo = TerminalRepository()
+productRepo = ProductRepository()
+membershipRepo = MembershipRepository()
 
 # Short-lived per-instance cache for settings/salon metadata. Vercel may reuse a
 # function instance across requests, so this avoids repeated Supabase round-trips
@@ -1813,6 +1815,199 @@ def api_delete_category(category_id):
     return jsonify({"success": ok, "message": message}), (200 if ok else 409)
 
 
+# ================= PRODUCTS & INVENTORY APIS =================
+
+@app.get('/api/products')
+@login_required
+def api_get_products():
+    salon_id = session.get("id", 1)
+    active_only = request.args.get("active_only", "").lower() in ("1", "true", "yes")
+    products = productRepo.get_products(salon_id, active_only=active_only)
+    categories = productRepo.get_categories(salon_id)
+    return jsonify({"products": products, "categories": categories})
+
+
+@app.post('/api/products')
+@role_required("admin", "manager")
+def api_create_product():
+    if not (has_permission("inventory", "write") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: inventory:write required."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Product name is required."}), 400
+    new_id = productRepo.add_product(
+        account_id=salon_id,
+        name=name,
+        category=data.get("category", "Retail"),
+        sku=data.get("sku", ""),
+        barcode=data.get("barcode", ""),
+        price=data.get("price", 0),
+        cost_price=data.get("cost_price", 0),
+        stock=data.get("stock", data.get("stock_quantity", 0)),
+        tax_rate=data.get("tax_rate", 18.0),
+        description=data.get("description", ""),
+        active=data.get("active", 1)
+    )
+    product = productRepo.get_product(new_id, salon_id)
+    return jsonify({"success": True, "id": new_id, "product": product, "message": f"Product '{name}' created."}), 201
+
+
+@app.put('/api/products/<int:product_id>')
+@role_required("admin", "manager")
+def api_update_product(product_id):
+    if not (has_permission("inventory", "write") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: inventory:write required."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Product name is required."}), 400
+    ok = productRepo.update_product(
+        product_id=product_id,
+        account_id=salon_id,
+        name=name,
+        category=data.get("category", "Retail"),
+        sku=data.get("sku", ""),
+        barcode=data.get("barcode", ""),
+        price=data.get("price", 0),
+        cost_price=data.get("cost_price", 0),
+        stock=data.get("stock", 0),
+        tax_rate=data.get("tax_rate", 18.0),
+        description=data.get("description", ""),
+        active=data.get("active", 1)
+    )
+    return jsonify({"success": ok})
+
+
+@app.delete('/api/products/<int:product_id>')
+@role_required("admin", "manager")
+def api_delete_product(product_id):
+    if not (has_permission("inventory", "write") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: inventory:write required."}), 403
+    salon_id = session.get("id", 1)
+    ok = productRepo.delete_product(product_id, salon_id)
+    return jsonify({"success": ok})
+
+
+@app.post('/api/products/<int:product_id>/stock')
+@role_required("admin", "manager")
+def api_adjust_product_stock(product_id):
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    delta = int(data.get("adjustment", data.get("delta", 0)) or 0)
+    ok = productRepo.adjust_stock(product_id, salon_id, delta)
+    prod = productRepo.get_product(product_id, salon_id)
+    return jsonify({"success": ok, "product": prod})
+
+
+# ================= MEMBERSHIPS & TIERS APIS =================
+
+@app.get('/api/memberships/tiers')
+@login_required
+def api_get_membership_tiers():
+    salon_id = session.get("id", 1)
+    active_only = request.args.get("active_only", "").lower() in ("1", "true", "yes")
+    tiers = membershipRepo.get_tiers(salon_id, active_only=active_only)
+    return jsonify({"tiers": tiers})
+
+
+@app.post('/api/memberships/tiers')
+@role_required("admin", "manager")
+def api_create_membership_tier():
+    if not (has_permission("memberships", "manage") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: memberships:manage required."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Tier name is required."}), 400
+    new_id = membershipRepo.add_tier(
+        account_id=salon_id,
+        name=name,
+        description=data.get("description", ""),
+        price=data.get("price", 0),
+        duration_days=data.get("duration_days", data.get("validity_days", 365)),
+        service_discount_pct=data.get("service_discount_pct", 10.0),
+        product_discount_pct=data.get("product_discount_pct", 5.0),
+        perks=data.get("perks", []),
+        color=data.get("color", "#7928ca"),
+        active=data.get("active", 1)
+    )
+    tier = membershipRepo.get_tier(new_id, salon_id)
+    return jsonify({"success": True, "id": new_id, "tier": tier, "message": f"Membership tier '{name}' created."}), 201
+
+
+@app.put('/api/memberships/tiers/<int:tier_id>')
+@role_required("admin", "manager")
+def api_update_membership_tier(tier_id):
+    if not (has_permission("memberships", "manage") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: memberships:manage required."}), 403
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    name = str(data.get("name", "") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Tier name is required."}), 400
+    ok = membershipRepo.update_tier(
+        tier_id=tier_id,
+        account_id=salon_id,
+        name=name,
+        description=data.get("description", ""),
+        price=data.get("price", 0),
+        duration_days=data.get("duration_days", 365),
+        service_discount_pct=data.get("service_discount_pct", 10.0),
+        product_discount_pct=data.get("product_discount_pct", 5.0),
+        perks=data.get("perks", []),
+        color=data.get("color", "#7928ca"),
+        active=data.get("active", 1)
+    )
+    return jsonify({"success": ok})
+
+
+@app.delete('/api/memberships/tiers/<int:tier_id>')
+@role_required("admin", "manager")
+def api_delete_membership_tier(tier_id):
+    if not (has_permission("memberships", "manage") or session.get("auth_level") in ("admin", "manager")):
+        return jsonify({"success": False, "message": "Permission denied: memberships:manage required."}), 403
+    salon_id = session.get("id", 1)
+    ok = membershipRepo.delete_tier(tier_id, salon_id)
+    return jsonify({"success": ok})
+
+
+@app.post('/api/customers/<int:customer_id>/membership')
+@role_required("admin", "manager")
+def api_assign_customer_membership(customer_id):
+    salon_id = session.get("id", 1)
+    data = request.get_json() or {}
+    tier_id = int(data.get("tier_id", 0) or 0)
+    if not tier_id:
+        return jsonify({"success": False, "message": "tier_id is required."}), 400
+    res = membershipRepo.assign_membership(
+        account_id=salon_id,
+        customer_id=customer_id,
+        tier_id=tier_id,
+        price_paid=data.get("price_paid")
+    )
+    if not res:
+        return jsonify({"success": False, "message": "Tier or customer not found."}), 404
+    return jsonify({"success": True, "membership": res, "message": f"Assigned {res['tier_name']} to customer."})
+
+
+@app.get('/api/customers/<int:customer_id>/membership')
+@login_required
+def api_get_customer_membership(customer_id):
+    salon_id = session.get("id", 1)
+    mem = membershipRepo.get_customer_membership(salon_id, customer_id)
+    has_mem = bool(mem and mem.get("is_active"))
+    return jsonify({
+        "success": True,
+        "has_membership": has_mem,
+        "active_membership": mem if has_mem else None,
+        "membership": mem
+    })
+
+
 # ================= CUSTOMER LOOKUP (POS BILLING) =================
 
 @app.get('/api/customers/search')
@@ -2050,36 +2245,67 @@ def api_create_bill():
         tax_amount=tax_amount
     )
 
-    # Record stylist sales for leaderboard (supporting two-staff revenue splits)
+    # Record stylist sales for leaderboard & process product inventory and membership activations
     for item in items:
-        if isinstance(item, dict):
-            splits = item.get("staff_split")
-            if isinstance(splits, list) and len(splits) > 0:
-                for sp in splits:
-                    if isinstance(sp, dict):
-                        s_name = sp.get("name") or sp.get("staff")
-                        s_amt = int(float(sp.get("amount", 0) or 0))
-                        if s_name and s_amt > 0:
-                            staffRepo.record_sale(s_name, salon_id, s_amt)
-            elif isinstance(splits, dict) and splits.get("enabled"):
-                st1 = splits.get("stylist1")
-                st2 = splits.get("stylist2")
-                r1 = float(splits.get("ratio1", 50) or 50)
+        if not isinstance(item, dict):
+            continue
+
+        item_type = str(item.get("type", "service") or "service").lower()
+
+        # Handle retail product inventory decrement
+        if item_type == "product":
+            prod_id = item.get("id") or item.get("product_id")
+            qty = max(1, int(float(item.get("qty", 1) or 1)))
+            if prod_id:
+                try:
+                    productRepo.adjust_stock(prod_id, salon_id, -qty)
+                except Exception as e:
+                    logger.warning(f"Failed to decrement product stock for product {prod_id}: {e}")
+
+        # Handle membership sale auto-activation on customer
+        if item_type == "membership":
+            tier_id = item.get("tier_id") or item.get("id")
+            if tier_id and client_phone:
+                try:
+                    cust = customerRepo.get_by_phone(salon_id, client_phone)
+                    if cust:
+                        membershipRepo.assign_membership(
+                            account_id=salon_id,
+                            customer_id=cust["id"],
+                            tier_id=tier_id,
+                            price_paid=int(float(item.get("price", 0) or 0)),
+                            bill_id=bill_id
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to auto-assign membership {tier_id} for phone {client_phone}: {e}")
+
+        splits = item.get("staff_split")
+        if isinstance(splits, list) and len(splits) > 0:
+            for sp in splits:
+                if isinstance(sp, dict):
+                    s_name = sp.get("name") or sp.get("staff")
+                    s_amt = int(float(sp.get("amount", 0) or 0))
+                    if s_name and s_amt > 0:
+                        staffRepo.record_sale(s_name, salon_id, s_amt)
+        elif isinstance(splits, dict) and splits.get("enabled"):
+            st1 = splits.get("stylist1")
+            st2 = splits.get("stylist2")
+            r1 = float(splits.get("ratio1", 50) or 50)
+            price = int(float(item.get("price", 0) or 0))
+            qty = int(float(item.get("qty", 1) or 1))
+            line_total = price * qty
+            amt1 = int(round(line_total * r1 / 100.0))
+            amt2 = max(0, line_total - amt1)
+            if st1 and amt1 > 0:
+                staffRepo.record_sale(st1, salon_id, amt1)
+            if st2 and amt2 > 0:
+                staffRepo.record_sale(st2, salon_id, amt2)
+        else:
+            staff_name = item.get("staff")
+            if staff_name:
                 price = int(float(item.get("price", 0) or 0))
                 qty = int(float(item.get("qty", 1) or 1))
-                line_total = price * qty
-                amt1 = int(round(line_total * r1 / 100.0))
-                amt2 = max(0, line_total - amt1)
-                if st1 and amt1 > 0:
-                    staffRepo.record_sale(st1, salon_id, amt1)
-                if st2 and amt2 > 0:
-                    staffRepo.record_sale(st2, salon_id, amt2)
-            else:
-                staff_name = item.get("staff")
-                if staff_name:
-                    price = int(float(item.get("price", 0) or 0))
-                    qty = int(float(item.get("qty", 1) or 1))
-                    staffRepo.record_sale(staff_name, salon_id, price * qty)
+                staffRepo.record_sale(staff_name, salon_id, price * qty)
 
     # Auto-clean cloud terminal draft if completed from a terminal
     terminal_id = data.get("terminal_id")

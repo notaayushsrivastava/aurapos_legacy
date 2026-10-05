@@ -149,6 +149,18 @@
       {% endif %}
 
       {% if is_admin %}
+      <button @click="tab = 'memberships'"
+              :class="tab === 'memberships' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
+              class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
+        <span class="flex items-center gap-3">
+          <i data-lucide="award" class="w-4 h-4" :class="tab === 'memberships' ? 'text-violet-600 dark:text-neon-cyan' : 'text-neutral-400'"></i>
+          <span>Membership Tiers</span>
+        </span>
+        <span class="px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-[10px] font-bold font-mono-num text-neutral-600 dark:text-neutral-300" x-text="membershipTiers.length"></span>
+      </button>
+      {% endif %}
+
+      {% if is_admin %}
       <button @click="tab = 'data'"
               :class="tab === 'data' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-neon-cyan font-semibold' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900/60 dark:hover:text-white'"
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left">
@@ -1970,8 +1982,166 @@
 
       </section>
 
+      <!-- ============ CATEGORY: MEMBERSHIP TIERS MANAGEMENT ============ -->
+      <section x-show="tab === 'memberships'" x-cloak class="space-y-6">
+        <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#141210] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 shadow-sm space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-neutral-100 dark:border-neutral-800 gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                <i data-lucide="award" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-neutral-900 dark:text-white">Customer Membership Tiers</h3>
+                <p class="text-xs text-neutral-400">Configure VIP tiers, service/product discount perks, and validity periods.</p>
+              </div>
+            </div>
+            <button @click="openAddTierModal()" 
+                    class="px-4 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center gap-2 hover:opacity-95 transition-all self-start sm:self-auto">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Create New Tier</span>
+            </button>
+          </div>
+
+          <!-- Membership Tiers Grid Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <template x-for="tier in membershipTiers" :key="tier.id">
+              <div class="p-5 rounded-2xl border transition-all flex flex-col justify-between group relative overflow-hidden"
+                   :class="tier.active ? 'bg-neutral-50/50 dark:bg-neutral-900/40 border-neutral-200 dark:border-neutral-800 hover:border-violet-500/50' : 'bg-neutral-100/40 dark:bg-neutral-900/20 border-dashed border-neutral-300 dark:border-neutral-800 opacity-70'">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider text-white"
+                          :style="'background-color: ' + (tier.color || '#7928ca')"
+                          x-text="tier.name"></span>
+                    <span class="text-xs font-bold font-mono-num text-neutral-900 dark:text-white">
+                      ₹<span x-text="Number(tier.price).toLocaleString('en-IN')"></span>
+                    </span>
+                  </div>
+                  <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-2 line-clamp-2" x-text="tier.description || 'Standard membership plan'"></p>
+                  
+                  <div class="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-neutral-200/60 dark:border-neutral-800 text-[11px] font-mono-num">
+                    <div class="p-2 rounded-xl bg-white dark:bg-[#141210] border border-neutral-200/60 dark:border-neutral-800">
+                      <span class="text-neutral-400 block text-[9px] uppercase font-sans">Service Disc</span>
+                      <span class="font-bold text-violet-600 dark:text-neon-cyan" x-text="tier.service_discount_pct + '%'"></span>
+                    </div>
+                    <div class="p-2 rounded-xl bg-white dark:bg-[#141210] border border-neutral-200/60 dark:border-neutral-800">
+                      <span class="text-neutral-400 block text-[9px] uppercase font-sans">Product Disc</span>
+                      <span class="font-bold text-emerald-600 dark:text-emerald-400" x-text="tier.product_discount_pct + '%'"></span>
+                    </div>
+                  </div>
+
+                  <!-- Perks list -->
+                  <div class="mt-3 space-y-1">
+                    <span class="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider">Perks Included:</span>
+                    <template x-for="(perk, pIdx) in (tier.perks || [])" :key="pIdx">
+                      <div class="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300">
+                        <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
+                        <span class="truncate" x-text="perk"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-neutral-200/60 dark:border-neutral-800 flex items-center justify-between text-xs">
+                  <span class="text-[10px] text-neutral-400 font-mono-num" x-text="tier.duration_days + ' days validity'"></span>
+                  <div class="flex items-center gap-1">
+                    <button @click="openEditTierModal(tier)" class="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors" title="Edit Tier">
+                      <i data-lucide="pencil" class="w-4 h-4"></i>
+                    </button>
+                    <button @click="deleteTier(tier.id)" class="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors" title="Delete Tier">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+
     </div>
 
+  </div>
+
+  <!-- ================= ADD / EDIT MEMBERSHIP TIER MODAL ================= -->
+  <div x-show="showTierModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+         @click.away="showTierModal = false">
+      
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+            <i data-lucide="award" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-lg font-bold text-neutral-900 dark:text-white" x-text="isEditingTier ? 'Edit Membership Tier' : 'Create Membership Tier'"></h3>
+        </div>
+        <button @click="showTierModal = false" class="text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form @submit.prevent="saveTier()" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Tier Name</label>
+          <input type="text" x-model="tierForm.name" required placeholder="e.g. Diamond Elite" 
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Price (₹)</label>
+            <input type="number" min="0" x-model.number="tierForm.price" required placeholder="2999" 
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Validity (Days)</label>
+            <input type="number" min="1" x-model.number="tierForm.duration_days" required placeholder="365" 
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Service Discount (%)</label>
+            <input type="number" min="0" max="100" step="0.5" x-model.number="tierForm.service_discount_pct" placeholder="15" 
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Product Discount (%)</label>
+            <input type="number" min="0" max="100" step="0.5" x-model.number="tierForm.product_discount_pct" placeholder="10" 
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Perks (One per line)</label>
+          <textarea x-model="tierForm.perksText" rows="3" placeholder="10% off haircuts&#10;1 free blowdry every month&#10;Complimentary beverage" 
+                    class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Description</label>
+          <input type="text" x-model="tierForm.description" placeholder="Short description of tier" 
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+          <button type="button" @click="showTierModal = false" class="px-4 py-2 rounded-xl text-neutral-600 dark:text-neutral-400 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-neon-magenta/25 hover:opacity-95 transition-all">
+            <span x-text="isEditingTier ? 'Update Tier' : 'Save Tier'"></span>
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Toast Notification -->
@@ -2060,13 +2230,14 @@
       async init() {
         window.addEventListener('hashchange', () => {
           const hash = (window.location.hash || '').replace('#', '');
-          const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'printer', 'whatsapp', 'data', 'subscription'];
+          const valid = ['profile', 'team', 'roles', 'booking-link', 'payments', 'taxes', 'printer', 'whatsapp', 'memberships', 'data', 'subscription'];
           if (valid.includes(hash)) this.tab = hash;
         });
 
         await Promise.all([
           this.loadPaymentMethods(),
-          this.loadTaxSettings()
+          this.loadTaxSettings(),
+          this.loadMembershipTiers()
         ]);
         this.refreshIcons();
 
@@ -2487,6 +2658,113 @@
           this.notify('Network error — please retry.', 'error');
         }
         this.savingWhatsapp = false;
+      },
+
+      // ---------- Customer Membership Tiers ----------
+      membershipTiers: [],
+      showTierModal: false,
+      isEditingTier: false,
+      tierForm: {
+        id: null,
+        name: '',
+        price: 1999,
+        duration_days: 365,
+        service_discount_pct: 10,
+        product_discount_pct: 5,
+        perksText: '',
+        description: '',
+        color: '#7928ca'
+      },
+      async loadMembershipTiers() {
+        try {
+          const res = await fetch('/api/memberships/tiers');
+          if (res.ok) {
+            const data = await res.json();
+            this.membershipTiers = data.tiers || [];
+          }
+        } catch (e) {
+          console.log('Failed to load membership tiers:', e);
+        }
+        this.refreshIcons();
+      },
+      openAddTierModal() {
+        this.isEditingTier = false;
+        this.tierForm = {
+          id: null,
+          name: '',
+          price: 1999,
+          duration_days: 365,
+          service_discount_pct: 10,
+          product_discount_pct: 5,
+          perksText: '10% off services\n5% off products\nPriority appointments',
+          description: '',
+          color: '#7928ca'
+        };
+        this.showTierModal = true;
+        this.refreshIcons();
+      },
+      openEditTierModal(tier) {
+        this.isEditingTier = true;
+        this.tierForm = {
+          id: tier.id,
+          name: tier.name,
+          price: tier.price,
+          duration_days: tier.duration_days,
+          service_discount_pct: tier.service_discount_pct,
+          product_discount_pct: tier.product_discount_pct,
+          perksText: (tier.perks || []).join('\n'),
+          description: tier.description || '',
+          color: tier.color || '#7928ca'
+        };
+        this.showTierModal = true;
+        this.refreshIcons();
+      },
+      async saveTier() {
+        const perks = this.tierForm.perksText.split('\n').map(s => s.trim()).filter(Boolean);
+        const payload = {
+          name: this.tierForm.name,
+          price: this.tierForm.price,
+          duration_days: this.tierForm.duration_days,
+          service_discount_pct: this.tierForm.service_discount_pct,
+          product_discount_pct: this.tierForm.product_discount_pct,
+          perks: perks,
+          description: this.tierForm.description,
+          color: this.tierForm.color
+        };
+        try {
+          if (this.isEditingTier && this.tierForm.id) {
+            const res = await fetch(`/api/memberships/tiers/${this.tierForm.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            this.notify(data.success ? 'Membership tier updated.' : (data.message || 'Error updating tier.'), data.success ? 'success' : 'error');
+          } else {
+            const res = await fetch('/api/memberships/tiers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            this.notify(data.message || 'Membership tier created.', data.success ? 'success' : 'error');
+          }
+          await this.loadMembershipTiers();
+          this.showTierModal = false;
+        } catch (e) {
+          this.notify('Network error saving membership tier.', 'error');
+        }
+      },
+      async deleteTier(id) {
+        if (!confirm('Are you sure you want to delete this membership tier?')) return;
+        try {
+          const res = await fetch(`/api/memberships/tiers/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          this.notify(data.success ? 'Membership tier deleted.' : (data.message || 'Error deleting tier.'), data.success ? 'success' : 'error');
+          await this.loadMembershipTiers();
+        } catch (e) {
+          this.notify('Network error deleting tier.', 'error');
+        }
       },
 
       // ---------- RBAC: Roles & Permissions ----------

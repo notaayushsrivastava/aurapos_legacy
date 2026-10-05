@@ -716,6 +716,174 @@ class TestAllFeatures(unittest.TestCase):
         self.assertTrue(data.get('success'))
         self.assertIn('booking_id', data)
 
+    def test_product_inventory_and_billing_decrement(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # 1. Create a retail product
+        prod_payload = {
+            'name': 'Moroccan Argan Hair Serum',
+            'category': 'Hair Care',
+            'brand': 'Moroccanoil',
+            'sku': 'MOR-SERUM-100',
+            'price': 1800,
+            'cost_price': 1100,
+            'stock_quantity': 15,
+            'tax_rate': 18,
+            'barcode': '8901234567890'
+        }
+        res = self.client.post('/api/products', json=prod_payload)
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        prod_id = data['product']['id']
+        self.assertEqual(data['product']['stock_quantity'], 15)
+
+        # 2. Adjust stock
+        res = self.client.post(f'/api/products/{prod_id}/stock', json={'adjustment': 5, 'reason': 'Restock batch'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()['product']['stock_quantity'], 20)
+
+        # 3. Sell product on invoice and verify inventory decrement
+        bill_payload = {
+            'terminal_id': '01',
+            'client_name': 'Aarav Mehta',
+            'client_phone': '9811122334',
+            'subtotal': 3600,
+            'discount': 0,
+            'tax': 648,
+            'grand_total': 4248,
+            'amount_paid': 4248,
+            'due_amount': 0,
+            'payment_status': 'PAID',
+            'payment_mode': 'UPI',
+            'tax_enabled': True,
+            'tax_inclusive': False,
+            'tax_rate': 18,
+            'items': [
+                {
+                    'id': prod_id,
+                    'product_id': prod_id,
+                    'name': 'Moroccan Argan Hair Serum',
+                    'type': 'product',
+                    'price': 1800,
+                    'qty': 2,
+                    'tax_rate': 18,
+                    'staff': 'Alex Rivera'
+                }
+            ]
+        }
+        b_res = self.client.post('/api/bills', json=bill_payload)
+        self.assertEqual(b_res.status_code, 200)
+        self.assertTrue(b_res.get_json()['success'])
+
+        # Verify stock decreased from 20 to 18
+        p_res = self.client.get('/api/products')
+        self.assertEqual(p_res.status_code, 200)
+        products = p_res.get_json()['products']
+        p_item = next((p for p in products if p['id'] == prod_id), None)
+        self.assertIsNotNone(p_item)
+        self.assertEqual(p_item['stock_quantity'], 18)
+
+    def test_membership_tier_management_and_bill_activation(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        suffix1 = str(int(datetime.now().timestamp()))[-6:]
+        phone1 = f"98{suffix1}11"
+        phone2 = f"98{suffix1}22"
+
+        # 1. Create a customer
+        c_res = self.client.post('/api/customers', json={
+            'name': 'Pooja Hegde',
+            'phone': phone1,
+            'email': f'pooja_{suffix1}@example.com'
+        })
+        self.assertIn(c_res.status_code, [200, 201])
+        c_data = c_res.get_json()
+        cust_id = c_data['customer']['id'] if 'customer' in c_data else c_data['id']
+
+        # 2. Create a membership tier
+        tier_payload = {
+            'name': f'Platinum VIP Privilege {suffix1}',
+            'price': 5000,
+            'validity_days': 180,
+            'service_discount_pct': 20,
+            'product_discount_pct': 15,
+            'perks': ['20% discount on all salon services', '15% discount on retail products', 'Free scalp spa analysis on birthdays'],
+            'description': 'Exclusive high-tier membership for premium clients'
+        }
+        t_res = self.client.post('/api/memberships/tiers', json=tier_payload)
+        self.assertEqual(t_res.status_code, 201)
+        tier_id = t_res.get_json()['tier']['id']
+
+        # 3. Direct assignment to customer
+        assign_res = self.client.post(f'/api/customers/{cust_id}/membership', json={'tier_id': tier_id})
+        self.assertEqual(assign_res.status_code, 200)
+        self.assertTrue(assign_res.get_json()['success'])
+
+        # Read back customer membership
+        mem_check = self.client.get(f'/api/customers/{cust_id}/membership')
+        self.assertEqual(mem_check.status_code, 200)
+        check_data = mem_check.get_json()
+        self.assertTrue(check_data['has_membership'])
+        self.assertEqual(check_data['active_membership']['tier_id'], tier_id)
+        self.assertEqual(check_data['active_membership']['service_discount_pct'], 20)
+
+        # 4. Sell membership via invoice to another customer and test auto-assignment
+        c2_res = self.client.post('/api/customers', json={
+            'name': 'Kavya Nair',
+            'phone': phone2,
+            'email': f'kavya_{suffix1}@example.com'
+        })
+        self.assertIn(c2_res.status_code, [200, 201])
+        c2_data = c2_res.get_json()
+        cust2_id = c2_data['customer']['id'] if 'customer' in c2_data else c2_data['id']
+
+        # Sell membership in bill
+        bill_mem_payload = {
+            'terminal_id': '01',
+            'client_name': 'Kavya Nair',
+            'client_phone': phone2,
+            'subtotal': 5000,
+            'discount': 0,
+            'tax': 0,
+            'grand_total': 5000,
+            'amount_paid': 5000,
+            'due_amount': 0,
+            'payment_status': 'PAID',
+            'payment_mode': 'Card',
+            'tax_enabled': False,
+            'tax_inclusive': False,
+            'tax_rate': 0,
+            'items': [
+                {
+                    'id': tier_id,
+                    'tier_id': tier_id,
+                    'name': 'Platinum VIP Privilege Membership',
+                    'type': 'membership',
+                    'price': 5000,
+                    'qty': 1,
+                    'staff': 'Unassigned'
+                }
+            ]
+        }
+        b_res = self.client.post('/api/bills', json=bill_mem_payload)
+        self.assertEqual(b_res.status_code, 200)
+        self.assertTrue(b_res.get_json()['success'])
+
+        # Verify customer #2 now has active membership
+        mem2_check = self.client.get(f'/api/customers/{cust2_id}/membership')
+        self.assertEqual(mem2_check.status_code, 200)
+        check2_data = mem2_check.get_json()
+        self.assertTrue(check2_data['has_membership'])
+        self.assertEqual(check2_data['active_membership']['tier_id'], tier_id)
+        self.assertEqual(check2_data['active_membership']['tier_name'], tier_payload['name'])
+
 
 if __name__ == '__main__':
     unittest.main()

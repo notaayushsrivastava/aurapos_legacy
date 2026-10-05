@@ -314,6 +314,12 @@
                     <div class="flex items-center gap-2">
                       <p class="font-bold text-neutral-900 dark:text-white group-hover:text-violet-600 dark:group-hover:text-neon-cyan transition-colors" x-text="c.name"></p>
                       <span x-show="c.gender" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200/60 dark:border-neutral-700/60" x-text="c.gender"></span>
+                      <template x-if="c.membership_tier_name">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                          <i data-lucide="crown" class="w-2.5 h-2.5"></i>
+                          <span x-text="c.membership_tier_name"></span>
+                        </span>
+                      </template>
                     </div>
                     <p class="text-[10px] text-neutral-400 font-mono-num" x-text="'Joined ' + formatDate(c.created_at)"></p>
                   </div>
@@ -747,6 +753,50 @@
         <template x-if="!loadingDetails">
           <div class="space-y-6">
 
+            <!-- ================= ACTIVE MEMBERSHIP CARD ================= -->
+            <div class="p-4 rounded-2xl border transition-all"
+                 :class="customerDetails && customerDetails.membership_tier_id 
+                         ? 'bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30' 
+                         : 'bg-neutral-50 dark:bg-neutral-900/60 border-neutral-200/80 dark:border-neutral-800/80'">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                       :class="customerDetails && customerDetails.membership_tier_id 
+                               ? 'bg-amber-500/20 text-amber-500' 
+                               : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400'">
+                    <i data-lucide="crown" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h4 class="text-xs font-bold text-neutral-900 dark:text-white"
+                          x-text="customerDetails && customerDetails.membership_tier_name ? customerDetails.membership_tier_name + ' Membership' : 'No Active Membership'"></h4>
+                      <template x-if="customerDetails && customerDetails.membership_tier_id">
+                        <span class="px-2 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400">Active</span>
+                      </template>
+                    </div>
+                    <p class="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                      <template x-if="customerDetails && customerDetails.membership_expires_at">
+                        <span>Expires on <strong class="font-mono-num text-neutral-800 dark:text-neutral-200" x-text="formatDate(customerDetails.membership_expires_at)"></strong></span>
+                      </template>
+                      <template x-if="!customerDetails || !customerDetails.membership_tier_id">
+                        <span>Enroll client into a membership tier for automated discounts on services and products.</span>
+                      </template>
+                    </p>
+                  </div>
+                </div>
+
+                <button type="button"
+                        @click="openAssignMembershipModal(customerDetails)"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1.5"
+                        :class="customerDetails && customerDetails.membership_tier_id 
+                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100' 
+                                : 'btn-brand text-white shadow-sm'">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                  <span x-text="customerDetails && customerDetails.membership_tier_id ? 'Change Tier' : 'Assign Tier'"></span>
+                </button>
+              </div>
+            </div>
+
             <!-- Preferences / Notes (if available) -->
             <div x-show="customerDetails && customerDetails.notes" class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/70 dark:border-neutral-800/70 text-xs">
               <span class="font-bold text-neutral-700 dark:text-neutral-300 block mb-0.5 flex items-center gap-1.5">
@@ -978,6 +1028,83 @@
         <button @click="showBillDetailModal = false"
                 class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
           Back
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= ASSIGN / UPGRADE MEMBERSHIP MODAL ================= -->
+  <div x-show="showAssignMembershipModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-5"
+         @click.away="if (!assigningMembership) showAssignMembershipModal = false">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-200/80 dark:border-neutral-800/80">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+            <i data-lucide="crown" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-neutral-900 dark:text-white">Assign Membership Tier</h3>
+            <p class="text-xs text-neutral-400" x-text="membershipCustomer ? 'Customer: ' + membershipCustomer.name : 'Select membership'"></p>
+          </div>
+        </div>
+        <button @click="showAssignMembershipModal = false" :disabled="assigningMembership" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Tier Selection Cards -->
+      <div class="space-y-3 max-h-80 overflow-y-auto pr-1">
+        <template x-if="membershipTiers.length === 0">
+          <div class="p-6 text-center rounded-2xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/80 dark:border-neutral-800/80 text-neutral-400 text-xs">
+            <p class="font-semibold">No membership tiers found.</p>
+            <p class="mt-1 text-[11px]">Go to Settings &gt; Membership Tiers to create tier plans first.</p>
+          </div>
+        </template>
+
+        <template x-for="tier in membershipTiers" :key="tier.id">
+          <label class="p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 relative"
+                 :class="selectedTierId === tier.id 
+                         ? 'bg-amber-500/10 border-amber-500 ring-1 ring-amber-500/30' 
+                         : 'bg-neutral-50 dark:bg-neutral-900/60 border-neutral-200/80 dark:border-neutral-800/80 hover:border-neutral-300 dark:hover:border-neutral-700'">
+            <input type="radio" :value="tier.id" x-model="selectedTierId" class="mt-1 text-amber-600 focus:ring-amber-500">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-bold text-sm text-neutral-900 dark:text-white" x-text="tier.name"></span>
+                <span class="font-bold font-mono-num text-sm text-neutral-900 dark:text-white">₹<span x-text="tier.price"></span></span>
+              </div>
+              <div class="flex items-center gap-2 mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                <span class="font-semibold text-emerald-600 dark:text-emerald-400" x-text="tier.service_discount_pct + '% off svc'"></span>
+                <span>·</span>
+                <span class="font-semibold text-teal-600 dark:text-teal-400" x-text="tier.product_discount_pct + '% off prod'"></span>
+                <span>·</span>
+                <span x-text="tier.validity_days + ' days validity'"></span>
+              </div>
+              <p x-show="tier.description" class="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2" x-text="tier.description"></p>
+            </div>
+          </label>
+        </template>
+      </div>
+
+      <p x-show="assignMembershipError" x-cloak class="text-xs font-semibold text-rose-500" x-text="assignMembershipError"></p>
+
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+        <button type="button" @click="showAssignMembershipModal = false" :disabled="assigningMembership"
+                class="px-4 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors">
+          Cancel
+        </button>
+        <button type="button" @click="submitAssignMembership()" :disabled="!selectedTierId || assigningMembership"
+                class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md shadow-amber-500/25 flex items-center gap-2 hover:opacity-95 transition-all disabled:opacity-50 active:scale-95">
+          <i data-lucide="crown" class="w-4 h-4" :class="assigningMembership ? 'animate-bounce' : ''"></i>
+          <span x-text="assigningMembership ? 'Assigning…' : 'Confirm Assignment'"></span>
         </button>
       </div>
 
@@ -1333,6 +1460,81 @@
         if (!ts) return '—';
         const d = new Date(ts * 1000);
         return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      },
+
+      // Membership tier assignment modal state
+      showAssignMembershipModal: false,
+      membershipCustomer: null,
+      membershipTiers: [],
+      selectedTierId: null,
+      assigningMembership: false,
+      assignMembershipError: '',
+
+      async openAssignMembershipModal(customer) {
+        this.membershipCustomer = customer;
+        this.assignMembershipError = '';
+        this.selectedTierId = (customer && customer.membership_tier_id) ? customer.membership_tier_id : null;
+        this.showAssignMembershipModal = true;
+        this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+
+        if (this.membershipTiers.length === 0) {
+          try {
+            const res = await fetch('/api/memberships/tiers?active_only=1');
+            if (res.ok) {
+              const data = await res.json();
+              this.membershipTiers = data.tiers || [];
+              if (!this.selectedTierId && this.membershipTiers.length > 0) {
+                this.selectedTierId = this.membershipTiers[0].id;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to load membership tiers:', e);
+          }
+        }
+      },
+
+      async submitAssignMembership() {
+        if (!this.membershipCustomer || !this.selectedTierId) return;
+        this.assigningMembership = true;
+        this.assignMembershipError = '';
+
+        try {
+          const res = await fetch(`/api/customers/${this.membershipCustomer.id}/membership`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier_id: this.selectedTierId })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            const tier = this.membershipTiers.find(t => t.id === this.selectedTierId);
+            const tierName = tier ? tier.name : 'Active';
+
+            // Update local customer object and directory item
+            if (this.customerDetails && this.customerDetails.id === this.membershipCustomer.id) {
+              this.customerDetails.membership_tier_id = this.selectedTierId;
+              this.customerDetails.membership_tier_name = tierName;
+              if (data.membership && data.membership.expires_at) {
+                this.customerDetails.membership_expires_at = data.membership.expires_at;
+              }
+            }
+
+            const cIdx = this.customers.findIndex(c => c.id === this.membershipCustomer.id);
+            if (cIdx !== -1) {
+              this.customers[cIdx].membership_tier_id = this.selectedTierId;
+              this.customers[cIdx].membership_tier_name = tierName;
+            }
+
+            this.showAssignMembershipModal = false;
+            if (window.uiToast) window.uiToast(`Assigned ${tierName} tier to ${this.membershipCustomer.name}!`, 'success');
+          } else {
+            this.assignMembershipError = (data && data.message) || 'Failed to assign membership tier.';
+          }
+        } catch (e) {
+          this.assignMembershipError = 'Network error while assigning membership.';
+        } finally {
+          this.assigningMembership = false;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        }
       }
     };
   }

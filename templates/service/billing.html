@@ -117,8 +117,37 @@
     <div data-anim="up" data-delay="140" class="lg:col-span-7 min-w-0 space-y-4">
       
       <!-- Search & Category Filters -->
+      <!-- Catalog Mode Switcher & Category / Filter Bar -->
       <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#141210] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
         
+        <!-- Tab Pills: Services vs Retail Products vs Memberships -->
+        <div class="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs">
+          <button type="button"
+                  @click="catalogType = 'services'"
+                  :class="catalogType === 'services' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="scissors" class="w-3.5 h-3.5 text-violet-500"></i>
+            <span>Services</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="services.length"></span>
+          </button>
+          <button type="button"
+                  @click="catalogType = 'products'"
+                  :class="catalogType === 'products' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="package" class="w-3.5 h-3.5 text-teal-500"></i>
+            <span>Retail Products</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="products.length"></span>
+          </button>
+          <button type="button"
+                  @click="catalogType = 'memberships'"
+                  :class="catalogType === 'memberships' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-500"></i>
+            <span>Memberships</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="membershipTiers.length"></span>
+          </button>
+        </div>
+
         <!-- Search Input -->
         <div class="relative flex items-center">
           <div class="absolute left-3.5 flex items-center justify-center pointer-events-none text-neutral-400">
@@ -126,15 +155,15 @@
           </div>
           <input type="text" 
                  x-model="searchQuery"
-                 placeholder="Search services by name (e.g., haircut, facial, keratin, beard)..." 
+                 :placeholder="catalogType === 'services' ? 'Search services (e.g., haircut, facial, beard)...' : (catalogType === 'products' ? 'Search retail products by name, brand, SKU...' : 'Search membership tiers by name...')" 
                  class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 dark:focus:ring-violet-400 text-neutral-900 dark:text-white placeholder-neutral-400">
           <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3.5 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
             <i data-lucide="x" class="w-3.5 h-3.5"></i>
           </button>
         </div>
 
-        <!-- Category Filter Pills -->
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+        <!-- Category Filter Pills (Services Only) -->
+        <div x-show="catalogType === 'services'" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           <template x-for="cat in categories" :key="cat">
             <button @click="selectedCategory = cat" 
                     :class="selectedCategory === cat ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'"
@@ -166,9 +195,9 @@
         </template>
       </div>
 
-      <!-- SERVICE CARDS GRID -->
-      <div x-show="!isLoading" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <template x-for="service in filteredServices" :key="service.id">
+      <!-- 1. SERVICE CARDS GRID -->
+      <div x-show="!isLoading && catalogType === 'services'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <template x-for="service in filteredServices" :key="'svc_' + service.id">
           <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-violet-500/50 dark:hover:border-violet-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
             
             <div>
@@ -196,8 +225,8 @@
                       class="relative px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white dark:bg-violet-500/10 dark:text-neon-cyan dark:hover:bg-violet-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 <span>Add</span>
-                <template x-if="getItemCount(service.id) > 0">
-                  <span class="ml-1 w-4 h-4 rounded-full bg-violet-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(service.id)"></span>
+                <template x-if="getItemCount(service.id, 'service') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-violet-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(service.id, 'service')"></span>
                 </template>
               </button>
             </div>
@@ -211,6 +240,121 @@
             <i data-lucide="search-x" class="w-8 h-8 mx-auto text-neutral-400 mb-2"></i>
             <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No services match your search.</p>
             <p class="text-xs text-neutral-400 mt-1">Try another keyword or add as a custom line item.</p>
+          </div>
+        </template>
+      </div>
+
+      <!-- 2. RETAIL PRODUCT CARDS GRID -->
+      <div x-show="!isLoading && catalogType === 'products'" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
+        <template x-for="product in filteredProducts" :key="'prod_' + product.id">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-teal-500/50 dark:hover:border-teal-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800" x-text="product.category || 'Retail Product'"></span>
+                <span class="text-[11px] font-mono-num font-semibold"
+                      :class="product.stock_quantity <= 5 ? 'text-rose-500 dark:text-rose-400' : 'text-neutral-500 dark:text-neutral-400'">
+                  Stock: <span x-text="product.stock_quantity"></span>
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-neutral-900 dark:text-white mt-2 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" x-text="product.name"></h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1" x-text="product.brand || product.sku ? ((product.brand || '') + (product.sku ? ' · ' + product.sku : '')) : 'Retail inventory item'"></p>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-neutral-400 flex items-center gap-1">
+                  <span>Price</span>
+                  <span class="text-[10px] text-teal-600 dark:text-teal-400 font-mono-num" x-text="'(GST ' + (product.tax_rate != null ? product.tax_rate : 18) + '%)'"></span>
+                </span>
+                <div class="text-base font-extrabold font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="product.price"></span>
+                </div>
+              </div>
+
+              <!-- Quick Add Product Button -->
+              <button @click="addProductToBill(product)" 
+                      :disabled="product.stock_quantity <= 0"
+                      class="relative px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-600 hover:text-white dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span x-text="product.stock_quantity <= 0 ? 'Out of Stock' : 'Add'"></span>
+                <template x-if="getItemCount(product.id, 'product') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-teal-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(product.id, 'product')"></span>
+                </template>
+              </button>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- No Products Fallback -->
+        <template x-if="filteredProducts.length === 0">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <i data-lucide="package-x" class="w-8 h-8 mx-auto text-neutral-400 mb-2"></i>
+            <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No retail products found.</p>
+            <p class="text-xs text-neutral-400 mt-1">Add retail inventory items in the Services &amp; Products catalog.</p>
+          </div>
+        </template>
+      </div>
+
+      <!-- 3. MEMBERSHIP TIERS GRID -->
+      <div x-show="!isLoading && catalogType === 'memberships'" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
+        <template x-for="tier in filteredMemberships" :key="'tier_' + tier.id">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-amber-500/50 dark:hover:border-amber-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                  <i data-lucide="crown" class="w-3 h-3 text-amber-500"></i>
+                  <span x-text="tier.validity_days + ' Days'"></span>
+                </span>
+                <span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                  <span x-text="tier.service_discount_pct + '% off svc'"></span>
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-neutral-900 dark:text-white mt-2 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" x-text="tier.name"></h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-2" x-text="tier.description || 'Full salon membership with exclusive discounts and priority booking.'"></p>
+              
+              <!-- Perks Summary Pills -->
+              <div class="mt-2.5 flex flex-wrap gap-1">
+                <template x-if="tier.service_discount_pct > 0">
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300" x-text="tier.service_discount_pct + '% off Services'"></span>
+                </template>
+                <template x-if="tier.product_discount_pct > 0">
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300" x-text="tier.product_discount_pct + '% off Products'"></span>
+                </template>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-neutral-400">Membership Fee</span>
+                <div class="text-base font-extrabold font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="tier.price"></span>
+                </div>
+              </div>
+
+              <!-- Quick Sell Membership Button -->
+              <button @click="addMembershipToBill(tier)" 
+                      class="relative px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
+                <i data-lucide="crown" class="w-3.5 h-3.5"></i>
+                <span>Sell Tier</span>
+                <template x-if="getItemCount(tier.id, 'membership') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-amber-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(tier.id, 'membership')"></span>
+                </template>
+              </button>
+            </div>
+
+          </div>
+        </template>
+        
+
+        <!-- No Memberships Fallback -->
+        <template x-if="filteredMemberships.length === 0">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <i data-lucide="crown" class="w-8 h-8 mx-auto text-neutral-400 mb-2 opacity-60"></i>
+            <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No membership tiers configured.</p>
+            <p class="text-xs text-neutral-400 mt-1">Configure Membership Tiers in Settings &gt; Membership Tiers.</p>
           </div>
         </template>
       </div>
@@ -240,106 +384,206 @@
             </button>
           </div>
 
-          <!-- Customer Lookup (search by name or 10-digit phone) -->
-          <div class="relative pt-1" @click.away="showCustomerResults = false">
-            <div class="flex items-center justify-between mb-1">
-              <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">Customer</label>
-              <button @click="openNewCustomerModal()" class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-0.5">
-                <i data-lucide="user-plus" class="w-3 h-3"></i> New
-              </button>
-            </div>
-            <div class="relative flex items-center">
-              <div class="absolute left-2.5 flex items-center justify-center pointer-events-none text-neutral-400">
-                <i data-lucide="search" class="w-3.5 h-3.5"></i>
-              </div>
-              <input type="text"
-                     x-model="customerQuery"
-                     @input="onCustomerInput()"
-                     @focus="customerQuery && (showCustomerResults = true)"
-                     placeholder="Search name or 10-digit phone…"
-                     class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
-              <button x-show="customerQuery" @click="clearCustomer()" class="absolute right-2.5 text-neutral-400 hover:text-rose-500 transition-colors">
-                <i data-lucide="x" class="w-3.5 h-3.5"></i>
-              </button>
-            </div>
-
-            <!-- Live Search Results Dropdown -->
-            <div x-show="showCustomerResults" x-cloak
-                 class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
-              <div x-show="customerSearching" class="px-3 py-2.5 text-[11px] text-neutral-400">
-                Searching customers…
-              </div>
-              <div x-show="!customerSearching && customerResults.length > 0">
-                <template x-for="(c, idx) in customerResults" :key="c.id ? 'c_' + c.id : 'idx_' + idx">
-                  <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
-                    <span class="min-w-0">
-                      <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
-                      <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
-                    </span>
-                    <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
-                  </button>
-                </template>
-              </div>
-              <div x-show="!customerSearching && customerResults.length === 0" class="px-3 py-2.5 space-y-2">
-                <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
-                <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
-                  <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
-                  Create New Customer
+          <!-- Customer Area: Lookup Search OR Customer Info Card -->
+          <div class="pt-1">
+            <!-- Customer Lookup (Shown only when NO customer is selected) -->
+            <div x-show="!customer.id" class="relative" @click.away="showCustomerResults = false">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">Customer Lookup</label>
+                <button @click="openNewCustomerModal()" class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-0.5">
+                  <i data-lucide="user-plus" class="w-3 h-3"></i> New
                 </button>
               </div>
-            </div>
-          </div>
+              <div class="relative flex items-center">
+                <div class="absolute left-2.5 flex items-center justify-center pointer-events-none text-neutral-400">
+                  <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                </div>
+                <input type="text"
+                       x-model="customerQuery"
+                       @input="onCustomerInput()"
+                       @focus="customerQuery && (showCustomerResults = true)"
+                       placeholder="Search name or 10-digit phone…"
+                       class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                <button x-show="customerQuery" @click="clearCustomer()" class="absolute right-2.5 text-neutral-400 hover:text-rose-500 transition-colors">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
 
-          <!-- Selected Customer Chip -->
-          <div x-show="customer.id" x-cloak class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50">
-            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>
-            <span class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 truncate flex items-center gap-1.5">
-              <span x-text="customer.name"></span>
-              <span x-show="customer.gender" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200/60 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300" x-text="customer.gender"></span>
-              <span x-show="customer.phone"> · <span class="font-mono-num" x-text="customer.phone"></span></span>
-            </span>
-            <button @click="clearCustomer()" class="ml-auto text-[10px] font-bold text-neutral-400 hover:text-rose-500 shrink-0 transition-colors">Change</button>
-          </div>
-          <p x-show="!customer.id" class="text-[10px] text-neutral-400">No customer selected — the bill will be recorded as a Walk-in.</p>
-
-          <!-- Customer Outstanding Dues Banner -->
-          <template x-if="customerDues && customerDues.total_due > 0">
-            <div class="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2 shadow-xs">
-              <div class="flex items-center gap-2 min-w-0">
-                <i data-lucide="alert-circle" class="w-4 h-4 text-amber-500 shrink-0"></i>
-                <div class="text-[11px] min-w-0">
-                  <span class="font-bold">Past Due:</span>
-                  <span class="font-mono-num font-bold text-amber-600 dark:text-amber-400">₹<span x-text="customerDues.total_due"></span></span>
-                  <span class="text-neutral-500 dark:text-neutral-400 text-[10px]">(<span x-text="customerDues.dues.length"></span> bill<span x-text="customerDues.dues.length > 1 ? 's' : ''"></span>)</span>
+              <!-- Live Search Results Dropdown -->
+              <div x-show="showCustomerResults" x-cloak
+                   class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
+                <div x-show="customerSearching" class="px-3 py-2.5 text-[11px] text-neutral-400">
+                  Searching customers…
+                </div>
+                <div x-show="!customerSearching && customerResults.length > 0">
+                  <template x-for="(c, idx) in customerResults" :key="c.id ? 'c_' + c.id : 'idx_' + idx">
+                    <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
+                      <span class="min-w-0">
+                        <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
+                        <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
+                      </span>
+                      <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
+                    </button>
+                  </template>
+                </div>
+                <div x-show="!customerSearching && customerResults.length === 0" class="px-3 py-2.5 space-y-2">
+                  <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
+                  <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
+                    <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                    Create New Customer
+                  </button>
                 </div>
               </div>
-              <button type="button" 
-                      @click="openSettleDuesModal()" 
-                      class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] uppercase tracking-wider shrink-0 transition-all active:scale-95 cursor-pointer shadow-xs">
-                Settle Dues
-              </button>
+              <p class="text-[10px] text-neutral-400 mt-1">No customer selected — bill will be recorded as Walk-in.</p>
             </div>
-          </template>
+
+            <!-- Enhanced Customer Info Card (Shown when customer is selected, hides search bar) -->
+            <div x-show="customer.id" x-cloak
+                 class="rounded-xl border p-3 space-y-2.5 transition-all shadow-xs"
+                 :class="(customerDues && customerDues.total_due > 0)
+                          ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/60' 
+                          : 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/50'">
+              
+              <!-- Header: NAME & Change Button -->
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-xs font-black tracking-tight"
+                          :class="(customerDues && customerDues.total_due > 0) ? 'text-rose-950 dark:text-rose-200' : 'text-emerald-950 dark:text-emerald-200'"
+                          x-text="customer.name"></span>
+                    <span x-show="customer.gender" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-white/80 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200/50 dark:border-neutral-700" x-text="customer.gender"></span>
+                  </div>
+                  <div class="text-[10px] font-mono-num text-neutral-500 dark:text-neutral-400 mt-0.5" x-show="customer.phone">
+                    <i data-lucide="phone" class="w-2.5 h-2.5 inline mr-0.5"></i><span x-text="customer.phone"></span>
+                  </div>
+                </div>
+                <button type="button" @click="clearCustomer()" 
+                        class="text-[10px] font-bold px-2 py-0.5 rounded-md border border-neutral-300/80 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-300 hover:text-rose-500 hover:border-rose-300 transition-colors shrink-0 shadow-xs">
+                  Change
+                </button>
+              </div>
+
+              <!-- DUES IF ANY (Decides color of the card) -->
+              <div class="p-2 rounded-lg border text-xs"
+                   :class="(customerDues && customerDues.total_due > 0)
+                            ? 'bg-rose-100/70 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800/50 text-rose-900 dark:text-rose-200'
+                            : 'bg-emerald-100/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <i :data-lucide="(customerDues && customerDues.total_due > 0) ? 'alert-triangle' : 'check-circle-2'" class="w-3.5 h-3.5 shrink-0"></i>
+                    <span class="font-bold text-[11px]">
+                      <template x-if="customerDues && customerDues.total_due > 0">
+                        <span>Past Due: <span class="font-mono-num font-black">₹<span x-text="customerDues.total_due"></span></span></span>
+                      </template>
+                      <template x-if="!customerDues || customerDues.total_due <= 0">
+                        <span>No Outstanding Dues</span>
+                      </template>
+                    </span>
+                  </div>
+                  <template x-if="customerDues && customerDues.total_due > 0">
+                    <button type="button" 
+                            @click="openSettleDuesModal()" 
+                            class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[9px] uppercase tracking-wider shrink-0 transition-all shadow-xs cursor-pointer">
+                      Settle Dues
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <!-- MEMBERSHIP VALID UPTO -->
+              <div class="p-2 rounded-lg bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/60 dark:border-neutral-800 text-[11px]">
+                <template x-if="customerMembership">
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+                        <span x-text="customerMembership.tier_name + ' Tier'"></span>
+                      </span>
+                      <span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded font-mono-num">
+                        Auto-Discounted
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] text-neutral-500 dark:text-neutral-400 pt-0.5">
+                      <span>Valid upto: <strong class="text-neutral-700 dark:text-neutral-200 font-mono-num" x-text="formatMembershipExpiry(customerMembership.expires_at)"></strong></span>
+                      <span class="font-mono-num" x-text="customerMembership.service_discount_pct + '% svc / ' + customerMembership.product_discount_pct + '% prod'"></span>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!customerMembership">
+                  <div class="flex items-center justify-between text-[10px] text-neutral-400">
+                    <span class="flex items-center gap-1">
+                      <i data-lucide="shield-off" class="w-3 h-3 text-neutral-400"></i>
+                      <span>No active membership</span>
+                    </span>
+                    <button type="button" @click="catalogType = 'memberships'" class="text-violet-600 dark:text-neon-cyan font-bold hover:underline">
+                      + Add Membership
+                    </button>
+                  </div>
+                </template>
+              </div>
+
+              <!-- NOTES -->
+              <div class="text-[10px] bg-neutral-100/60 dark:bg-neutral-900/50 px-2 py-1.5 rounded-lg border border-neutral-200/50 dark:border-neutral-800">
+                <span class="font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider text-[9px] block">Customer Notes:</span>
+                <p class="text-neutral-700 dark:text-neutral-300 mt-0.5 italic" x-text="customer.notes ? customer.notes : 'No customer notes recorded.'"></p>
+              </div>
+
+            </div>
+          </div>
         </div>
 
-        <!-- Selected Line Items List -->
+        <!-- Selected Line Items List (Isolated by active catalog tab, preserving full invoice state) -->
         <div class="p-4 sm:p-5 flex-1 min-h-[220px] max-h-[340px] overflow-y-auto space-y-3">
           
-          <template x-if="billItems.length === 0">
-            <div class="h-44 flex flex-col items-center justify-center text-center text-neutral-400">
-              <i data-lucide="shopping-cart" class="w-9 h-9 mb-2 opacity-30 text-neutral-500"></i>
-              <p class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Bill is empty</p>
-              <p class="text-[11px] text-neutral-400 mt-0.5">Click services on the left to add items to invoice.</p>
+          <!-- Category View Header Pill & Preserved Items Notice -->
+          <div class="flex items-center justify-between gap-2 pb-1 text-[11px]">
+            <span class="font-bold uppercase tracking-wider text-neutral-400 text-[10px] flex items-center gap-1">
+              <template x-if="catalogType === 'services'"><i data-lucide="scissors" class="w-3 h-3 text-violet-500"></i></template>
+              <template x-if="catalogType === 'products'"><i data-lucide="package" class="w-3 h-3 text-teal-500"></i></template>
+              <template x-if="catalogType === 'memberships'"><i data-lucide="crown" class="w-3 h-3 text-amber-500"></i></template>
+              <span x-text="catalogType === 'services' ? 'Services in Bill' : (catalogType === 'products' ? 'Products in Bill' : 'Subscription in Bill')"></span>
+              (<span x-text="displayedBillItems.length"></span>)
+            </span>
+
+            <template x-if="otherCategoryItemsCount > 0">
+              <span class="px-2 py-0.5 rounded-full bg-neutral-200/80 dark:bg-neutral-800 text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 font-mono-num"
+                    :title="'Switch tabs above to view other category items. All items will be included on the final invoice and printed receipt.'">
+                +<span x-text="otherCategoryItemsCount"></span> in other tabs (kept)
+              </span>
+            </template>
+          </div>
+
+          <!-- Empty Category Demo State -->
+          <template x-if="displayedBillItems.length === 0">
+            <div class="h-40 flex flex-col items-center justify-center text-center text-neutral-400">
+              <i data-lucide="shopping-cart" class="w-8 h-8 mb-2 opacity-30 text-neutral-500"></i>
+              <p class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                <span x-text="catalogType === 'services' ? 'No services in current view' : (catalogType === 'products' ? 'No retail products in current view' : 'No subscription tier in current view')"></span>
+              </p>
+              <p class="text-[11px] text-neutral-400 mt-0.5" x-text="catalogType === 'services' ? 'Click services on the left to add items.' : (catalogType === 'products' ? 'Click retail products to add to bill.' : 'Select a membership tier on the left.')"></p>
+              <template x-if="otherCategoryItemsCount > 0">
+                <p class="text-[10px] text-violet-600 dark:text-neon-cyan mt-1 font-semibold">
+                  <span x-text="otherCategoryItemsCount"></span> other item(s) are safely preserved on this invoice.
+                </p>
+              </template>
             </div>
           </template>
 
-          <template x-for="(item, index) in billItems" :key="item.cartId">
+          <template x-for="item in displayedBillItems" :key="item.cartId">
             <div class="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80 space-y-2">
               
               <!-- Item Header & Rate -->
               <div class="flex items-start justify-between gap-2">
                 <div class="truncate flex-1 min-w-0">
-                  <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="item.name"></p>
+                  <div class="flex items-center gap-1.5 truncate">
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="item.name"></p>
+                    <template x-if="item.type === 'product'">
+                      <span class="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">Retail</span>
+                    </template>
+                    <template x-if="item.type === 'membership'">
+                      <span class="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">Membership</span>
+                    </template>
+                  </div>
                   
                   <!-- Editable Unit Price & Catalog Price Badge -->
                   <div class="flex items-center gap-1.5 mt-1">
@@ -355,6 +599,10 @@
                         Modified
                       </span>
                     </template>
+                    <template x-if="item.type === 'product' && item.tax_rate != null">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-neutral-200/60 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono-num"
+                            x-text="'GST ' + item.tax_rate + '%'"></span>
+                    </template>
                   </div>
                 </div>
 
@@ -362,7 +610,7 @@
                   <span class="text-xs font-bold font-mono-num text-neutral-900 dark:text-white">
                     ₹<span x-text="Math.round(item.price * item.qty)"></span>
                   </span>
-                  <button @click="removeItem(index)" class="text-neutral-400 hover:text-rose-500 transition-colors p-0.5">
+                  <button @click="removeCartItem(item)" class="text-neutral-400 hover:text-rose-500 transition-colors p-0.5" title="Remove item">
                     <i data-lucide="x" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -383,9 +631,9 @@
 
                 <!-- Quantity Controls -->
                 <div class="flex items-center border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-lg p-0.5 shrink-0">
-                  <button @click="decrementItem(index)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">-</button>
+                  <button @click="decrementCartItem(item)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">-</button>
                   <span class="px-2 text-xs font-bold font-mono-num text-neutral-900 dark:text-white" x-text="item.qty"></span>
-                  <button @click="incrementItem(index)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">+</button>
+                  <button @click="incrementCartItem(item)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">+</button>
                 </div>
               </div>
 
@@ -640,7 +888,8 @@
         </div>
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num font-bold pointer-events-none">₹</span>
-          <input type="number" min="0" :max="grandTotal" x-model.number="amountReceived" 
+          <input type="number" min="0" :max="grandTotal" x-model.number="amountReceived"
+                 @input="$nextTick(() => { if (isSplitMode) splitEqually(); })"
                  class="w-full pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-base font-bold font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
         </div>
 
@@ -729,7 +978,7 @@
 
               <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
                 <span>Amount to collect:</span>
-                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="grandTotal"></span></span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="paymentAmount"></span></span>
               </div>
             </div>
           </template>
@@ -742,13 +991,13 @@
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num pointer-events-none">₹</span>
                   <input type="number"
                          x-model.number="cashReceived"
-                         :placeholder="grandTotal"
+                         :placeholder="paymentAmount"
                          class="w-full pl-7 pr-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
                 </div>
               </div>
               <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 flex justify-between text-xs font-semibold">
                 <span class="text-neutral-500">Change Due to Client</span>
-                <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="Math.max(0, cashReceived - grandTotal)"></span></span>
+                <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="Math.max(0, cashReceived - paymentAmount)"></span></span>
               </div>
             </div>
           </template>
@@ -775,7 +1024,7 @@
               </div>
               <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
                 <span>Charge client:</span>
-                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="grandTotal"></span></span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="paymentAmount"></span></span>
               </div>
             </div>
           </template>
@@ -891,7 +1140,7 @@
               <div class="font-mono-num text-xs">
                 <span :class="splitRemaining === 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : (splitRemaining < 0 ? 'text-rose-600 font-bold' : 'text-neutral-900 dark:text-white font-bold')"
                       x-text="'₹' + splitTotal"></span>
-                <span class="text-neutral-400 font-normal"> / ₹<span x-text="grandTotal"></span></span>
+                <span class="text-neutral-400 font-normal"> / ₹<span x-text="paymentAmount"></span></span>
               </div>
             </div>
 
@@ -1305,12 +1554,72 @@
       </template>
     </div>
 
-    <div class="py-2 text-[11px] space-y-1 border-b border-black">
-      <template x-for="item in printItems" :key="item.cartId || item.name">
-        <div class="flex justify-between">
-          <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
-          <span>₹<span x-text="item.price * item.qty"></span></span>
+    <!-- Billed Items Grouped By Category: <SERVICES> / <PRODUCTS> / <SUBSCRIPTIONS> -->
+    <div class="py-2 text-[11px] space-y-2 border-b border-black">
+      
+      <!-- <SERVICES> Section -->
+      <template x-if="printServiceItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;SERVICES&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printServiceItems" :key="'ps_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
         </div>
+      </template>
+
+      <!-- Divider if both services and products exist -->
+      <template x-if="printServiceItems.length > 0 && printProductItems.length > 0">
+        <div class="border-t border-dashed border-black my-1"></div>
+      </template>
+
+      <!-- <PRODUCTS> Section -->
+      <template x-if="printProductItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;PRODUCTS&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printProductItems" :key="'pp_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Divider if products/services and subscriptions exist -->
+      <template x-if="(printServiceItems.length > 0 || printProductItems.length > 0) && printSubscriptionItems.length > 0">
+        <div class="border-t border-dashed border-black my-1"></div>
+      </template>
+
+      <!-- <SUBSCRIPTIONS> Section -->
+      <template x-if="printSubscriptionItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;SUBSCRIPTIONS&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printSubscriptionItems" :key="'pm_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Fallback if uncategorized / custom items are present -->
+      <template x-if="printServiceItems.length === 0 && printProductItems.length === 0 && printSubscriptionItems.length === 0">
+        <template x-for="item in printItems" :key="item.cartId || item.name">
+          <div class="flex justify-between">
+            <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+            <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+          </div>
+        </template>
       </template>
     </div>
 
@@ -2093,6 +2402,11 @@
         staff: 'Unassigned'
       },
 
+      catalogType: 'services', // 'services' | 'products' | 'memberships'
+      products: [],
+      membershipTiers: [],
+      customerMembership: null,
+
       categories: ['All', 'Haircuts', 'Spa & Facial', 'Color & Hair', 'Styling', 'Grooming', 'Treatments'],
       staffList: {{ billing_staff | tojson }},
       paymentModes: ['UPI', 'Cash', 'Card'],
@@ -2114,13 +2428,15 @@
         }
         this.restoreActiveTerminalState();
 
-        // Sync the POS catalog + category pills with the backend
+        // Sync POS catalogs (services, retail products, membership tiers) + settings with backend
         try {
-          const [svcRes, catRes, payRes, taxRes] = await Promise.all([
+          const [svcRes, catRes, payRes, taxRes, prodRes, memRes] = await Promise.all([
             fetch('/api/services'),
             fetch('/api/categories'),
             fetch('/api/settings/payment-methods'),
-            fetch('/api/settings/taxes')
+            fetch('/api/settings/taxes'),
+            fetch('/api/products?active_only=1'),
+            fetch('/api/memberships/tiers?active_only=1')
           ]);
 
           if (svcRes.ok) {
@@ -2141,6 +2457,32 @@
           if (catRes.ok) {
             const catData = await catRes.json();
             this.backendCategories = (catData.categories || []).map(c => c.name);
+          }
+          if (prodRes && prodRes.ok) {
+            const prodData = await prodRes.json();
+            this.products = (prodData.products || []).map(p => ({
+              id: p.id,
+              name: p.name,
+              category: p.category || 'Retail',
+              brand: p.brand || '',
+              sku: p.sku || '',
+              price: Number(p.price || 0),
+              stock_quantity: Number(p.stock_quantity || 0),
+              tax_rate: p.tax_rate != null ? Number(p.tax_rate) : 18
+            }));
+          }
+          if (memRes && memRes.ok) {
+            const memData = await memRes.json();
+            this.membershipTiers = (memData.tiers || []).map(t => ({
+              id: t.id,
+              name: t.name,
+              price: Number(t.price || 0),
+              validity_days: Number(t.validity_days || 365),
+              service_discount_pct: Number(t.service_discount_pct || 0),
+              product_discount_pct: Number(t.product_discount_pct || 0),
+              perks: Array.isArray(t.perks) ? t.perks : [],
+              description: t.description || ''
+            }));
           }
           if (payRes.ok) {
             const payData = await payRes.json();
@@ -2203,21 +2545,58 @@
       },
 
       selectCustomer(c) {
-        this.customer = { id: c.id, name: c.name, phone: c.phone, gender: c.gender || '' };
+        this.customer = { id: c.id, name: c.name, phone: c.phone, gender: c.gender || '', notes: c.notes || '' };
         this.customerQuery = c.name;
         this.showCustomerResults = false;
         this.customerResults = [];
         this.fetchCustomerDues(c.phone);
+        this.fetchCustomerMembership(c.id);
         this.saveCurrentTerminalDraft();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
 
       clearCustomer() {
-        this.customer = { id: null, name: '', phone: '' };
+        this.customer = { id: null, name: '', phone: '', notes: '' };
         this.customerQuery = '';
         this.customerResults = [];
         this.showCustomerResults = false;
         this.customerDues = null;
+        this.customerMembership = null;
         this.saveCurrentTerminalDraft();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      formatMembershipExpiry(timestamp) {
+        if (!timestamp) return 'No expiry';
+        try {
+          const d = new Date(Number(timestamp) * 1000);
+          if (isNaN(d.getTime())) return String(timestamp);
+          return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        } catch (e) {
+          return String(timestamp);
+        }
+      },
+
+      async fetchCustomerMembership(customerId) {
+        if (!customerId) { this.customerMembership = null; return; }
+        try {
+          const res = await fetch(`/api/customers/${customerId}/membership`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.has_membership && data.active_membership) {
+              this.customerMembership = data.active_membership;
+              // Auto-apply membership discounts upon customer selection
+              this.applyMembershipDiscounts(true);
+            } else {
+              this.customerMembership = null;
+            }
+          } else {
+            this.customerMembership = null;
+          }
+        } catch (e) {
+          this.customerMembership = null;
+        }
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
 
       async fetchCustomerDues(phone) {
@@ -2353,13 +2732,75 @@
       get filteredServices() {
         return this.services.filter(s => {
           const matchCat = this.selectedCategory === 'All' || s.category === this.selectedCategory;
-          const matchQuery = !this.searchQuery || s.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || s.category.toLowerCase().includes(this.searchQuery.toLowerCase());
+          const matchQuery = !this.searchQuery || s.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || (s.category && s.category.toLowerCase().includes(this.searchQuery.toLowerCase()));
           return matchCat && matchQuery;
         });
       },
 
+      get filteredProducts() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.products.filter(p => {
+          if (!q) return true;
+          return (p.name && p.name.toLowerCase().includes(q)) ||
+                 (p.category && p.category.toLowerCase().includes(q)) ||
+                 (p.brand && p.brand.toLowerCase().includes(q)) ||
+                 (p.sku && p.sku.toLowerCase().includes(q));
+        });
+      },
+
+      get filteredMemberships() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.membershipTiers.filter(t => {
+          if (!q) return true;
+          return (t.name && t.name.toLowerCase().includes(q)) ||
+                 (t.description && t.description.toLowerCase().includes(q));
+        });
+      },
+
+      // Separate workspace bill demo items by active catalog tab without losing data across categories
+      get displayedBillItems() {
+        if (!this.billItems || this.billItems.length === 0) return [];
+        if (this.catalogType === 'services') {
+          return this.billItems.filter(i => !i.type || i.type === 'service');
+        } else if (this.catalogType === 'products') {
+          return this.billItems.filter(i => i.type === 'product');
+        } else if (this.catalogType === 'memberships') {
+          return this.billItems.filter(i => i.type === 'membership');
+        }
+        return this.billItems;
+      },
+
+      get otherCategoryItemsCount() {
+        return (this.billItems || []).length - (this.displayedBillItems || []).length;
+      },
+
+      removeCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.removeItem(idx);
+        }
+      },
+
+      decrementCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.decrementItem(idx);
+        }
+      },
+
+      incrementCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.incrementItem(idx);
+        }
+      },
+
       addToBill(service) {
-        const existing = this.billItems.find(i => i.id === service.id);
+        let finalPrice = Number(service.price);
+        if (this.customerMembership && Number(this.customerMembership.service_discount_pct) > 0) {
+          finalPrice = Math.round(finalPrice * (1 - (Number(this.customerMembership.service_discount_pct) / 100)));
+        }
+        const existing = this.billItems.find(i => i.id === service.id && (!i.type || i.type === 'service'));
         if (existing) {
           existing.qty++;
         } else {
@@ -2368,8 +2809,9 @@
             id: service.id,
             name: service.name,
             catalogPrice: Number(service.price),
-            price: Number(service.price),
+            price: finalPrice,
             qty: 1,
+            type: 'service',
             staff: this.staffList[0] || 'Unassigned',
             isSplitStaff: false,
             staff2: this.staffList[1] || this.staffList[0] || 'Unassigned',
@@ -2380,12 +2822,118 @@
         this.saveCurrentTerminalDraft();
       },
 
-      getItemCount(serviceId) {
-        const item = this.billItems.find(i => i.id === serviceId);
+      addProductToBill(product) {
+        if (product.stock_quantity <= 0) {
+          window.uiToast('Product is currently out of stock.', 'warning');
+          return;
+        }
+        let finalPrice = Number(product.price);
+        if (this.customerMembership && Number(this.customerMembership.product_discount_pct) > 0) {
+          finalPrice = Math.round(finalPrice * (1 - (Number(this.customerMembership.product_discount_pct) / 100)));
+        }
+        const existing = this.billItems.find(i => i.id === product.id && i.type === 'product');
+        if (existing) {
+          if (existing.qty >= product.stock_quantity) {
+            window.uiToast(`Cannot add more: Only ${product.stock_quantity} available in stock.`, 'warning');
+            return;
+          }
+          existing.qty++;
+        } else {
+          this.billItems.push({
+            cartId: Date.now() + Math.random(),
+            id: product.id,
+            product_id: product.id,
+            name: product.name,
+            catalogPrice: Number(product.price),
+            price: finalPrice,
+            qty: 1,
+            type: 'product',
+            tax_rate: product.tax_rate != null ? Number(product.tax_rate) : 18,
+            sku: product.sku || '',
+            staff: this.staffList[0] || 'Unassigned',
+            isSplitStaff: false,
+            staff2: this.staffList[1] || this.staffList[0] || 'Unassigned',
+            splitRatio1: 50,
+            splitRatio2: 50
+          });
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      addMembershipToBill(tier) {
+        const existing = this.billItems.find(i => i.type === 'membership');
+        if (existing) {
+          window.uiToast('Only one membership tier can be sold per invoice.', 'info');
+          return;
+        }
+        this.billItems.push({
+          cartId: Date.now() + Math.random(),
+          id: tier.id,
+          tier_id: tier.id,
+          name: tier.name + ' Membership',
+          catalogPrice: Number(tier.price),
+          price: Number(tier.price),
+          qty: 1,
+          type: 'membership',
+          validity_days: tier.validity_days,
+          service_discount_pct: tier.service_discount_pct,
+          product_discount_pct: tier.product_discount_pct,
+          staff: 'Unassigned',
+          isSplitStaff: false,
+          staff2: 'Unassigned',
+          splitRatio1: 50,
+          splitRatio2: 50
+        });
+        window.uiToast(`Added ${tier.name} membership to invoice.`, 'success');
+        this.saveCurrentTerminalDraft();
+      },
+
+      applyMembershipDiscounts(silent = false) {
+        if (!this.customerMembership) {
+          if (!silent) window.uiToast('Selected customer has no active membership.', 'info');
+          return;
+        }
+        const svcPct = Number(this.customerMembership.service_discount_pct) || 0;
+        const prodPct = Number(this.customerMembership.product_discount_pct) || 0;
+        let appliedCount = 0;
+
+        this.billItems.forEach(item => {
+          const catPrice = Number(item.catalogPrice != null ? item.catalogPrice : item.price);
+          if ((!item.type || item.type === 'service') && svcPct > 0) {
+            item.price = Math.round(catPrice * (1 - (svcPct / 100)));
+            appliedCount++;
+          } else if (item.type === 'product' && prodPct > 0) {
+            item.price = Math.round(catPrice * (1 - (prodPct / 100)));
+            appliedCount++;
+          }
+        });
+
+        if (appliedCount > 0) {
+          window.uiToast(`Applied ${this.customerMembership.tier_name} member discounts to ${appliedCount} line item(s)!`, 'success');
+        } else if (!silent) {
+          window.uiToast('No eligible service or product items in cart to discount.', 'info');
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      getItemCount(itemId, itemType = 'service') {
+        const item = this.billItems.find(i => i.id === itemId && (itemType === 'service' ? (!i.type || i.type === 'service') : i.type === itemType));
         return item ? item.qty : 0;
       },
 
       incrementItem(index) {
+        const item = this.billItems[index];
+        if (item && item.type === 'product') {
+          const prod = this.products.find(p => p.id === item.id);
+          if (prod && item.qty >= prod.stock_quantity) {
+            window.uiToast(`Max available stock (${prod.stock_quantity}) reached.`, 'warning');
+            return;
+          }
+        }
+        if (item && item.type === 'membership') {
+          window.uiToast('Memberships are sold in quantity of 1.', 'info');
+          return;
+        }
         this.billItems[index].qty++;
         this.saveCurrentTerminalDraft();
       },
@@ -2491,14 +3039,32 @@
       },
 
       get taxAmount() {
-        if (!this.taxEnabled || this.taxRate === 0) {
+        if (!this.taxEnabled) {
           return 0;
         }
-        if (this.taxInclusive) {
-          const base = this.taxableAmount / (1 + (this.taxRate / 100));
-          return Math.round(this.taxableAmount - base);
+
+        const globalRate = this.taxRate;
+        const sub = this.subtotal;
+        const discRatio = sub > 0 ? (this.discountAmount / sub) : 0;
+
+        let totalTax = 0;
+        for (const item of this.billItems) {
+          // If product has its own tax_rate, use that rate; otherwise use global taxRate
+          const rate = (item.type === 'product' && item.tax_rate != null) ? Number(item.tax_rate) : globalRate;
+          if (rate <= 0) continue;
+
+          const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
+          const itemTaxable = Math.max(0, itemTotal * (1 - discRatio));
+
+          if (this.taxInclusive) {
+            const base = itemTaxable / (1 + (rate / 100));
+            totalTax += (itemTaxable - base);
+          } else {
+            totalTax += (itemTaxable * (rate / 100));
+          }
         }
-        return Math.round(this.taxableAmount * (this.taxRate / 100));
+
+        return Math.round(totalTax);
       },
 
       get grandTotal() {
@@ -2506,6 +3072,11 @@
           return this.taxableAmount;
         }
         return this.taxableAmount + this.taxAmount;
+      },
+
+      get paymentAmount() {
+        const received = Number(this.amountReceived) || 0;
+        return Math.max(0, Math.min(this.grandTotal, received));
       },
 
       get dueAmount() {
@@ -2526,15 +3097,15 @@
       },
 
       get splitRemaining() {
-        return this.grandTotal - this.splitTotal;
+        return this.paymentAmount - this.splitTotal;
       },
 
       enableSplitMode() {
         this.isSplitMode = true;
-        const half = Math.floor(this.grandTotal / 2);
+        const half = Math.floor(this.paymentAmount / 2);
         this.splitRows = [
           { method: 'UPI', amount: half },
-          { method: 'Cash', amount: this.grandTotal - half }
+          { method: 'Cash', amount: this.paymentAmount - half }
         ];
         this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
       },
@@ -2563,8 +3134,8 @@
       splitEqually() {
         if (this.splitRows.length === 0) return;
         const count = this.splitRows.length;
-        const base = Math.floor(this.grandTotal / count);
-        let rem = this.grandTotal - (base * count);
+        const base = Math.floor(this.paymentAmount / count);
+        let rem = this.paymentAmount - (base * count);
         this.splitRows.forEach((r, idx) => {
           r.amount = base + (idx === count - 1 ? rem : 0);
         });
@@ -2604,7 +3175,7 @@
             return;
           }
           if (this.splitRemaining !== 0) {
-            window.uiToast(`Split amount does not match total due (₹${this.splitRemaining} difference).`, 'error');
+            window.uiToast(`Split amount does not match today's payment (₹${this.splitRemaining} difference).`, 'error');
             return;
           }
           if (this.splitRows.some(r => !r.amount || Number(r.amount) <= 0)) {
@@ -2645,6 +3216,11 @@
             splits: splitsData,
             items: this.billItems.map(i => ({
               name: i.name,
+              type: i.type || 'service',
+              id: i.id,
+              product_id: i.product_id || (i.type === 'product' ? i.id : null),
+              tier_id: i.tier_id || (i.type === 'membership' ? i.id : null),
+              tax_rate: i.tax_rate != null ? Number(i.tax_rate) : null,
               catalog_price: Number(i.catalogPrice != null ? i.catalogPrice : i.price),
               price: Number(i.price),
               unit_price: Number(i.price),
@@ -2734,6 +3310,15 @@
         if (this.lastSavedBill && this.lastSavedBill.items) return this.lastSavedBill.items;
         return [];
       },
+      get printServiceItems() {
+        return this.printItems.filter(i => !i.type || i.type === 'service');
+      },
+      get printProductItems() {
+        return this.printItems.filter(i => i.type === 'product');
+      },
+      get printSubscriptionItems() {
+        return this.printItems.filter(i => i.type === 'membership');
+      },
       get printSubtotal() {
         if (this.billItems && this.billItems.length > 0) return this.subtotal;
         return this.lastSavedBill ? this.lastSavedBill.subtotal : 0;
@@ -2785,4 +3370,3 @@
   }
 </script>
 {% endblock %}
-
