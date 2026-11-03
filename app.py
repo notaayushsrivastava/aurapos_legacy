@@ -1654,8 +1654,9 @@ def billing():
     billing_staff = [f"{s['name']} ({s['role']})" for s in staff_list] + ["Unassigned"]
     plan = (salon.plan if salon else "free") or "free"
     terminal_limit = get_terminal_limit(plan)
+    template_name = 'service/billing_legacy.html' if request.args.get('legacy') in ('1', 'true', 'yes') else 'service/billing.html'
     return render_template(
-        'service/billing.html',
+        template_name,
         salon=salon,
         current_salon=salon,
         services=service_list,
@@ -2305,7 +2306,15 @@ def api_create_bill():
             if staff_name:
                 price = int(float(item.get("price", 0) or 0))
                 qty = int(float(item.get("qty", 1) or 1))
-                staffRepo.record_sale(staff_name, salon_id, price * qty)
+                line_total = price * qty
+                if "," in str(staff_name):
+                    names = [s.strip() for s in str(staff_name).split(",") if s.strip()]
+                    if names:
+                        share = int(round(line_total / len(names)))
+                        for n in names:
+                            staffRepo.record_sale(n, salon_id, share)
+                else:
+                    staffRepo.record_sale(staff_name, salon_id, line_total)
 
     # Auto-clean cloud terminal draft if completed from a terminal
     terminal_id = data.get("terminal_id")
@@ -2982,6 +2991,7 @@ def api_change_password():
 
 
 @app.route('/api/settings/payment-methods', methods=['GET'])
+@app.route('/api/payment-methods', methods=['GET'])
 @login_required
 def api_get_payment_methods():
     salon_id = session.get("id", 1)
@@ -3021,6 +3031,7 @@ def api_update_payment_methods():
 
 
 @app.route('/api/settings/taxes', methods=['GET'])
+@app.route('/api/tax-settings', methods=['GET'])
 @login_required
 def api_get_tax_settings():
     salon_id = session.get("id", 1)
@@ -3291,6 +3302,180 @@ def api_export_data(dataset):
             [[r["id"], r["client_name"], r["client_phone"], r["subtotal"], r["discount"], r["tax"], r["grand_total"], r["payment_mode"], r["created_at"]] for r in rows],
         )
     return jsonify({"success": False, "message": "Unknown dataset."}), 404
+
+
+def _parse_bill_datetime(raw):
+    if not raw:
+        return "", ""
+    try:
+        if isinstance(raw, (int, float)):
+            val = float(raw)
+            if val > 1e11:
+                val /= 1000.0
+            dt = datetime.fromtimestamp(val)
+            return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M:%S")
+        s = str(raw).strip()
+        if s.isdigit():
+            val = float(s)
+            if val > 1e11:
+                val /= 1000.0
+            dt = datetime.fromtimestamp(val)
+            return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M:%S")
+        if "T" in s:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M:%S")
+        if " " in s:
+            parts = s.split(" ", 1)
+            return parts[0], parts[1]
+        return s, ""
+    except Exception:
+        return str(raw), ""
+
+
+@app.get('/api/reports/export/invoices-csv')
+@login_required
+def api_export_invoices_csv():
+    salon_id = session.get("id", 1)
+    status = request.args.get("status")
+    q = request.args.get("q")
+
+    data = billRepo.get_bills_filtered(salon_id, status=status, q=q, limit=100000, offset=0)
+    bills = data.get("bills", [])
+
+    rows = []
+    sno = 1
+    for b in bills:
+        bill_id = b.get("id") or b.get("bill_id")
+        created = b.get("created_at") or b.get("created_on") or ""
+        date_str, time_str = _parse_bill_datetime(created)
+
+        items = b.get("items") or []
+        if isinstance(items, list) and len(items) > 0:
+            for it in items:
+                p_name = it.get("name") or it.get("product_name") or it.get("service_name") or "Item"
+                price = int(float(it.get("price", 0) or 0)) * int(float(it.get("qty", 1) or 1))
+
+                splits = it.get("staff_split")
+                staff_str = ""
+                if isinstance(splits, dict) and splits.get("enabled"):
+                    st1 = (splits.get("stylist1") or "").strip()
+                    st2 = (splits.get("stylist2") or "").strip()
+                    staff_str = f"{st1}, {st2}".strip(", ")
+                elif isinstance(splits, list) and len(splits) > 0:
+                    names = [str(s.get("name") or s.get("staff")).strip() for s in splits if isinstance(s, dict) and (s.get("name") or s.get("staff"))]
+                    staff_str = ", ".join(names)
+                else:
+                    staff_str = str(it.get("staff") or b.get("staff") or "Unassigned").strip()
+
+                rows.append([sno, bill_id, p_name, price, staff_str, date_str, time_str])
+                sno += 1
+        else:
+            p_name = "General Sale"
+            price = b.get("grand_total", 0)
+            staff_str = str(b.get("staff") or "Unassigned").strip()
+            rows.append([sno, bill_id, p_name, price, staff_str, date_str, time_str])
+            sno += 1
+
+    stamp = date.today().isoformat()
+    return _csv_response(
+        f"invoices-recoverables-{stamp}.csv",
+        ["sno", "bill-id", "product_name", "price", "staff(comma separated if mulitple)", "date", "time"],
+        rows
+    )
+
+
+@app.get('/api/reports/export/staff-csv')
+@login_required
+def api_export_staff_csv():
+    salon_id = session.get("id", 1)
+    status = request.args.get("status")
+    q = request.args.get("q")
+
+    data = billRepo.get_bills_filtered(salon_id, status=status, q=q, limit=100000, offset=0)
+    bills = data.get("bills", [])
+
+    roster = staffRepo.get_staff(salon_id)
+    known_staff = [s["name"] for s in roster if s.get("name")]
+    staff_records = {name: [] for name in known_staff}
+
+    for b in bills:
+        bill_id = b.get("id") or b.get("bill_id")
+        created = b.get("created_at") or b.get("created_on") or ""
+        date_str, time_str = _parse_bill_datetime(created)
+
+        items = b.get("items") or []
+        for it in items:
+            s_name = it.get("name") or it.get("service_name") or it.get("product_name") or "Service"
+            price = int(float(it.get("price", 0) or 0))
+            qty = int(float(it.get("qty", 1) or 1))
+            line_total = price * qty
+
+            splits = it.get("staff_split")
+            if isinstance(splits, dict) and splits.get("enabled"):
+                st1 = (splits.get("stylist1") or "").strip()
+                st2 = (splits.get("stylist2") or "").strip()
+                r1 = float(splits.get("ratio1", 50) or 50)
+                amt1 = int(round(line_total * r1 / 100.0))
+                amt2 = max(0, line_total - amt1)
+
+                if st1:
+                    staff_records.setdefault(st1, []).append({
+                        "bill_id": bill_id, "service_name": s_name, "contribution": amt1, "date": date_str, "time": time_str
+                    })
+                if st2:
+                    staff_records.setdefault(st2, []).append({
+                        "bill_id": bill_id, "service_name": s_name, "contribution": amt2, "date": date_str, "time": time_str
+                    })
+            elif isinstance(splits, list) and len(splits) > 0:
+                for sp in splits:
+                    if isinstance(sp, dict):
+                        st = (sp.get("name") or sp.get("staff") or "").strip()
+                        amt = int(float(sp.get("amount", 0) or 0))
+                        if st:
+                            staff_records.setdefault(st, []).append({
+                                "bill_id": bill_id, "service_name": s_name, "contribution": amt, "date": date_str, "time": time_str
+                            })
+            else:
+                staff_val = str(it.get("staff") or b.get("staff") or "").strip()
+                if staff_val and staff_val != "Unassigned":
+                    if "," in staff_val:
+                        parts = [p.strip() for p in staff_val.split(",") if p.strip()]
+                        share = int(round(line_total / len(parts))) if parts else line_total
+                        for p in parts:
+                            staff_records.setdefault(p, []).append({
+                                "bill_id": bill_id, "service_name": s_name, "contribution": share, "date": date_str, "time": time_str
+                            })
+                    else:
+                        staff_records.setdefault(staff_val, []).append({
+                            "bill_id": bill_id, "service_name": s_name, "contribution": line_total, "date": date_str, "time": time_str
+                        })
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    first_sheet = True
+    for staff_name, recs in staff_records.items():
+        if not first_sheet:
+            writer.writerow([])
+            writer.writerow([])
+        first_sheet = False
+
+        writer.writerow([f"Sheet: {staff_name}"])
+        writer.writerow(["sno", "bill-id", "service_name", "contribution", "date", "time"])
+        sno = 1
+        for r in recs:
+            writer.writerow([sno, r["bill_id"], r["service_name"], r["contribution"], r["date"], r["time"]])
+            sno += 1
+        if not recs:
+            writer.writerow(["—", "—", "No contributions recorded", 0, "—", "—"])
+
+    stamp = date.today().isoformat()
+    buffer.seek(0)
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=staff-data-{stamp}.csv"}
+    )
 
 
 @app.get('/api/settings/export/template/<dataset>')

@@ -1,0 +1,3372 @@
+{% extends "layout.html" %}
+
+{% block title %}POS Billing — AuraPOS{% endblock %}
+{% block page_title %}Point of Sale (POS) Billing{% endblock %}
+
+{% block content %}
+{% set current_tier = (current_tier or (salon.plan if salon else 'free') or 'free') | lower %}
+{% set is_studio = 'studio' in current_tier %}
+{% set is_pro = 'pro' in current_tier and not is_studio %}
+{% set is_free = not is_studio and not is_pro %}
+<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6" x-data="posBillingApp()">
+  
+  <!-- Multi-Terminal Navigation & Concurrency Switcher Bar -->
+  <div data-anim="up" class="p-2 sm:p-2.5 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <!-- Active Terminals Strip -->
+    <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar flex-1">
+      <template x-for="term in terminals" :key="term.id">
+        <div class="relative group shrink-0">
+          <button type="button"
+                  @click="switchTerminal(term.id)"
+                  :class="activeTerminalId === term.id 
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 font-bold shadow-md' 
+                    : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium border border-transparent dark:border-neutral-800/60'"
+                  class="pl-3.5 pr-7 py-2 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer">
+            <span class="w-2 h-2 rounded-full" 
+                  :class="activeTerminalId === term.id ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-neutral-400'"></span>
+            <span x-text="term.name"></span>
+            <!-- Cart count or total badge -->
+            <span class="px-1.5 py-0.5 rounded-md text-[10px] font-mono-num"
+                  :class="activeTerminalId === term.id 
+                    ? 'bg-white/20 text-white dark:bg-black/10 dark:text-neutral-900' 
+                    : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'"
+                  x-text="getTerminalSummary(term.id)">
+            </span>
+          </button>
+          <!-- Close Terminal button (if > 1 terminal) -->
+          <button x-show="terminals.length > 1" 
+                  @click.stop="closeTerminal(term.id)"
+                  type="button"
+                  title="Close terminal"
+                  :class="activeTerminalId === term.id ? 'text-white/70 hover:text-white dark:text-black/70 dark:hover:text-black' : 'text-neutral-400 hover:text-rose-500'"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
+            <i data-lucide="x" class="w-3 h-3"></i>
+          </button>
+        </div>
+      </template>
+
+      <!-- + New Terminal Button (Limit 3 terminals per tab) -->
+      <button type="button"
+              x-show="terminals.length < 3"
+              @click="requestNewTerminal()"
+              class="px-3 py-2 rounded-xl border border-dashed border-neutral-300 dark:border-neutral-700 hover:border-violet-500 dark:hover:border-neon-cyan hover:bg-violet-50/50 dark:hover:bg-violet-950/20 text-neutral-600 dark:text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+        <span>New Terminal</span>
+      </button>
+    </div>
+
+    <!-- Tier Capabilities Pill & Status Indicator -->
+    <div class="flex items-center gap-2 shrink-0 text-xs">
+      {% if is_studio %}
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-violet-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold text-[11px]">
+        <i data-lucide="cloud" class="w-3.5 h-3.5 text-amber-500 animate-pulse"></i>
+        <span>Studio: Unlimited Cloud Sync</span>
+      </span>
+      {% elif is_pro %}
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 text-violet-700 dark:text-neon-cyan font-bold text-[11px]">
+        <i data-lucide="hard-drive" class="w-3.5 h-3.5 text-violet-500"></i>
+        <span>Pro: 3 Terminals (Cookie Cached)</span>
+      </span>
+      {% else %}
+      <a href="{{ url_for('upgrade') }}?plan=pro" 
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-violet-50 dark:bg-neutral-900 dark:hover:bg-violet-950/30 border border-neutral-200 dark:border-neutral-800 hover:border-violet-300 dark:hover:border-violet-700 text-neutral-600 dark:text-neutral-400 hover:text-violet-600 dark:hover:text-neon-cyan font-semibold text-[11px] transition-colors">
+        <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-500"></i>
+        <span>Free: 1 Terminal Limit · <strong class="text-violet-600 dark:text-neon-cyan">Upgrade</strong></span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Top Action Bar & Shortcuts Banner -->
+  <div data-anim="up" class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
+        <span x-text="activeTerminalName">Terminal #01</span>
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Live Register
+        </span>
+      </h2>
+      <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+        Fast service selection, stylist commissions, and instant GST invoices.
+      </p>
+    </div>
+
+
+    <!-- Quick Buttons & Loading Toggle -->
+    <div class="flex items-center gap-2.5">
+      <button @click="showCustomItemModal = true" 
+              class="px-3.5 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+        <i data-lucide="plus" class="w-3.5 h-3.5 text-violet-500"></i>
+        <span>Custom Item</span>
+      </button>
+
+      <button @click="toggleSkeleton()" 
+              class="px-3.5 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              title="Toggle skeleton loader demo">
+        <i data-lucide="loader-2" class="w-3.5 h-3.5" :class="isLoading ? 'animate-spin text-violet-500' : ''"></i>
+        <span x-text="isLoading ? 'Loading...' : 'Simulate Refresh'"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Two-Column Split Layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- ================= LEFT COLUMN: CATALOG & SEARCH ================= -->
+    <div data-anim="up" data-delay="140" class="lg:col-span-7 min-w-0 space-y-4">
+      
+      <!-- Search & Category Filters -->
+      <!-- Catalog Mode Switcher & Category / Filter Bar -->
+      <div data-anim="up" data-delay="80" class="bg-white dark:bg-[#141210] p-4 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-sm space-y-3">
+        
+        <!-- Tab Pills: Services vs Retail Products vs Memberships -->
+        <div class="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800 text-xs">
+          <button type="button"
+                  @click="catalogType = 'services'"
+                  :class="catalogType === 'services' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="scissors" class="w-3.5 h-3.5 text-violet-500"></i>
+            <span>Services</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="services.length"></span>
+          </button>
+          <button type="button"
+                  @click="catalogType = 'products'"
+                  :class="catalogType === 'products' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="package" class="w-3.5 h-3.5 text-teal-500"></i>
+            <span>Retail Products</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="products.length"></span>
+          </button>
+          <button type="button"
+                  @click="catalogType = 'memberships'"
+                  :class="catalogType === 'memberships' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-bold shadow-sm' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                  class="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all">
+            <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-500"></i>
+            <span>Memberships</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-mono-num" x-text="membershipTiers.length"></span>
+          </button>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative flex items-center">
+          <div class="absolute left-3.5 flex items-center justify-center pointer-events-none text-neutral-400">
+            <i data-lucide="search" class="w-4 h-4"></i>
+          </div>
+          <input type="text" 
+                 x-model="searchQuery"
+                 :placeholder="catalogType === 'services' ? 'Search services (e.g., haircut, facial, beard)...' : (catalogType === 'products' ? 'Search retail products by name, brand, SKU...' : 'Search membership tiers by name...')" 
+                 class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 dark:focus:ring-violet-400 text-neutral-900 dark:text-white placeholder-neutral-400">
+          <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3.5 flex items-center justify-center text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Category Filter Pills (Services Only) -->
+        <div x-show="catalogType === 'services'" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <template x-for="cat in categories" :key="cat">
+            <button @click="selectedCategory = cat" 
+                    :class="selectedCategory === cat ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'"
+                    class="px-3.5 py-1.5 rounded-lg whitespace-nowrap transition-all font-medium"
+                    x-text="cat">
+            </button>
+          </template>
+        </div>
+
+      </div>
+
+      <!-- SKELETON LOADER STATE -->
+      <div x-show="isLoading" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
+        <template x-for="i in 6" :key="i">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800 space-y-3 relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div class="space-y-2 flex-1 pr-4">
+                <div class="h-3 w-16 rounded skeleton-box"></div>
+                <div class="h-4 w-32 rounded skeleton-box"></div>
+                <div class="h-2.5 w-24 rounded skeleton-box"></div>
+              </div>
+              <div class="w-8 h-8 rounded-xl skeleton-box shrink-0"></div>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t border-neutral-100 dark:border-neutral-800/80">
+              <div class="h-4 w-14 rounded skeleton-box"></div>
+              <div class="h-6 w-16 rounded-xl skeleton-box"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 1. SERVICE CARDS GRID -->
+      <div x-show="!isLoading && catalogType === 'services'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <template x-for="service in filteredServices" :key="'svc_' + service.id">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-violet-500/50 dark:hover:border-violet-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-800" x-text="service.category"></span>
+                <span class="text-[11px] text-neutral-400 flex items-center gap-1 font-mono-num">
+                  <i data-lucide="clock" class="w-3 h-3"></i>
+                  <span x-text="service.duration"></span>m
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-neutral-900 dark:text-white mt-2 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors" x-text="service.name"></h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1" x-text="service.description"></p>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-neutral-400">Price</span>
+                <div class="text-base font-extrabold font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="service.price"></span>
+                </div>
+              </div>
+
+              <!-- Quick Add Button with In-Cart Count Badge -->
+              <button @click="addToBill(service)" 
+                      class="relative px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white dark:bg-violet-500/10 dark:text-neon-cyan dark:hover:bg-violet-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add</span>
+                <template x-if="getItemCount(service.id, 'service') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-violet-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(service.id, 'service')"></span>
+                </template>
+              </button>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- No Results Fallback -->
+        <template x-if="filteredServices.length === 0">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <i data-lucide="search-x" class="w-8 h-8 mx-auto text-neutral-400 mb-2"></i>
+            <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No services match your search.</p>
+            <p class="text-xs text-neutral-400 mt-1">Try another keyword or add as a custom line item.</p>
+          </div>
+        </template>
+      </div>
+
+      <!-- 2. RETAIL PRODUCT CARDS GRID -->
+      <div x-show="!isLoading && catalogType === 'products'" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
+        <template x-for="product in filteredProducts" :key="'prod_' + product.id">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-teal-500/50 dark:hover:border-teal-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800" x-text="product.category || 'Retail Product'"></span>
+                <span class="text-[11px] font-mono-num font-semibold"
+                      :class="product.stock_quantity <= 5 ? 'text-rose-500 dark:text-rose-400' : 'text-neutral-500 dark:text-neutral-400'">
+                  Stock: <span x-text="product.stock_quantity"></span>
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-neutral-900 dark:text-white mt-2 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" x-text="product.name"></h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1" x-text="product.brand || product.sku ? ((product.brand || '') + (product.sku ? ' · ' + product.sku : '')) : 'Retail inventory item'"></p>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-neutral-400 flex items-center gap-1">
+                  <span>Price</span>
+                  <span class="text-[10px] text-teal-600 dark:text-teal-400 font-mono-num" x-text="'(GST ' + (product.tax_rate != null ? product.tax_rate : 18) + '%)'"></span>
+                </span>
+                <div class="text-base font-extrabold font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="product.price"></span>
+                </div>
+              </div>
+
+              <!-- Quick Add Product Button -->
+              <button @click="addProductToBill(product)" 
+                      :disabled="product.stock_quantity <= 0"
+                      class="relative px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-600 hover:text-white dark:bg-teal-500/10 dark:text-teal-300 dark:hover:bg-teal-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span x-text="product.stock_quantity <= 0 ? 'Out of Stock' : 'Add'"></span>
+                <template x-if="getItemCount(product.id, 'product') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-teal-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(product.id, 'product')"></span>
+                </template>
+              </button>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- No Products Fallback -->
+        <template x-if="filteredProducts.length === 0">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <i data-lucide="package-x" class="w-8 h-8 mx-auto text-neutral-400 mb-2"></i>
+            <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No retail products found.</p>
+            <p class="text-xs text-neutral-400 mt-1">Add retail inventory items in the Services &amp; Products catalog.</p>
+          </div>
+        </template>
+      </div>
+
+      <!-- 3. MEMBERSHIP TIERS GRID -->
+      <div x-show="!isLoading && catalogType === 'memberships'" class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-cloak>
+        <template x-for="tier in filteredMemberships" :key="'tier_' + tier.id">
+          <div class="p-4 rounded-2xl bg-white dark:bg-[#141210] border border-neutral-200/80 dark:border-neutral-800/80 hover:border-amber-500/50 dark:hover:border-amber-500/40 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                  <i data-lucide="crown" class="w-3 h-3 text-amber-500"></i>
+                  <span x-text="tier.validity_days + ' Days'"></span>
+                </span>
+                <span class="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                  <span x-text="tier.service_discount_pct + '% off svc'"></span>
+                </span>
+              </div>
+              <h3 class="text-sm font-bold text-neutral-900 dark:text-white mt-2 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" x-text="tier.name"></h3>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-2" x-text="tier.description || 'Full salon membership with exclusive discounts and priority booking.'"></p>
+              
+              <!-- Perks Summary Pills -->
+              <div class="mt-2.5 flex flex-wrap gap-1">
+                <template x-if="tier.service_discount_pct > 0">
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300" x-text="tier.service_discount_pct + '% off Services'"></span>
+                </template>
+                <template x-if="tier.product_discount_pct > 0">
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300" x-text="tier.product_discount_pct + '% off Products'"></span>
+                </template>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-neutral-400">Membership Fee</span>
+                <div class="text-base font-extrabold font-mono-num text-neutral-900 dark:text-white">
+                  ₹<span x-text="tier.price"></span>
+                </div>
+              </div>
+
+              <!-- Quick Sell Membership Button -->
+              <button @click="addMembershipToBill(tier)" 
+                      class="relative px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-600 dark:hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95">
+                <i data-lucide="crown" class="w-3.5 h-3.5"></i>
+                <span>Sell Tier</span>
+                <template x-if="getItemCount(tier.id, 'membership') > 0">
+                  <span class="ml-1 w-4 h-4 rounded-full bg-amber-600 text-white dark:bg-white dark:text-neutral-950 text-[10px] flex items-center justify-center font-bold" x-text="getItemCount(tier.id, 'membership')"></span>
+                </template>
+              </button>
+            </div>
+
+          </div>
+        </template>
+        
+
+        <!-- No Memberships Fallback -->
+        <template x-if="filteredMemberships.length === 0">
+          <div class="col-span-2 p-8 text-center bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <i data-lucide="crown" class="w-8 h-8 mx-auto text-neutral-400 mb-2 opacity-60"></i>
+            <p class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">No membership tiers configured.</p>
+            <p class="text-xs text-neutral-400 mt-1">Configure Membership Tiers in Settings &gt; Membership Tiers.</p>
+          </div>
+        </template>
+      </div>
+
+    </div>
+
+    <!-- ================= RIGHT COLUMN: DYNAMIC BILL SUMMARY ================= -->
+    <div data-anim="up" data-delay="220" class="lg:col-span-5 min-w-0 sticky top-20 space-y-4">
+      
+      <div class="bg-white dark:bg-[#141210] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-md flex flex-col overflow-hidden">
+        
+        <!-- Header & Customer Metadata -->
+        <div class="p-4 sm:p-5 border-b border-neutral-200/80 dark:border-neutral-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-300">
+                <i data-lucide="receipt" class="w-4 h-4"></i>
+              </div>
+              <span class="text-sm font-bold text-neutral-900 dark:text-white">Current Invoice</span>
+            </div>
+            
+            <button @click="resetBill()" 
+                    x-show="billItems.length > 0"
+                    class="text-xs font-semibold text-rose-500 hover:text-rose-600 dark:text-rose-400 transition-colors flex items-center gap-1">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Clear</span>
+            </button>
+          </div>
+
+          <!-- Customer Area: Lookup Search OR Customer Info Card -->
+          <div class="pt-1">
+            <!-- Customer Lookup (Shown only when NO customer is selected) -->
+            <div x-show="!customer.id" class="relative" @click.away="showCustomerResults = false">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">Customer Lookup</label>
+                <button @click="openNewCustomerModal()" class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-0.5">
+                  <i data-lucide="user-plus" class="w-3 h-3"></i> New
+                </button>
+              </div>
+              <div class="relative flex items-center">
+                <div class="absolute left-2.5 flex items-center justify-center pointer-events-none text-neutral-400">
+                  <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                </div>
+                <input type="text"
+                       x-model="customerQuery"
+                       @input="onCustomerInput()"
+                       @focus="customerQuery && (showCustomerResults = true)"
+                       placeholder="Search name or 10-digit phone…"
+                       class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                <button x-show="customerQuery" @click="clearCustomer()" class="absolute right-2.5 text-neutral-400 hover:text-rose-500 transition-colors">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <!-- Live Search Results Dropdown -->
+              <div x-show="showCustomerResults" x-cloak
+                   class="absolute z-30 mt-1 w-full rounded-xl bg-white dark:bg-[#181512] border border-neutral-200 dark:border-neutral-800 shadow-xl overflow-hidden">
+                <div x-show="customerSearching" class="px-3 py-2.5 text-[11px] text-neutral-400">
+                  Searching customers…
+                </div>
+                <div x-show="!customerSearching && customerResults.length > 0">
+                  <template x-for="(c, idx) in customerResults" :key="c.id ? 'c_' + c.id : 'idx_' + idx">
+                    <button @click="selectCustomer(c)" class="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-violet-50 dark:hover:bg-violet-950/30 text-left border-b border-neutral-100 dark:border-neutral-800/60 last:border-0 transition-colors">
+                      <span class="min-w-0">
+                        <span class="block text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="c.name"></span>
+                        <span class="block text-[10px] text-neutral-400 font-mono-num" x-text="c.phone"></span>
+                      </span>
+                      <span class="text-[10px] font-bold text-violet-600 dark:text-neon-cyan shrink-0">Select</span>
+                    </button>
+                  </template>
+                </div>
+                <div x-show="!customerSearching && customerResults.length === 0" class="px-3 py-2.5 space-y-2">
+                  <p class="text-[11px] text-neutral-400" x-text="customerQuery.trim().length < 2 ? 'Type at least 2 characters to search by name or phone.' : 'No saved customer matches “' + customerQuery + '”.'"></p>
+                  <button @click="openNewCustomerModal()" class="w-full py-2 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-neon-cyan text-[11px] font-bold flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors">
+                    <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                    Create New Customer
+                  </button>
+                </div>
+              </div>
+              <p class="text-[10px] text-neutral-400 mt-1">No customer selected — bill will be recorded as Walk-in.</p>
+            </div>
+
+            <!-- Enhanced Customer Info Card (Shown when customer is selected, hides search bar) -->
+            <div x-show="customer.id" x-cloak
+                 class="rounded-xl border p-3 space-y-2.5 transition-all shadow-xs"
+                 :class="(customerDues && customerDues.total_due > 0)
+                          ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/60' 
+                          : 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/50'">
+              
+              <!-- Header: NAME & Change Button -->
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-xs font-black tracking-tight"
+                          :class="(customerDues && customerDues.total_due > 0) ? 'text-rose-950 dark:text-rose-200' : 'text-emerald-950 dark:text-emerald-200'"
+                          x-text="customer.name"></span>
+                    <span x-show="customer.gender" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-white/80 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200/50 dark:border-neutral-700" x-text="customer.gender"></span>
+                  </div>
+                  <div class="text-[10px] font-mono-num text-neutral-500 dark:text-neutral-400 mt-0.5" x-show="customer.phone">
+                    <i data-lucide="phone" class="w-2.5 h-2.5 inline mr-0.5"></i><span x-text="customer.phone"></span>
+                  </div>
+                </div>
+                <button type="button" @click="clearCustomer()" 
+                        class="text-[10px] font-bold px-2 py-0.5 rounded-md border border-neutral-300/80 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-300 hover:text-rose-500 hover:border-rose-300 transition-colors shrink-0 shadow-xs">
+                  Change
+                </button>
+              </div>
+
+              <!-- DUES IF ANY (Decides color of the card) -->
+              <div class="p-2 rounded-lg border text-xs"
+                   :class="(customerDues && customerDues.total_due > 0)
+                            ? 'bg-rose-100/70 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800/50 text-rose-900 dark:text-rose-200'
+                            : 'bg-emerald-100/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <i :data-lucide="(customerDues && customerDues.total_due > 0) ? 'alert-triangle' : 'check-circle-2'" class="w-3.5 h-3.5 shrink-0"></i>
+                    <span class="font-bold text-[11px]">
+                      <template x-if="customerDues && customerDues.total_due > 0">
+                        <span>Past Due: <span class="font-mono-num font-black">₹<span x-text="customerDues.total_due"></span></span></span>
+                      </template>
+                      <template x-if="!customerDues || customerDues.total_due <= 0">
+                        <span>No Outstanding Dues</span>
+                      </template>
+                    </span>
+                  </div>
+                  <template x-if="customerDues && customerDues.total_due > 0">
+                    <button type="button" 
+                            @click="openSettleDuesModal()" 
+                            class="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[9px] uppercase tracking-wider shrink-0 transition-all shadow-xs cursor-pointer">
+                      Settle Dues
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <!-- MEMBERSHIP VALID UPTO -->
+              <div class="p-2 rounded-lg bg-white/80 dark:bg-neutral-900/80 border border-neutral-200/60 dark:border-neutral-800 text-[11px]">
+                <template x-if="customerMembership">
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <i data-lucide="crown" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+                        <span x-text="customerMembership.tier_name + ' Tier'"></span>
+                      </span>
+                      <span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded font-mono-num">
+                        Auto-Discounted
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] text-neutral-500 dark:text-neutral-400 pt-0.5">
+                      <span>Valid upto: <strong class="text-neutral-700 dark:text-neutral-200 font-mono-num" x-text="formatMembershipExpiry(customerMembership.expires_at)"></strong></span>
+                      <span class="font-mono-num" x-text="customerMembership.service_discount_pct + '% svc / ' + customerMembership.product_discount_pct + '% prod'"></span>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!customerMembership">
+                  <div class="flex items-center justify-between text-[10px] text-neutral-400">
+                    <span class="flex items-center gap-1">
+                      <i data-lucide="shield-off" class="w-3 h-3 text-neutral-400"></i>
+                      <span>No active membership</span>
+                    </span>
+                    <button type="button" @click="catalogType = 'memberships'" class="text-violet-600 dark:text-neon-cyan font-bold hover:underline">
+                      + Add Membership
+                    </button>
+                  </div>
+                </template>
+              </div>
+
+              <!-- NOTES -->
+              <div class="text-[10px] bg-neutral-100/60 dark:bg-neutral-900/50 px-2 py-1.5 rounded-lg border border-neutral-200/50 dark:border-neutral-800">
+                <span class="font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider text-[9px] block">Customer Notes:</span>
+                <p class="text-neutral-700 dark:text-neutral-300 mt-0.5 italic" x-text="customer.notes ? customer.notes : 'No customer notes recorded.'"></p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Line Items List (Isolated by active catalog tab, preserving full invoice state) -->
+        <div class="p-4 sm:p-5 flex-1 min-h-[220px] max-h-[340px] overflow-y-auto space-y-3">
+          
+          <!-- Category View Header Pill & Preserved Items Notice -->
+          <div class="flex items-center justify-between gap-2 pb-1 text-[11px]">
+            <span class="font-bold uppercase tracking-wider text-neutral-400 text-[10px] flex items-center gap-1">
+              <template x-if="catalogType === 'services'"><i data-lucide="scissors" class="w-3 h-3 text-violet-500"></i></template>
+              <template x-if="catalogType === 'products'"><i data-lucide="package" class="w-3 h-3 text-teal-500"></i></template>
+              <template x-if="catalogType === 'memberships'"><i data-lucide="crown" class="w-3 h-3 text-amber-500"></i></template>
+              <span x-text="catalogType === 'services' ? 'Services in Bill' : (catalogType === 'products' ? 'Products in Bill' : 'Subscription in Bill')"></span>
+              (<span x-text="displayedBillItems.length"></span>)
+            </span>
+
+            <template x-if="otherCategoryItemsCount > 0">
+              <span class="px-2 py-0.5 rounded-full bg-neutral-200/80 dark:bg-neutral-800 text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 font-mono-num"
+                    :title="'Switch tabs above to view other category items. All items will be included on the final invoice and printed receipt.'">
+                +<span x-text="otherCategoryItemsCount"></span> in other tabs (kept)
+              </span>
+            </template>
+          </div>
+
+          <!-- Empty Category Demo State -->
+          <template x-if="displayedBillItems.length === 0">
+            <div class="h-40 flex flex-col items-center justify-center text-center text-neutral-400">
+              <i data-lucide="shopping-cart" class="w-8 h-8 mb-2 opacity-30 text-neutral-500"></i>
+              <p class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                <span x-text="catalogType === 'services' ? 'No services in current view' : (catalogType === 'products' ? 'No retail products in current view' : 'No subscription tier in current view')"></span>
+              </p>
+              <p class="text-[11px] text-neutral-400 mt-0.5" x-text="catalogType === 'services' ? 'Click services on the left to add items.' : (catalogType === 'products' ? 'Click retail products to add to bill.' : 'Select a membership tier on the left.')"></p>
+              <template x-if="otherCategoryItemsCount > 0">
+                <p class="text-[10px] text-violet-600 dark:text-neon-cyan mt-1 font-semibold">
+                  <span x-text="otherCategoryItemsCount"></span> other item(s) are safely preserved on this invoice.
+                </p>
+              </template>
+            </div>
+          </template>
+
+          <template x-for="item in displayedBillItems" :key="item.cartId">
+            <div class="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 border border-neutral-200/80 dark:border-neutral-800/80 space-y-2">
+              
+              <!-- Item Header & Rate -->
+              <div class="flex items-start justify-between gap-2">
+                <div class="truncate flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 truncate">
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white truncate" x-text="item.name"></p>
+                    <template x-if="item.type === 'product'">
+                      <span class="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">Retail</span>
+                    </template>
+                    <template x-if="item.type === 'membership'">
+                      <span class="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">Membership</span>
+                    </template>
+                  </div>
+                  
+                  <!-- Editable Unit Price & Catalog Price Badge -->
+                  <div class="flex items-center gap-1.5 mt-1">
+                    <span class="text-[10px] text-neutral-400 font-mono-num">Rate: ₹</span>
+                    <input type="number" 
+                           min="0"
+                           x-model.number="item.price" 
+                           @input="saveCurrentTerminalDraft()"
+                           class="w-20 px-1.5 py-0.5 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
+                    <template x-if="item.catalogPrice != null && Number(item.price) !== Number(item.catalogPrice)">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold"
+                            :title="'Catalog Price: ₹' + item.catalogPrice">
+                        Modified
+                      </span>
+                    </template>
+                    <template x-if="item.type === 'product' && item.tax_rate != null">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-neutral-200/60 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono-num"
+                            x-text="'GST ' + item.tax_rate + '%'"></span>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="text-xs font-bold font-mono-num text-neutral-900 dark:text-white">
+                    ₹<span x-text="Math.round(item.price * item.qty)"></span>
+                  </span>
+                  <button @click="removeCartItem(item)" class="text-neutral-400 hover:text-rose-500 transition-colors p-0.5" title="Remove item">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Staff Assignment & Quantity Adjuster -->
+              <div class="flex items-center justify-between gap-2 pt-1">
+                <!-- Staff Assignment Dropdown -->
+                <div class="flex-1 min-w-0">
+                  <select x-model="item.staff" 
+                          @change="saveCurrentTerminalDraft()"
+                          class="w-full px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-[11px] font-medium text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+                    <template x-for="st in staffList" :key="st">
+                      <option :value="st" x-text="st"></option>
+                    </template>
+                  </select>
+                </div>
+
+                <!-- Quantity Controls -->
+                <div class="flex items-center border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-lg p-0.5 shrink-0">
+                  <button @click="decrementCartItem(item)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">-</button>
+                  <span class="px-2 text-xs font-bold font-mono-num text-neutral-900 dark:text-white" x-text="item.qty"></span>
+                  <button @click="incrementCartItem(item)" class="w-6 h-5 flex items-center justify-center text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white">+</button>
+                </div>
+              </div>
+
+              <!-- Staff Split Toggle & Configuration -->
+              <div class="pt-1 border-t border-neutral-100 dark:border-neutral-800/60">
+                <div class="flex items-center justify-between">
+                  <button type="button" 
+                          @click="item.isSplitStaff = !item.isSplitStaff; if (item.isSplitStaff && !item.staff2) item.staff2 = (staffList.find(s => s !== item.staff) || staffList[0] || 'Unassigned'); saveCurrentTerminalDraft(); $nextTick(() => { if (window.lucide) lucide.createIcons(); });"
+                          class="text-[10px] text-violet-600 dark:text-neon-cyan hover:underline flex items-center gap-1 font-semibold cursor-pointer">
+                    <i data-lucide="users" class="w-3 h-3"></i>
+                    <span x-text="item.isSplitStaff ? 'Remove Stylist Split' : 'Split Stylists (60/40)'"></span>
+                  </button>
+                  <template x-if="item.isSplitStaff">
+                    <span class="text-[10px] font-mono-num text-neutral-400">
+                      ₹<span x-text="Math.round(item.price * item.qty * ((item.splitRatio1 || 50) / 100))"></span> / ₹<span x-text="Math.round(item.price * item.qty * ((100 - (item.splitRatio1 || 50)) / 100))"></span>
+                    </span>
+                  </template>
+                </div>
+
+                <template x-if="item.isSplitStaff">
+                  <div class="p-2 mt-1.5 rounded-lg bg-neutral-100/70 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/50 space-y-1.5 text-xs">
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 min-w-0">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Stylist 1</label>
+                        <select x-model="item.staff" @change="saveCurrentTerminalDraft()" class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] text-neutral-900 dark:text-white">
+                          <template x-for="st in staffList" :key="'s1_'+st">
+                            <option :value="st" x-text="st"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div class="w-16">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Share %</label>
+                        <input type="number" min="0" max="100" 
+                               x-model.number="item.splitRatio1" 
+                               @input="item.splitRatio2 = Math.max(0, 100 - (Number(item.splitRatio1) || 0)); saveCurrentTerminalDraft();" 
+                               class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] font-mono-num text-right text-neutral-900 dark:text-white">
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 min-w-0">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Stylist 2</label>
+                        <select x-model="item.staff2" @change="saveCurrentTerminalDraft()" class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] text-neutral-900 dark:text-white">
+                          <template x-for="st in staffList" :key="'s2_'+st">
+                            <option :value="st" x-text="st"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div class="w-16">
+                        <label class="block text-[9px] text-neutral-400 uppercase font-semibold">Share %</label>
+                        <input type="number" min="0" max="100" 
+                               x-model.number="item.splitRatio2" 
+                               @input="item.splitRatio1 = Math.max(0, 100 - (Number(item.splitRatio2) || 0)); saveCurrentTerminalDraft();" 
+                               class="w-full px-1.5 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] font-mono-num text-right text-neutral-900 dark:text-white">
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+            </div>
+          </template>
+
+        </div>
+
+        <!-- Calculations & Tax Summary -->
+        <div class="p-4 sm:p-5 bg-neutral-50 dark:bg-[#181512] border-t border-neutral-200/80 dark:border-neutral-800 space-y-2 text-xs">
+          
+          <!-- Subtotal -->
+          <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
+            <span>Subtotal</span>
+            <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">₹<span x-text="subtotal"></span></span>
+          </div>
+
+          <!-- Discount Line -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-neutral-600 dark:text-neutral-400 flex items-center gap-1">
+              <span>Discount</span>
+              <button @click="toggleDiscountMode()" class="text-[10px] underline text-violet-600 dark:text-neon-cyan" x-text="discountType === 'percent' ? '(%)' : '(₹)'"></button>
+            </span>
+            <div class="flex items-center gap-1 w-24">
+              <input type="number" 
+                     x-model.number="discountValue" 
+                     min="0"
+                     class="w-full text-right px-2 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num focus:outline-none focus:ring-1 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
+            </div>
+          </div>
+
+          <!-- Optional & Editable Tax Controls -->
+          <div class="pt-1.5 border-t border-neutral-200/70 dark:border-neutral-800/70 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" x-model="taxEnabled" class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500">
+                <span class="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Apply Tax</span>
+              </label>
+
+              <!-- Inclusive vs Exclusive Selector -->
+              <div x-show="taxEnabled" class="inline-flex rounded-lg bg-neutral-200/80 dark:bg-neutral-800 p-0.5 text-[10px] font-bold">
+                <button type="button" 
+                        @click="taxInclusive = false" 
+                        :class="!taxInclusive ? 'bg-white dark:bg-[#141210] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                        class="px-2 py-0.5 rounded-md transition-all">
+                  Exclusive (+Tax)
+                </button>
+                <button type="button" 
+                        @click="taxInclusive = true" 
+                        :class="taxInclusive ? 'bg-white dark:bg-[#141210] text-neutral-900 dark:text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'"
+                        class="px-2 py-0.5 rounded-md transition-all">
+                  Inclusive (In Price)
+                </button>
+              </div>
+            </div>
+
+            <!-- Tax Rate & Presets (when enabled) -->
+            <div x-show="taxEnabled" class="flex items-center justify-between gap-2 pt-0.5">
+              <div class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                <template x-for="r in [0, 5, 12, 18, 28]" :key="r">
+                  <button type="button" 
+                          @click="taxRateInput = r" 
+                          :class="Number(taxRateInput) === r ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold' : 'bg-neutral-200/60 dark:bg-neutral-800/80 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200'"
+                          class="px-1.5 py-0.5 rounded text-[10px] font-mono-num transition-all"
+                          x-text="r + '%'"></button>
+                </template>
+              </div>
+              <div class="flex items-center gap-1 w-20 shrink-0">
+                <input type="number" min="0" max="100" step="0.5"
+                       x-model.number="taxRateInput"
+                       class="w-full text-right px-1.5 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono-num focus:outline-none focus:ring-1 focus:ring-violet-500 text-neutral-900 dark:text-white">
+                <span class="text-xs text-neutral-400">%</span>
+              </div>
+            </div>
+
+            <!-- Tax Summary Line -->
+            <div class="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
+              <span class="flex items-center gap-1">
+                <span x-text="taxLabel"></span>
+              </span>
+              <span class="font-mono-num font-semibold text-neutral-900 dark:text-white">
+                ₹<span x-text="taxAmount"></span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Grand Total Payable -->
+          <div class="pt-2 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-base font-extrabold text-neutral-900 dark:text-white">
+            <div>
+              <span>Total Payable</span>
+              <span x-show="taxEnabled && taxInclusive" class="block text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                (Inclusive of ₹<span x-text="taxAmount"></span> tax)
+              </span>
+            </div>
+            <span class="font-mono-num text-lg text-violet-600 dark:text-neon-cyan">₹<span x-text="grandTotal"></span></span>
+          </div>
+
+          <!-- Payment Mode Selection -->
+          <div class="pt-3">
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5">Payment Method</label>
+            <div class="flex flex-wrap gap-1.5 text-center">
+              <template x-for="mode in paymentModes" :key="mode">
+                <button @click="selectedPaymentMode = mode"
+                        :class="selectedPaymentMode === mode ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 font-bold shadow-sm ring-1 ring-neutral-900/10 dark:ring-white/10' : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'"
+                        class="flex-1 min-w-[70px] py-1.5 px-2 rounded-lg text-xs font-medium transition-all truncate"
+                        x-text="mode">
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="pt-4 space-y-2">
+            <div class="grid grid-cols-3 gap-2">
+              <button @click="openPaymentModal()" 
+                      :disabled="billItems.length === 0"
+                      class="col-span-2 py-3 px-3 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-orange-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                <span class="font-bold tracking-wide">Collect Payment</span>
+              </button>
+
+              <button @click="printReceipt()" 
+                      :disabled="billItems.length === 0 && !lastSavedBill"
+                      class="py-3 px-2 rounded-xl bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 disabled:opacity-50 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+                <span>Print</span>
+              </button>
+            </div>
+
+            <!-- Quick Print Last Bill button if available -->
+            <template x-if="lastSavedBill">
+              <button @click="printLastBill()" 
+                      class="w-full py-2 px-3 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 text-violet-700 dark:text-neon-cyan border border-violet-200 dark:border-violet-800/60 text-xs font-semibold flex items-center justify-center gap-2 transition-all">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                <span>Print Last Bill (<span class="font-mono-num font-bold" x-text="lastSavedBill.bill_id"></span>)</span>
+              </button>
+            </template>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= PAYMENT COLLECTION MODAL ================= -->
+  <div x-show="showPaymentModal" 
+       x-cloak
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="payment-modal-title"
+       @keydown.escape.window="showPaymentModal = false"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+         @click.away="showPaymentModal = false">
+      
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 id="payment-modal-title" class="text-lg font-bold text-neutral-900 dark:text-white">Collect Payment</h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Order #AP-{{ session.get('id', '8910') }}</p>
+        </div>
+        <button @click="showPaymentModal = false" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Amount Banner -->
+      <div class="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50 text-center">
+        <span class="text-xs text-violet-700 dark:text-neon-cyan font-semibold">Total Amount Due</span>
+        <div class="text-3xl font-black font-mono-num text-violet-600 dark:text-neon-cyan mt-0.5">
+          ₹<span x-text="grandTotal"></span>
+        </div>
+      </div>
+
+      <!-- Amount Received & Part-Payment Status -->
+      <div class="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-neutral-800 dark:text-neutral-200">Amount Received Today (₹)</label>
+          <div class="flex items-center gap-1.5">
+            <button type="button" @click="amountReceived = grandTotal" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 transition-colors">
+              Full Pay
+            </button>
+            <button type="button" @click="amountReceived = 0" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 transition-colors">
+              Credit / Unpaid
+            </button>
+          </div>
+        </div>
+        <div class="relative">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num font-bold pointer-events-none">₹</span>
+          <input type="number" min="0" :max="grandTotal" x-model.number="amountReceived"
+                 @input="$nextTick(() => { if (isSplitMode) splitEqually(); })"
+                 class="w-full pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-base font-bold font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+        </div>
+
+        <div class="flex items-center justify-between text-xs pt-0.5">
+          <div class="text-neutral-500 dark:text-neutral-400">
+            <template x-if="dueAmount > 0">
+              <span>Balance Due: <strong class="font-mono-num font-bold text-rose-600 dark:text-rose-400">₹<span x-text="dueAmount"></span></strong></span>
+            </template>
+            <template x-if="dueAmount === 0">
+              <span>Paid in full</span>
+            </template>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                :class="paymentStatus === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : (paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20')"
+                x-text="paymentStatus === 'PAID' ? 'Full Payment' : (paymentStatus === 'PARTIALLY_PAID' ? 'Part Payment' : 'Unpaid Bill')">
+          </span>
+        </div>
+      </div>
+
+      <!-- Payment Mode Switcher: Single vs Split Payment -->
+      <div class="grid grid-cols-2 gap-2 p-1 bg-neutral-100 dark:bg-neutral-900 rounded-xl text-xs font-semibold">
+        <button type="button"
+                @click="isSplitMode = false"
+                :class="!isSplitMode ? 'bg-white dark:bg-[#201c18] text-neutral-900 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'"
+                class="py-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5">
+          <i data-lucide="wallet" class="w-3.5 h-3.5"></i>
+          <span>Single Tender</span>
+        </button>
+        <button type="button"
+                @click="enableSplitMode()"
+                :class="isSplitMode ? 'bg-white dark:bg-[#201c18] text-violet-600 dark:text-neon-cyan shadow-sm font-bold' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'"
+                class="py-2 rounded-lg transition-all text-center flex items-center justify-center gap-1.5">
+          <i data-lucide="git-fork" class="w-3.5 h-3.5"></i>
+          <span>Split Payment (2+)</span>
+        </button>
+      </div>
+
+      <!-- SINGLE PAYMENT MODE -->
+      <template x-if="!isSplitMode">
+        <div class="space-y-4">
+          <!-- Method pills -->
+          <div class="flex flex-wrap gap-2">
+            <template x-for="mode in paymentModes" :key="mode">
+              <button type="button"
+                      @click="selectedPaymentMode = mode"
+                      :class="selectedPaymentMode === mode ? 'border-violet-600 bg-violet-50 text-violet-700 dark:border-neon-cyan dark:bg-violet-950/40 dark:text-neon-cyan font-bold shadow-sm' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60 text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700'"
+                      class="flex-1 min-w-[85px] py-2 px-3 rounded-xl border text-xs text-center transition-all cursor-pointer truncate"
+                      x-text="mode">
+              </button>
+            </template>
+          </div>
+
+          <!-- Method Details -->
+          <template x-if="selectedPaymentMode === 'UPI'">
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                    <i data-lucide="smartphone" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white">Direct UPI Payment</p>
+                    <p class="text-[10px] text-neutral-400">Accept via GPay, PhonePe, Paytm, BHIM</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Instant Settlement
+                </span>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80 flex items-center justify-between gap-3"
+                   x-data="{ copied: false }">
+                <div class="min-w-0">
+                  <p class="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Salon VPA / UPI ID</p>
+                  <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white truncate"
+                     x-text="paymentMethods.upi || 'salon@aurapos.upi'"></p>
+                </div>
+                <button type="button"
+                        @click="navigator.clipboard.writeText(paymentMethods.upi || 'salon@aurapos.upi'); copied = true; setTimeout(() => copied = false, 2000)"
+                        class="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer">
+                  <i data-lucide="copy" class="w-3.5 h-3.5" x-show="!copied"></i>
+                  <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500" x-show="copied" x-cloak></i>
+                  <span x-text="copied ? 'Copied' : 'Copy'"></span>
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
+                <span>Amount to collect:</span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="paymentAmount"></span></span>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="selectedPaymentMode === 'Cash'">
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Cash Received (₹)</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400 font-mono-num pointer-events-none">₹</span>
+                  <input type="number"
+                         x-model.number="cashReceived"
+                         :placeholder="paymentAmount"
+                         class="w-full pl-7 pr-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50 text-neutral-900 dark:text-white">
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-neutral-100 dark:bg-neutral-900 flex justify-between text-xs font-semibold">
+                <span class="text-neutral-500">Change Due to Client</span>
+                <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="Math.max(0, cashReceived - paymentAmount)"></span></span>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="selectedPaymentMode === 'Card'">
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-neon-cyan flex items-center justify-center">
+                    <i data-lucide="credit-card" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white">Card POS Terminal</p>
+                    <p class="text-[10px] text-neutral-400">Tap, insert or swipe on physical terminal</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> EDC Machine
+                </span>
+              </div>
+              <div class="p-3.5 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700/80">
+                <p class="text-[10px] uppercase font-bold tracking-wider text-neutral-400 mb-0.5">Terminal ID / Model</p>
+                <p class="text-sm font-bold font-mono-num text-neutral-900 dark:text-white" x-text="paymentMethods.card_terminal || 'EDC-POS-01 (Primary)'"></p>
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
+                <span>Charge client:</span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="paymentAmount"></span></span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Custom / Alternate Payment Mode (Cheque, DD, Bank Transfer, Gift Card, etc.) -->
+          <template x-if="!['UPI', 'Cash', 'Card'].includes(selectedPaymentMode)">
+            <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+              <div class="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    <i data-lucide="receipt" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <p class="text-xs font-bold text-neutral-900 dark:text-white" x-text="selectedPaymentMode + ' Payment'"></p>
+                    <p class="text-[10px] text-neutral-400">Offline / Custom Tender Verification</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Verified Tender
+                </span>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+                  <span x-text="selectedPaymentMode"></span> Reference / Cheque / Instrument # (Optional)
+                </label>
+                <input type="text"
+                       x-model="customPaymentNote"
+                       :placeholder="'e.g. ' + selectedPaymentMode + ' #123456 / Bank Ref'"
+                       class="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400 px-1 pt-1">
+                <span>Amount to collect:</span>
+                <span class="font-mono-num font-bold text-neutral-900 dark:text-white">₹<span x-text="grandTotal"></span></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- SPLIT PAYMENT MODE -->
+      <template x-if="isSplitMode">
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between text-xs">
+            <div>
+              <span class="font-bold text-neutral-800 dark:text-neutral-200">Payment Tenders</span>
+              <span class="text-[10px] text-neutral-400 block sm:inline sm:ml-1 font-medium">(2 or more payment methods)</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" 
+                      @click="splitEqually()"
+                      class="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-[11px] font-semibold transition-all cursor-pointer">
+                Split 50/50
+              </button>
+              <button type="button" 
+                      @click="addSplitRow()" 
+                      class="px-2.5 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/60 dark:hover:bg-violet-900/60 text-violet-600 dark:text-neon-cyan text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Add Tender</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tender Rows Container -->
+          <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1 -mr-1">
+            <template x-for="(row, idx) in splitRows" :key="idx">
+              <div class="p-3 rounded-2xl bg-neutral-50/80 dark:bg-neutral-900/80 border border-neutral-200/80 dark:border-neutral-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 transition-all">
+                
+                <!-- Method selector -->
+                <div class="w-full sm:w-44 shrink-0">
+                  <div class="relative">
+                    <select x-model="row.method" 
+                            class="custom-select w-full pl-3 pr-8 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/80 text-xs font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-sm cursor-pointer">
+                      <template x-for="m in availableSplitMethods" :key="m">
+                        <option :value="m" x-text="m" class="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"></option>
+                      </template>
+                    </select>
+                    <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400">
+                      <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Amount input -->
+                <div class="relative flex-1">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-neutral-400 font-mono-num pointer-events-none select-none">₹</span>
+                  <input type="number" 
+                         min="0"
+                         x-model.number="row.amount" 
+                         placeholder="0"
+                         class="w-full pl-8 pr-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700/80 text-xs font-mono-num font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 shadow-sm">
+                </div>
+
+                <!-- Remove button -->
+                <div class="flex items-center justify-end sm:justify-center shrink-0">
+                  <button type="button" 
+                          @click="removeSplitRow(idx)"
+                          :disabled="splitRows.length <= 2"
+                          title="Remove tender method"
+                          class="p-2 rounded-xl text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-neutral-400 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Split Summary & Status Alert Card -->
+          <div class="space-y-2 pt-1 border-t border-neutral-200 dark:border-neutral-800">
+            <div class="flex items-center justify-between text-xs font-semibold px-1">
+              <span class="text-neutral-500 dark:text-neutral-400">Allocation Progress</span>
+              <div class="font-mono-num text-xs">
+                <span :class="splitRemaining === 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : (splitRemaining < 0 ? 'text-rose-600 font-bold' : 'text-neutral-900 dark:text-white font-bold')"
+                      x-text="'₹' + splitTotal"></span>
+                <span class="text-neutral-400 font-normal"> / ₹<span x-text="paymentAmount"></span></span>
+              </div>
+            </div>
+
+            <!-- Balanced state -->
+            <template x-if="splitRemaining === 0">
+              <div class="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between shadow-sm">
+                <span class="flex items-center gap-2">
+                  <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="check" class="w-3.5 h-3.5 stroke-[2.5]"></i>
+                  </div>
+                  <span>Balanced &amp; Ready to Confirm</span>
+                </span>
+                <span class="font-mono-num font-extrabold text-sm">₹<span x-text="splitTotal"></span></span>
+              </div>
+            </template>
+
+            <!-- Remaining state -->
+            <template x-if="splitRemaining > 0">
+              <div class="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 text-xs font-medium flex items-center justify-between gap-2 shadow-sm">
+                <div class="flex items-center gap-2 min-w-0">
+                  <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 shrink-0"></i>
+                  <span class="truncate">Remaining to allocate: <strong class="font-mono-num font-bold text-amber-700 dark:text-amber-300">₹<span x-text="splitRemaining"></span></strong></span>
+                </div>
+                <button type="button" 
+                        @click="fillSplitRemaining()" 
+                        class="px-2.5 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300/80 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-950 dark:text-white text-[11px] font-bold uppercase tracking-wider shrink-0 transition-all active:scale-95 shadow-xs">
+                  Auto-Fill
+                </button>
+              </div>
+            </template>
+
+            <!-- Over-allocated state -->
+            <template x-if="splitRemaining < 0">
+              <div class="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 text-xs font-medium flex items-center gap-2 shadow-sm">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-rose-500 shrink-0"></i>
+                <span>Tenders exceed invoice by <strong class="font-mono-num font-bold">₹<span x-text="Math.abs(splitRemaining)"></span></strong>. Please reduce amounts.</span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Customer WhatsApp Invoice Checkbox -->
+      <div class="flex items-center gap-2.5 text-xs text-neutral-600 dark:text-neutral-300 pt-1">
+        <input type="checkbox" id="send-wa" checked class="rounded border-neutral-300 text-violet-600 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        <label for="send-wa">Send invoice copy instantly via WhatsApp / SMS</label>
+      </div>
+
+      <!-- Action -->
+      <div class="flex gap-3 pt-2">
+        <button @click="showPaymentModal = false" class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          Cancel
+        </button>
+        <button @click="finalizePayment()" 
+                :disabled="processingPayment || (isSplitMode && splitRemaining !== 0) || (!isSplitMode && selectedPaymentMode === 'Cash' && amountReceived > 0 && cashReceived < amountReceived)"
+                class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i data-lucide="check" class="w-4 h-4" :class="processingPayment ? 'animate-pulse' : ''"></i>
+          <span x-text="processingPayment ? 'Saving Invoice…' : 'Confirm & Complete'"></span>
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= SETTLE OUTSTANDING DUES MODAL ================= -->
+  <div x-show="showSettleDuesModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-lg rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+         @click.away="showSettleDuesModal = false">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">Settle Outstanding Customer Dues</h3>
+          <p class="text-xs text-neutral-400" x-text="(customer.name || 'Client') + (customer.phone ? ' (' + customer.phone + ')' : '')"></p>
+        </div>
+        <button @click="showSettleDuesModal = false" class="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Dues List -->
+      <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+        <template x-if="!customerDues || !customerDues.dues || customerDues.dues.length === 0">
+          <p class="text-xs text-neutral-400 text-center py-4">No outstanding due bills found for this customer.</p>
+        </template>
+        <template x-for="bill in (customerDues ? customerDues.dues : [])" :key="bill.id">
+          <div class="p-3 rounded-2xl border transition-all cursor-pointer"
+               :class="selectedDueBill && selectedDueBill.id === bill.id ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 ring-1 ring-amber-500/40' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60'"
+               @click="selectDueBillToSettle(bill)">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold font-mono-num text-neutral-900 dark:text-white" x-text="'Bill #' + bill.id"></span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                    :class="bill.payment_status === 'PARTIALLY_PAID' ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'"
+                    x-text="bill.payment_status"></span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-neutral-500 mt-1">
+              <span>Total: ₹<span class="font-mono-num" x-text="bill.grand_total"></span> · Paid: ₹<span class="font-mono-num" x-text="bill.amount_paid"></span></span>
+              <span class="font-bold font-mono-num text-rose-600 dark:text-rose-400">Due: ₹<span x-text="bill.due_amount"></span></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Settlement Form (when a bill is selected) -->
+      <template x-if="selectedDueBill">
+        <div class="p-4 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-3">
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-neutral-700 dark:text-neutral-300">Settling Bill #<span x-text="selectedDueBill.id"></span></span>
+            <span class="text-neutral-500">Max Due: ₹<span class="font-mono-num font-bold text-rose-600" x-text="selectedDueBill.due_amount"></span></span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Settlement Amount (₹)</label>
+              <input type="number" min="1" :max="selectedDueBill.due_amount"
+                     x-model.number="settlePaymentAmount"
+                     class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-mono-num font-bold text-neutral-900 dark:text-white">
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Payment Method</label>
+              <select x-model="settlePaymentMode" class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-900 dark:text-white">
+                <template x-for="m in paymentModes" :key="'sp_'+m">
+                  <option :value="m" x-text="m"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] uppercase font-bold text-neutral-400 mb-1">Notes / Ref # (Optional)</label>
+            <input type="text" x-model="settlePaymentNotes" placeholder="e.g. Cleared by GPay ref 9812..."
+                   class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-900 dark:text-white">
+          </div>
+
+          <button type="button" 
+                  @click="recordSettlementPayment()" 
+                  :disabled="processingSettlement || settlePaymentAmount <= 0"
+                  class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span x-text="processingSettlement ? 'Recording Payment…' : 'Record ₹' + settlePaymentAmount + ' Settlement'"></span>
+          </button>
+        </div>
+      </template>
+
+      <div class="flex justify-end pt-1">
+        <button type="button" @click="showSettleDuesModal = false" class="px-4 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-semibold">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BILL SAVED SUCCESS & PRINT POPUP ================= -->
+  <div x-show="showBillSavedModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 text-center space-y-5"
+         @click.away="showBillSavedModal = false">
+      
+      <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto">
+        <i data-lucide="check-check" class="w-7 h-7"></i>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-bold text-neutral-900 dark:text-white">Bill Saved Successfully!</h3>
+        <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Invoice generated and recorded in system.</p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-left space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Invoice Number:</span>
+          <span class="font-mono-num font-bold text-neutral-900 dark:text-white" x-text="lastSavedBill ? lastSavedBill.bill_id : ''"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Customer:</span>
+          <span class="font-semibold text-neutral-900 dark:text-white" x-text="lastSavedBill ? (lastSavedBill.client_name || 'Walk-in') : ''"></span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-neutral-500">Payment Tender:</span>
+          <span class="font-semibold text-violet-600 dark:text-neon-cyan" x-text="lastSavedBill ? lastSavedBill.payment_mode : ''"></span>
+        </div>
+        <div class="flex justify-between pt-2 border-t border-neutral-200 dark:border-neutral-800 text-sm font-bold">
+          <span>Total Paid:</span>
+          <span class="font-mono-num text-emerald-600 dark:text-emerald-400">₹<span x-text="lastSavedBill ? lastSavedBill.grand_total : ''"></span></span>
+        </div>
+      </div>
+
+      <div class="flex gap-3 pt-1">
+        <button @click="showBillSavedModal = false" 
+                class="flex-1 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          Start New Bill
+        </button>
+        <button @click="printLastBill()" 
+                class="flex-1 py-3 rounded-xl btn-brand hover:opacity-95 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 flex items-center justify-center gap-1.5 transition-all">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Print Bill</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= CUSTOM LINE ITEM MODAL ================= -->
+  <div x-show="showCustomItemModal" 
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100">
+    
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+         @click.away="showCustomItemModal = false">
+      
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-neutral-900 dark:text-white">Add Custom Line Item</h3>
+        <button @click="showCustomItemModal = false" class="text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Item / Custom Service Name</label>
+          <input type="text" x-model="customItem.name" placeholder="e.g. Special Bridal Hair Touchup" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Price (₹)</label>
+            <input type="number" x-model.number="customItem.price" placeholder="750" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Assign Staff</label>
+            <select x-model="customItem.staff" class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <template x-for="st in staffList" :key="st">
+                <option :value="st" x-text="st"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button @click="showCustomItemModal = false" class="flex-1 py-2 rounded-xl border text-xs font-semibold">Cancel</button>
+        <button @click="addCustomItem()" class="flex-1 py-2 rounded-xl btn-brand text-white text-xs font-bold">Add to Bill</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= NEW CUSTOMER MODAL ================= -->
+  <div x-show="showNewCustomerModal"
+       x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+
+    <div class="bg-white dark:bg-[#181512] w-full max-w-md rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4"
+         @click.away="showNewCustomerModal = false">
+
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-neutral-900 dark:text-white">New Customer</h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">Saved instantly to your salon's customer list.</p>
+        </div>
+        <button @click="showNewCustomerModal = false" class="p-1 rounded-lg text-neutral-400 hover:text-neutral-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full Name <span class="text-rose-500">*</span></label>
+          <input type="text"
+                 x-model="newCustomer.name"
+                 placeholder="e.g., Riya Sharma"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Phone Number <span class="text-rose-500">*</span></label>
+            <input type="tel"
+                   inputmode="numeric"
+                   x-model="newCustomer.phone"
+                   @input="sanitizeCustomerPhone()"
+                   maxlength="10"
+                   placeholder="10-digit mobile number"
+                   class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono-num text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+            <p class="text-[10px] text-neutral-400 mt-1"><span class="font-mono-num" x-text="newCustomer.phone.length"></span>/10 digits — exactly 10 required.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Gender</label>
+            <select x-model="newCustomer.gender"
+                    class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+              <option value="">Select gender</option>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email (optional)</label>
+          <input type="email"
+                 x-model="newCustomer.email"
+                 placeholder="name@email.com"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Notes (optional)</label>
+          <input type="text"
+                 x-model="newCustomer.notes"
+                 placeholder="e.g., Prefers weekend slots"
+                 class="w-full px-3 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/70 dark:focus:ring-neon-cyan/50">
+        </div>
+        <p x-show="newCustomerError" x-cloak class="text-[11px] font-semibold text-rose-500" x-text="newCustomerError"></p>
+      </div>
+
+      <div class="flex gap-3 pt-1">
+        <button @click="showNewCustomerModal = false" class="flex-1 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800">
+          Cancel
+        </button>
+        <button @click="createCustomer()" :disabled="savingCustomer"
+                class="flex-1 py-2.5 rounded-xl btn-brand hover:opacity-95 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-neon-magenta/25 transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span x-text="savingCustomer ? 'Saving…' : 'Create &amp; Attach'"></span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= PRINTABLE THERMAL RECEIPT ================= -->
+  <style>
+    @media print {
+      .paper-2inch { width: 58mm !important; max-width: 58mm !important; font-size: 10px !important; margin: 0 auto !important; }
+      .paper-3inch { width: 80mm !important; max-width: 80mm !important; font-size: 12px !important; margin: 0 auto !important; }
+      .paper-4inch { width: 104mm !important; max-width: 104mm !important; font-size: 13px !important; margin: 0 auto !important; }
+    }
+  </style>
+  <div id="printable-receipt" 
+       :class="(printerSettings && printerSettings.paper_width === '2inch') ? 'paper-2inch' : ((printerSettings && printerSettings.paper_width === '4inch') ? 'paper-4inch' : 'paper-3inch')"
+       class="hidden print:block font-mono text-black">
+    <div class="text-center pb-2 border-b border-black">
+      {% if is_studio and salon and salon.logo %}
+      <div class="flex justify-center mb-2">
+        <img src="{{ salon.logo }}" alt="Logo" class="h-12 max-w-[160px] object-contain">
+      </div>
+      {% endif %}
+
+      <h2 class="font-bold text-base uppercase tracking-wider">{{ salon.salon_name if (salon and salon.salon_name) else 'Aura Salon' }}</h2>
+
+      {% if is_studio and salon and salon.address %}
+      <p class="text-[10px]">{{ salon.address }}</p>
+      {% endif %}
+
+      {% if (is_studio or is_pro) and salon and salon.phone %}
+      <p class="text-[10px]">Phone: {{ salon.phone }}</p>
+      {% endif %}
+
+      <p class="text-[10px]">Date: <span x-text="printDate"></span></p>
+      <p class="text-[10px]">Invoice: #<span x-text="printInvoiceId"></span></p>
+      <template x-if="taxSettings && taxSettings.tax_number">
+        <p class="text-[10px] font-mono">Tax / GSTIN: <span x-text="taxSettings.tax_number"></span></p>
+      </template>
+    </div>
+
+    {% if is_free %}
+    <!-- Free Tier AuraPOS Watermark -->
+    <div class="py-1 text-center border-b border-dashed border-black">
+      <p class="text-[9px] font-bold tracking-widest uppercase">--- POWERED BY AURAPOS ---</p>
+    </div>
+    {% endif %}
+
+    <div class="py-2 text-[11px] border-b border-dashed border-black">
+      <p>Customer: <span x-text="printCustomer.name || 'Walk-in Client'"></span></p>
+      <p>Phone: <span x-text="printCustomer.phone || 'N/A'"></span></p>
+      <div class="flex justify-between">
+        <span>Payment:</span>
+        <span class="font-bold" x-text="printPaymentSummary"></span>
+      </div>
+      <template x-if="printSplits && printSplits.length > 0">
+        <div class="pl-2 pt-0.5 space-y-0.5 text-[10px]">
+          <template x-for="sp in printSplits" :key="sp.method">
+            <div class="flex justify-between">
+              <span>• <span x-text="sp.method"></span>:</span>
+              <span>₹<span x-text="sp.amount"></span></span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- Billed Items Grouped By Category: <SERVICES> / <PRODUCTS> / <SUBSCRIPTIONS> -->
+    <div class="py-2 text-[11px] space-y-2 border-b border-black">
+      
+      <!-- <SERVICES> Section -->
+      <template x-if="printServiceItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;SERVICES&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printServiceItems" :key="'ps_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Divider if both services and products exist -->
+      <template x-if="printServiceItems.length > 0 && printProductItems.length > 0">
+        <div class="border-t border-dashed border-black my-1"></div>
+      </template>
+
+      <!-- <PRODUCTS> Section -->
+      <template x-if="printProductItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;PRODUCTS&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printProductItems" :key="'pp_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Divider if products/services and subscriptions exist -->
+      <template x-if="(printServiceItems.length > 0 || printProductItems.length > 0) && printSubscriptionItems.length > 0">
+        <div class="border-t border-dashed border-black my-1"></div>
+      </template>
+
+      <!-- <SUBSCRIPTIONS> Section -->
+      <template x-if="printSubscriptionItems.length > 0">
+        <div>
+          <div class="font-bold text-[10px] tracking-wider uppercase border-b border-dashed border-neutral-400 pb-0.5 mb-1">&lt;SUBSCRIPTIONS&gt;</div>
+          <div class="space-y-1">
+            <template x-for="item in printSubscriptionItems" :key="'pm_' + (item.cartId || item.id || item.name)">
+              <div class="flex justify-between">
+                <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+                <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Fallback if uncategorized / custom items are present -->
+      <template x-if="printServiceItems.length === 0 && printProductItems.length === 0 && printSubscriptionItems.length === 0">
+        <template x-for="item in printItems" :key="item.cartId || item.name">
+          <div class="flex justify-between">
+            <span><span x-text="item.name"></span> (x<span x-text="item.qty"></span>)</span>
+            <span>₹<span x-text="Math.round(item.price * item.qty)"></span></span>
+          </div>
+        </template>
+      </template>
+    </div>
+
+    <div class="py-2 text-[11px] space-y-0.5">
+      <div class="flex justify-between"><span>Subtotal:</span><span>₹<span x-text="printSubtotal"></span></span></div>
+      <div class="flex justify-between"><span>Discount:</span><span>₹<span x-text="printDiscount"></span></span></div>
+      <div class="flex justify-between" x-show="taxEnabled && printTax > 0">
+        <span><span x-text="taxSettings && taxSettings.tax_name ? taxSettings.tax_name : 'Tax'"></span> (<span x-text="taxRate"></span>%<span x-text="taxInclusive ? ' Incl.' : ''"></span>):</span>
+        <span>₹<span x-text="printTax"></span></span>
+      </div>
+      <div class="flex justify-between font-bold text-sm pt-1 border-t border-black">
+        <span>TOTAL INVOICE:</span><span>₹<span x-text="printGrandTotal"></span></span>
+      </div>
+      <template x-if="printDueAmount > 0">
+        <div class="pt-1 space-y-0.5 border-t border-dashed border-black text-[11px]">
+          <div class="flex justify-between"><span>Amount Paid:</span><span>₹<span x-text="printAmountPaid"></span></span></div>
+          <div class="flex justify-between font-bold"><span>BALANCE DUE:</span><span>₹<span x-text="printDueAmount"></span></span></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="text-center pt-3 text-[10px] border-t border-dashed border-black">
+      {% if is_free %}
+      <p class="font-bold text-[11px] tracking-wider uppercase">⚡ AURAPOS WATERMARK ⚡</p>
+      <p class="text-[9px]">Free Tier receipt • Visit aurapos3.vercel.app to upgrade</p>
+      {% else %}
+      <p>Thank you for visiting {{ salon.salon_name if salon else 'our salon' }}!</p>
+      <p>Book online at aurapos3.vercel.app/b/{{ salon.booking_slug if (salon and salon.booking_slug) else 'demo' }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <!-- ================= TERMINAL LOCKOUT BARRIER (Cross-Tab Concurrency Guard) ================= -->
+  <div x-show="tabBlocked" 
+       x-transition:enter="transition ease-out duration-300" 
+       x-transition:enter-start="opacity-0 scale-95" 
+       x-transition:enter-end="opacity-100 scale-100" 
+       x-cloak 
+       class="fixed inset-0 z-[99999] aurapos-topmost flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md" 
+       style="z-index: 2147483647 !important;">
+    
+    <div class="relative w-full max-w-lg p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200 dark:border-neutral-800 shadow-2xl text-center space-y-5">
+      
+      <!-- Icon & Status Ring -->
+      <div class="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 grid place-items-center shadow-lg shadow-amber-500/10">
+        <i data-lucide="shield-alert" class="w-8 h-8 animate-pulse"></i>
+      </div>
+
+      <!-- Heading & Text -->
+      <div>
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono-num font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 mb-2">
+          <span>Terminal Concurrency Active</span>
+        </div>
+        <h3 class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white" x-text="tabBlockedTitle">
+          Terminal Active in Another Tab
+        </h3>
+        <p class="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-2 max-w-md mx-auto leading-relaxed" x-text="tabBlockedMessage">
+          Free Tier allows only 1 active checkout terminal at a time across your salon. Terminal #01 is currently open and active in another browser tab.
+        </p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <!-- Take over terminal in this tab (when specific terminal is in use) -->
+        <button x-show="!isLimitReached"
+                type="button"
+                @click="takeoverActiveTerminal()"
+                class="w-full sm:w-auto px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-lg shadow-violet-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Take Over Terminal in This Tab</span>
+        </button>
+
+        <!-- Check availability button (when all slots are occupied) -->
+        <button x-show="isLimitReached"
+                type="button"
+                @click="sendHeartbeat()"
+                class="w-full sm:w-auto px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-lg shadow-violet-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Check Availability</span>
+        </button>
+
+        <!-- Upgrade button -->
+        <a href="{{ url_for('upgrade') }}" 
+           class="w-full sm:w-auto px-5 py-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold text-xs transition-colors flex items-center justify-center gap-2">
+          <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+          <span>Upgrade Plan</span>
+        </a>
+
+        <!-- Return to Dashboard -->
+        <a href="{{ url_for('dashboard') }}" 
+           class="w-full sm:w-auto px-4 py-3 rounded-xl text-neutral-500 hover:text-neutral-800 dark:hover:text-white font-medium text-xs transition-colors">
+          Dashboard
+        </a>
+      </div>
+
+      <div class="text-[11px] text-neutral-400 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+        Other pages (Appointments, Reports, Settings) remain freely accessible across tabs.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= UPGRADE PROMPT MODAL ================= -->
+  <div x-show="showTerminalUpgradeModal"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-cloak
+       class="fixed inset-0 z-[99998] aurapos-topmost flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-sm"
+       style="z-index: 2147483647 !important;">
+    <div class="w-full max-w-md p-6 rounded-3xl bg-white dark:bg-[#141210] border border-neutral-200 dark:border-neutral-800 shadow-2xl text-center space-y-4">
+      <div class="mx-auto w-12 h-12 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-600 dark:text-neon-cyan grid place-items-center">
+        <i data-lucide="layers" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-neutral-900 dark:text-white" x-text="upgradeModalTitle">Multi-Terminal Upgrade</h4>
+        <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1" x-text="upgradeModalMessage"></p>
+      </div>
+      <div class="grid grid-cols-2 gap-3 pt-2 text-left">
+        <div class="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+          <p class="text-[10px] font-bold uppercase text-violet-600 dark:text-neon-cyan">Pro Tier</p>
+          <p class="text-sm font-bold text-neutral-900 dark:text-white">3 Parallel Registers</p>
+          <p class="text-[10px] text-neutral-400 mt-0.5">₹69/mo · Cookie caching</p>
+        </div>
+        <div class="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
+          <p class="text-[10px] font-bold uppercase text-orange-500">Studio Tier</p>
+          <p class="text-sm font-bold text-neutral-900 dark:text-white">Unlimited + Cloud</p>
+          <p class="text-[10px] text-neutral-400 mt-0.5">₹149/mo · Live Cloud Sync</p>
+        </div>
+      </div>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button type="button" @click="showTerminalUpgradeModal = false" class="px-4 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs font-semibold hover:bg-neutral-200 transition-colors">
+          Cancel
+        </button>
+        <a href="{{ url_for('upgrade') }}" class="px-5 py-2.5 rounded-xl btn-brand text-white text-xs font-bold shadow-md shadow-orange-500/20 hover:scale-[1.02] transition-all">
+          View Plans &amp; Upgrade
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+  function posBillingApp() {
+    return {
+      tier: '{{ current_tier or "free" }}',
+      terminalLimit: {{ terminal_limit | tojson if terminal_limit is not none else 'null' }},
+      accountId: {{ account_id or 0 }},
+      accountName: '{{ account_username or "Staff" }}',
+      activeTerminalId: 1,
+      tabId: '',
+      tabBlocked: false,
+      tabBlockedTitle: 'Terminal Active in Another Tab',
+      tabBlockedMessage: '',
+      isLimitReached: false,
+      otherActiveIds: [],
+      showTerminalUpgradeModal: false,
+      upgradeModalTitle: '',
+      upgradeModalMessage: '',
+      heartbeatTimer: null,
+      draftDebounceTimer: null,
+      broadcastChannel: null,
+
+      terminals: [
+        {
+          id: 1,
+          name: 'Terminal #01',
+          billItems: [],
+          customer: { name: '', phone: '' },
+          customerQuery: '',
+          discountType: 'percent',
+          discountValue: 0,
+          selectedPaymentMode: 'UPI',
+          isSplitMode: false,
+          splitRows: [
+            { method: 'UPI', amount: 0 },
+            { method: 'Cash', amount: 0 }
+          ]
+        }
+      ],
+
+      get activeTerminalName() {
+        const t = this.terminals.find(item => item.id === this.activeTerminalId);
+        return t ? t.name : `Terminal #${String(this.activeTerminalId).padStart(2, '0')}`;
+      },
+
+      getTerminalSummary(termId) {
+        const t = this.terminals.find(item => item.id === termId);
+        if (!t) return 'Empty';
+        const count = (t.billItems || []).reduce((acc, i) => acc + (Number(i.qty) || 1), 0);
+        if (count === 0) return 'Empty';
+        const total = (t.billItems || []).reduce((acc, i) => acc + ((Number(i.price) || 0) * (Number(i.qty) || 1)), 0);
+        return `${count} item${count > 1 ? 's' : ''} • ₹${total}`;
+      },
+
+      switchTerminal(targetId) {
+        if (targetId === this.activeTerminalId) return;
+        this.snapshotCurrentTerminal();
+        if (this.tier === 'studio') {
+          this.saveStudioDraft(this.activeTerminalId);
+        } else if (this.tier === 'pro') {
+          this.saveProCookieDraft(this.activeTerminalId);
+        }
+        this.activeTerminalId = targetId;
+        this.restoreActiveTerminalState();
+        this.sendHeartbeat();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      snapshotCurrentTerminal() {
+        let term = this.terminals.find(t => t.id === this.activeTerminalId);
+        if (!term) return;
+        term.billItems = JSON.parse(JSON.stringify(this.billItems || []));
+        term.customer = JSON.parse(JSON.stringify(this.customer || { name: '', phone: '' }));
+        term.customerQuery = this.customerQuery || '';
+        term.discountType = this.discountType || 'percent';
+        term.discountValue = this.discountValue || 0;
+        term.selectedPaymentMode = this.selectedPaymentMode || 'UPI';
+        term.isSplitMode = this.isSplitMode || false;
+        term.splitRows = JSON.parse(JSON.stringify(this.splitRows || []));
+      },
+
+      restoreActiveTerminalState() {
+        let term = this.terminals.find(t => t.id === this.activeTerminalId);
+        if (!term) return;
+        this.billItems = JSON.parse(JSON.stringify(term.billItems || []));
+        this.customer = JSON.parse(JSON.stringify(term.customer || { name: '', phone: '' }));
+        this.customerQuery = term.customerQuery || (term.customer && term.customer.name) || '';
+        this.discountType = term.discountType || 'percent';
+        this.discountValue = term.discountValue || 0;
+        this.selectedPaymentMode = term.selectedPaymentMode || 'UPI';
+        this.isSplitMode = term.isSplitMode || false;
+        this.splitRows = JSON.parse(JSON.stringify(term.splitRows || [
+          { method: 'UPI', amount: 0 },
+          { method: 'Cash', amount: 0 }
+        ]));
+      },
+
+      async requestNewTerminal() {
+        if (this.terminals.length >= 3) {
+          if (window.uiToast) window.uiToast("Maximum of 3 concurrent terminals allowed per browser tab.", "warning");
+          return;
+        }
+
+        if (this.tier === 'free') {
+          this.upgradeModalTitle = "Free Plan: 1 Terminal Limit";
+          this.upgradeModalMessage = "The Free Plan allows only 1 active POS terminal across your salon. Upgrade to Pro for up to 3 parallel terminals with device cookie caching, or Studio for unlimited cloud-synced registers.";
+          this.showTerminalUpgradeModal = true;
+          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          return;
+        }
+
+        if (this.tier === 'pro') {
+          // Check live status from server to count terminals active in other tabs
+          try {
+            const statusRes = await fetch('/api/terminals/status');
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const otherActive = (statusData.active_terminals || []).filter(s => s.tab_id !== this.tabId);
+              const otherActiveIds = [...new Set(otherActive.map(s => Number(s.terminal_id)))];
+              this.otherActiveIds = otherActiveIds;
+              const myIds = this.terminals.map(t => Number(t.id));
+              const allDistinct = new Set([...otherActiveIds, ...myIds]);
+
+              if (allDistinct.size >= 3) {
+                this.upgradeModalTitle = "Pro Plan: 3 Terminals Reached";
+                this.upgradeModalMessage = `You already have ${allDistinct.size} concurrent terminal(s) active across your salon browser tabs. Pro tier allows a maximum of 3 parallel registers. Upgrade to Studio for unlimited registers.`;
+                this.showTerminalUpgradeModal = true;
+                this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn("Status check failed in requestNewTerminal:", e);
+          }
+
+          if (this.terminals.length >= 3) {
+            this.upgradeModalTitle = "Pro Plan: 3 Terminals Reached";
+            this.upgradeModalMessage = "You have opened the maximum of 3 concurrent terminals included in the Pro Plan. Upgrade to Studio for unlimited registers with live cloud draft synchronization across all devices.";
+            this.showTerminalUpgradeModal = true;
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+            return;
+          }
+        }
+
+        const existingIds = this.terminals.map(t => t.id);
+        let nextId = 1;
+        if (this.tier === 'pro') {
+          const occupied = new Set([...existingIds, ...(this.otherActiveIds || [])]);
+          const available = [1, 2, 3].find(id => !occupied.has(id));
+          if (!available) {
+            this.upgradeModalTitle = "Pro Plan: 3 Terminals Reached";
+            this.upgradeModalMessage = "All 3 terminals in your Pro Plan are currently open across your browser tabs or windows.";
+            this.showTerminalUpgradeModal = true;
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+            return;
+          }
+          nextId = available;
+        } else {
+          while (existingIds.includes(nextId)) {
+            nextId++;
+          }
+        }
+
+        const newTerm = {
+          id: nextId,
+          name: `Terminal #${String(nextId).padStart(2, '0')}`,
+          billItems: [],
+          customer: { name: '', phone: '' },
+          customerQuery: '',
+          discountType: 'percent',
+          discountValue: 0,
+          selectedPaymentMode: 'UPI',
+          isSplitMode: false,
+          splitRows: [
+            { method: 'UPI', amount: 0 },
+            { method: 'Cash', amount: 0 }
+          ]
+        };
+
+        this.snapshotCurrentTerminal();
+        this.terminals.push(newTerm);
+        this.switchTerminal(nextId);
+        window.uiToast(`Opened ${newTerm.name}`, 'info');
+        if (this.broadcastChannel) {
+          this.broadcastChannel.postMessage({
+            type: 'terminals_changed',
+            tabId: this.tabId,
+            openTerminalIds: this.terminals.map(t => t.id)
+          });
+        }
+      },
+
+      async closeTerminal(id) {
+        if (this.terminals.length <= 1) return;
+        const term = this.terminals.find(t => t.id === id);
+        if (!term) return;
+
+        if (term.billItems && term.billItems.length > 0) {
+          const ok = await window.uiConfirm({
+            title: `Close ${term.name}?`,
+            message: `There are ${term.billItems.length} unsaved service item(s) in this terminal. Closing it will discard this draft.`,
+            confirmText: 'Discard & Close',
+            cancelText: 'Keep Terminal',
+            danger: true
+          });
+          if (!ok) return;
+        }
+
+        if (this.tier === 'studio') {
+          fetch(`/api/terminals/drafts/${id}`, { method: 'DELETE' }).catch(() => {});
+        } else if (this.tier === 'pro') {
+          document.cookie = `aurapos_draft_u${this.accountId}_t${id}=; path=/; max-age=0`;
+        }
+
+        // Release terminal session on server
+        fetch('/api/terminals/release', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tab_id: this.tabId, terminal_id: id })
+        }).catch(() => {});
+
+        this.terminals = this.terminals.filter(t => t.id !== id);
+        if (this.activeTerminalId === id) {
+          this.activeTerminalId = this.terminals[0].id;
+          this.restoreActiveTerminalState();
+        }
+        await this.sendHeartbeat();
+        if (this.broadcastChannel) {
+          this.broadcastChannel.postMessage({
+            type: 'terminals_changed',
+            tabId: this.tabId,
+            releasedTerminalId: id,
+            openTerminalIds: this.terminals.map(t => t.id)
+          });
+        }
+        window.uiToast(`Closed ${term.name}`, 'info');
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      saveCurrentTerminalDraft() {
+        this.snapshotCurrentTerminal();
+        if (this.tier === 'studio') {
+          this.saveStudioDraft(this.activeTerminalId);
+        } else if (this.tier === 'pro') {
+          this.saveProCookieDraft(this.activeTerminalId);
+        }
+      },
+
+      saveStudioDraft(termId) {
+        if (this.tier !== 'studio') return;
+        const term = this.terminals.find(t => t.id === termId);
+        if (!term) return;
+        clearTimeout(this.draftDebounceTimer);
+        this.draftDebounceTimer = setTimeout(async () => {
+          try {
+            await fetch('/api/terminals/drafts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                terminal_id: term.id,
+                terminal_name: term.name,
+                cart_data: {
+                  items: term.billItems,
+                  customer: term.customer,
+                  customerQuery: term.customerQuery,
+                  discountType: term.discountType,
+                  discountValue: term.discountValue,
+                  selectedPaymentMode: term.selectedPaymentMode,
+                  isSplitMode: term.isSplitMode,
+                  splitRows: term.splitRows
+                }
+              })
+            });
+          } catch (e) {
+            console.warn("Studio cloud draft save error:", e);
+          }
+        }, 350);
+      },
+
+      saveProCookieDraft(termId) {
+        if (this.tier !== 'pro') return;
+        const term = this.terminals.find(t => t.id === termId);
+        if (!term) return;
+        try {
+          const key = `aurapos_draft_u${this.accountId}_t${termId}`;
+          const payload = JSON.stringify({
+            accountId: this.accountId,
+            terminalId: termId,
+            name: term.name,
+            items: term.billItems || [],
+            customer: term.customer || { name: '', phone: '' },
+            customerQuery: term.customerQuery || '',
+            discountType: term.discountType || 'percent',
+            discountValue: term.discountValue || 0,
+            selectedPaymentMode: term.selectedPaymentMode || 'UPI',
+            isSplitMode: term.isSplitMode || false,
+            splitRows: term.splitRows || []
+          });
+          document.cookie = `${key}=${encodeURIComponent(payload)}; path=/; max-age=604800; SameSite=Lax`;
+        } catch (e) {
+          console.warn("Pro cookie save error:", e);
+        }
+      },
+
+      loadProCookieDrafts() {
+        if (this.tier !== 'pro') return;
+        try {
+          const prefix = `aurapos_draft_u${this.accountId}_t`;
+          const cookies = document.cookie.split(';');
+          for (const c of cookies) {
+            const trimmed = c.trim();
+            if (trimmed.startsWith(prefix)) {
+              const eqIdx = trimmed.indexOf('=');
+              if (eqIdx !== -1) {
+                const val = decodeURIComponent(trimmed.substring(eqIdx + 1));
+                const data = JSON.parse(val);
+                if (data && data.terminalId && Number(data.accountId) === Number(this.accountId)) {
+                  const tId = Number(data.terminalId);
+                  // Never load a terminal ID held by another active tab
+                  if (this.otherActiveIds && this.otherActiveIds.includes(tId)) {
+                    continue;
+                  }
+                  let term = this.terminals.find(t => t.id === tId);
+                  if (!term) {
+                    const currentTotal = this.terminals.length + (this.otherActiveIds ? this.otherActiveIds.length : 0);
+                    if (currentTotal < 3) {
+                      term = {
+                        id: tId,
+                        name: data.name || `Terminal #${String(tId).padStart(2, '0')}`,
+                        billItems: data.items || [],
+                        customer: data.customer || { name: '', phone: '' },
+                        customerQuery: data.customerQuery || '',
+                        discountType: data.discountType || 'percent',
+                        discountValue: data.discountValue || 0,
+                        selectedPaymentMode: data.selectedPaymentMode || 'UPI',
+                        isSplitMode: data.isSplitMode || false,
+                        splitRows: data.splitRows || []
+                      };
+                      this.terminals.push(term);
+                    }
+                  } else {
+                    term.billItems = data.items || [];
+                    term.customer = data.customer || { name: '', phone: '' };
+                    term.customerQuery = data.customerQuery || '';
+                    term.discountType = data.discountType || 'percent';
+                    term.discountValue = data.discountValue || 0;
+                    term.selectedPaymentMode = data.selectedPaymentMode || 'UPI';
+                    term.isSplitMode = data.isSplitMode || false;
+                    term.splitRows = data.splitRows || [];
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Error loading Pro cookie drafts:", e);
+        }
+      },
+
+      async loadStudioCloudDrafts() {
+        if (this.tier !== 'studio') return;
+        try {
+          const res = await fetch('/api/terminals/drafts');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.cloud_sync && Array.isArray(data.drafts) && data.drafts.length > 0) {
+              for (const d of data.drafts) {
+                const tId = Number(d.terminal_id);
+                const cart = d.cart_data || {};
+                let term = this.terminals.find(t => t.id === tId);
+                if (!term) {
+                  if (this.terminals.length >= 3) continue;
+                  term = {
+                    id: tId,
+                    name: d.terminal_name || `Terminal #${String(tId).padStart(2, '0')}`,
+                    billItems: cart.items || [],
+                    customer: cart.customer || { name: '', phone: '' },
+                    customerQuery: cart.customerQuery || (cart.customer && cart.customer.name) || '',
+                    discountType: cart.discountType || 'percent',
+                    discountValue: cart.discountValue || 0,
+                    selectedPaymentMode: cart.selectedPaymentMode || 'UPI',
+                    isSplitMode: cart.isSplitMode || false,
+                    splitRows: cart.splitRows || []
+                  };
+                  this.terminals.push(term);
+                } else {
+                  term.billItems = cart.items || [];
+                  term.customer = cart.customer || { name: '', phone: '' };
+                  term.customerQuery = cart.customerQuery || (cart.customer && cart.customer.name) || '';
+                  term.discountType = cart.discountType || 'percent';
+                  term.discountValue = cart.discountValue || 0;
+                  term.selectedPaymentMode = cart.selectedPaymentMode || 'UPI';
+                  term.isSplitMode = cart.isSplitMode || false;
+                  term.splitRows = cart.splitRows || [];
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Error loading Studio cloud drafts:", e);
+        }
+      },
+
+      async initTerminalConcurrencyGuard() {
+        let tabId = sessionStorage.getItem('aurapos_pos_tab_id');
+        if (!tabId) {
+          tabId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+          sessionStorage.setItem('aurapos_pos_tab_id', tabId);
+        }
+        this.tabId = tabId;
+
+        // Query status FIRST before opening terminal
+        try {
+          const statusRes = await fetch('/api/terminals/status');
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            const activeList = statusData.active_terminals || [];
+            const otherActive = activeList.filter(s => s.tab_id !== this.tabId);
+            const otherActiveIds = [...new Set(otherActive.map(s => Number(s.terminal_id)))];
+            this.otherActiveIds = otherActiveIds;
+
+            if (this.tier === 'free') {
+              if (otherActiveIds.includes(1)) {
+                this.tabBlocked = true;
+                this.isLimitReached = false;
+                this.tabBlockedTitle = "Terminal Active in Another Tab";
+                this.tabBlockedMessage = "Free Tier allows only 1 active checkout terminal at a time across your salon. Terminal #01 is currently open and active in another browser tab. Close that tab or take over this terminal.";
+                this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                return;
+              }
+            } else if (this.tier === 'pro') {
+              if (otherActiveIds.length >= 3) {
+                this.tabBlocked = true;
+                this.isLimitReached = true;
+                this.tabBlockedTitle = "Terminal Limit Reached (3 Max)";
+                this.tabBlockedMessage = "Your Pro Plan allows up to 3 parallel terminals across your salon. Terminals #01, #02, and #03 are currently active in other windows or browser tabs. Close an existing terminal or upgrade to Studio for unlimited terminals.";
+                this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                return;
+              }
+
+              // Pick lowest available ID in [1, 2, 3] not used in other tabs
+              const availableId = [1, 2, 3].find(id => !otherActiveIds.includes(id)) || 1;
+              this.activeTerminalId = availableId;
+              this.terminals = [{
+                id: availableId,
+                name: `Terminal #${String(availableId).padStart(2, '0')}`,
+                billItems: [],
+                customer: { name: '', phone: '' },
+                customerQuery: '',
+                discountType: 'percent',
+                discountValue: 0,
+                selectedPaymentMode: 'UPI',
+                isSplitMode: false,
+                splitRows: [
+                  { method: 'UPI', amount: 0 },
+                  { method: 'Cash', amount: 0 }
+                ]
+              }];
+            }
+          }
+        } catch (e) {
+          console.warn("Terminal initial status check failed:", e);
+        }
+
+        // BroadcastChannel for instant same-browser cross-tab lockout & sync
+        if ('BroadcastChannel' in window) {
+          try {
+            this.broadcastChannel = new BroadcastChannel('aurapos_pos_terminals');
+            this.broadcastChannel.onmessage = async (e) => {
+              const msg = e.data || {};
+              if (msg.type === 'takeover' && Number(msg.terminalId) === Number(this.activeTerminalId) && msg.tabId !== this.tabId) {
+                this.tabBlocked = true;
+                this.isLimitReached = false;
+                this.tabBlockedTitle = "Terminal Taken Over in Another Tab";
+                this.tabBlockedMessage = `Terminal #${String(this.activeTerminalId).padStart(2, '0')} was claimed in another window or by another cashier.`;
+                this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+              } else if (msg.type === 'released' || msg.type === 'terminals_changed') {
+                if (this.tabBlocked) {
+                  await this.sendHeartbeat();
+                }
+              }
+            };
+          } catch (e) {
+            console.warn("BroadcastChannel error:", e);
+          }
+        }
+
+        // Beforeunload cleanup: release this tab's sessions
+        window.addEventListener('beforeunload', () => {
+          try {
+            const payload = JSON.stringify({ tab_id: this.tabId });
+            const blob = new Blob([payload], { type: 'application/json' });
+            navigator.sendBeacon('/api/terminals/release', blob);
+            if (this.broadcastChannel) {
+              this.broadcastChannel.postMessage({ type: 'released', tabId: this.tabId });
+            }
+          } catch (e) {}
+        });
+
+        // Send immediate heartbeat
+        await this.sendHeartbeat();
+
+        // Send recurring heartbeat every 30 seconds; the server keeps a 45s lease.
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = setInterval(() => {
+          if (!this.tabBlocked) {
+            this.sendHeartbeat();
+          }
+        }, 30000);
+      },
+
+      async sendHeartbeat() {
+        try {
+          const res = await fetch('/api/terminals/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              terminal_id: this.activeTerminalId,
+              tab_id: this.tabId,
+              open_terminal_ids: this.terminals.map(t => t.id)
+            })
+          });
+          const data = await res.json();
+          if (data && data.allowed === false) {
+            this.tabBlocked = true;
+            if (data.reason === 'in_use') {
+              this.isLimitReached = false;
+              this.tabBlockedTitle = `Terminal #${String(this.activeTerminalId).padStart(2, '0')} is Active in Another Tab`;
+              this.tabBlockedMessage = data.message || `Terminal #${this.activeTerminalId} is currently being used in another browser tab.`;
+            } else {
+              this.isLimitReached = true;
+              this.tabBlockedTitle = `Terminal Limit Reached (${data.limit} Max)`;
+              this.tabBlockedMessage = data.message || `Your plan allows up to ${data.limit} active terminal(s).`;
+            }
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          } else {
+            this.tabBlocked = false;
+            this.isLimitReached = false;
+            if (data && data.open_terminals) {
+              const allowed = new Set(data.open_terminals);
+              if (this.terminals.length > allowed.size) {
+                this.terminals = this.terminals.filter(t => allowed.has(t.id));
+                if (!allowed.has(this.activeTerminalId)) {
+                  this.activeTerminalId = this.terminals[0] ? this.terminals[0].id : 1;
+                  this.restoreActiveTerminalState();
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Terminal heartbeat failed:", e);
+        }
+      },
+
+      async takeoverActiveTerminal() {
+        try {
+          const res = await fetch('/api/terminals/takeover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              terminal_id: this.activeTerminalId,
+              tab_id: this.tabId
+            })
+          });
+          const data = await res.json();
+          if (data && data.allowed) {
+            this.tabBlocked = false;
+            if (this.broadcastChannel) {
+              this.broadcastChannel.postMessage({
+                type: 'takeover',
+                terminalId: this.activeTerminalId,
+                tabId: this.tabId
+              });
+            }
+            window.uiToast(`Active lease claimed for Terminal #${String(this.activeTerminalId).padStart(2, '0')}!`, 'success');
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          } else {
+            window.uiToast("Could not claim terminal lease.", "error");
+          }
+        } catch (e) {
+          window.uiToast("Network error taking over terminal.", "error");
+        }
+      },
+
+      isLoading: true,
+      searchQuery: '',
+      selectedCategory: 'All',
+      selectedPaymentMode: 'UPI',
+      discountType: 'percent', // 'percent' or 'flat'
+      discountValue: 0,
+      cashReceived: 0,
+      amountReceived: 0,
+      showPaymentModal: false,
+      showCustomItemModal: false,
+      processingPayment: false,
+      lastBillId: null,
+      showBillSavedModal: false,
+      lastSavedBill: null,
+
+      // Split payment mode state
+      isSplitMode: false,
+      splitRows: [
+        { method: 'UPI', amount: 0 },
+        { method: 'Cash', amount: 0 }
+      ],
+      availableSplitMethods: ['UPI', 'Cash', 'Card', 'Bank Transfer', 'Cheque', 'Gift Card'],
+
+      // Customer outstanding dues state
+      customerDues: null,
+      showSettleDuesModal: false,
+      selectedDueBill: null,
+      settlePaymentAmount: 0,
+      settlePaymentMode: 'Cash',
+      settlePaymentNotes: '',
+      processingSettlement: false,
+
+      customer: {
+        name: '',
+        phone: ''
+      },
+
+      customerQuery: '',
+      customerResults: [],
+      customerSearching: false,
+      showCustomerResults: false,
+      customerSearchTimer: null,
+      showNewCustomerModal: false,
+      savingCustomer: false,
+      newCustomerError: '',
+      newCustomer: { name: '', phone: '', email: '', notes: '', gender: '' },
+
+      backendCategories: [],
+
+      customItem: {
+        name: '',
+        price: 500,
+        staff: 'Unassigned'
+      },
+
+      catalogType: 'services', // 'services' | 'products' | 'memberships'
+      products: [],
+      membershipTiers: [],
+      customerMembership: null,
+
+      categories: ['All', 'Haircuts', 'Spa & Facial', 'Color & Hair', 'Styling', 'Grooming', 'Treatments'],
+      staffList: {{ billing_staff | tojson }},
+      paymentModes: ['UPI', 'Cash', 'Card'],
+      paymentMethods: { upi: '', card_terminal: '', custom_methods: [] },
+      customPaymentNote: '',
+      taxSettings: {{ tax_settings | tojson if tax_settings is defined and tax_settings else "{}" }},
+      printerSettings: {{ printer_settings | tojson if printer_settings is defined and printer_settings else "{}" }},
+      taxEnabled: true,
+      taxInclusive: false,
+      taxRateInput: 18,
+
+
+      async init() {
+        await this.initTerminalConcurrencyGuard();
+        if (this.tier === 'studio') {
+          await this.loadStudioCloudDrafts();
+        } else if (this.tier === 'pro') {
+          this.loadProCookieDrafts();
+        }
+        this.restoreActiveTerminalState();
+
+        // Sync POS catalogs (services, retail products, membership tiers) + settings with backend
+        try {
+          const [svcRes, catRes, payRes, taxRes, prodRes, memRes] = await Promise.all([
+            fetch('/api/services'),
+            fetch('/api/categories'),
+            fetch('/api/settings/payment-methods'),
+            fetch('/api/settings/taxes'),
+            fetch('/api/products?active_only=1'),
+            fetch('/api/memberships/tiers?active_only=1')
+          ]);
+
+          if (svcRes.ok) {
+            const data = await svcRes.json();
+            if (data && data.length) {
+              this.services = data
+                .filter(s => Number(s.active) === 1)
+                .map(s => ({
+                  id: s.id,
+                  name: s.name,
+                  category: s.category,
+                  price: s.price,
+                  duration: s.duration,
+                  description: s.description
+                }));
+            }
+          }
+          if (catRes.ok) {
+            const catData = await catRes.json();
+            this.backendCategories = (catData.categories || []).map(c => c.name);
+          }
+          if (prodRes && prodRes.ok) {
+            const prodData = await prodRes.json();
+            this.products = (prodData.products || []).map(p => ({
+              id: p.id,
+              name: p.name,
+              category: p.category || 'Retail',
+              brand: p.brand || '',
+              sku: p.sku || '',
+              price: Number(p.price || 0),
+              stock_quantity: Number(p.stock_quantity || 0),
+              tax_rate: p.tax_rate != null ? Number(p.tax_rate) : 18
+            }));
+          }
+          if (memRes && memRes.ok) {
+            const memData = await memRes.json();
+            this.membershipTiers = (memData.tiers || []).map(t => ({
+              id: t.id,
+              name: t.name,
+              price: Number(t.price || 0),
+              validity_days: Number(t.validity_days || 365),
+              service_discount_pct: Number(t.service_discount_pct || 0),
+              product_discount_pct: Number(t.product_discount_pct || 0),
+              perks: Array.isArray(t.perks) ? t.perks : [],
+              description: t.description || ''
+            }));
+          }
+          if (payRes.ok) {
+            const payData = await payRes.json();
+            const methods = payData.methods || { upi: '', card_terminal: '', custom_methods: [] };
+            if (!Array.isArray(methods.custom_methods)) methods.custom_methods = [];
+            this.paymentMethods = methods;
+            const custom = methods.custom_methods || [];
+            this.paymentModes = ['UPI', 'Cash', 'Card', ...custom];
+            this.availableSplitMethods = [...new Set(['UPI', 'Cash', 'Card', ...custom, 'Bank Transfer', 'Cheque', 'Gift Card'])];
+          }
+          if (taxRes && taxRes.ok) {
+            const taxData = await taxRes.json();
+            if (taxData && taxData.tax_settings) {
+              this.taxSettings = taxData.tax_settings;
+            }
+          }
+          if (this.taxSettings) {
+            this.taxEnabled = this.taxSettings.enabled !== false;
+            this.taxInclusive = this.taxSettings.tax_type === 'inclusive';
+            this.taxRateInput = Number(this.taxSettings.tax_rate != null ? this.taxSettings.tax_rate : 18) || 18;
+          }
+        } catch (e) {
+          console.log("POS catalog sync failed — using cached fallback:", e);
+        } finally {
+          this.isLoading = false;
+        }
+        this.syncCategories();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      syncCategories() {
+        const fromServices = this.services.map(s => s.category);
+        this.categories = ['All', ...new Set([...this.backendCategories, ...fromServices])];
+      },
+
+      // ---------- Customer lookup ----------
+      onCustomerInput() {
+        this.customer = { id: null, name: '', phone: '' };
+        this.customerDues = null;
+        this.showCustomerResults = true;
+        clearTimeout(this.customerSearchTimer);
+        const q = this.customerQuery.trim();
+        if (q.length < 2) { this.customerResults = []; this.customerSearching = false; return; }
+        this.customerSearching = true;
+        this.customerSearchTimer = setTimeout(async () => {
+          try {
+            const res = await fetch('/api/customers/search?q=' + encodeURIComponent(q));
+            if (res.ok) {
+              const data = await res.json();
+              this.customerResults = Array.isArray(data) ? data : (Array.isArray(data.customers) ? data.customers : []);
+            } else {
+              this.customerResults = [];
+            }
+          } catch (e) {
+            console.log('Customer search failed:', e);
+            this.customerResults = [];
+          }
+          this.customerSearching = false;
+        }, 250);
+      },
+
+      selectCustomer(c) {
+        this.customer = { id: c.id, name: c.name, phone: c.phone, gender: c.gender || '', notes: c.notes || '' };
+        this.customerQuery = c.name;
+        this.showCustomerResults = false;
+        this.customerResults = [];
+        this.fetchCustomerDues(c.phone);
+        this.fetchCustomerMembership(c.id);
+        this.saveCurrentTerminalDraft();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      clearCustomer() {
+        this.customer = { id: null, name: '', phone: '', notes: '' };
+        this.customerQuery = '';
+        this.customerResults = [];
+        this.showCustomerResults = false;
+        this.customerDues = null;
+        this.customerMembership = null;
+        this.saveCurrentTerminalDraft();
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      formatMembershipExpiry(timestamp) {
+        if (!timestamp) return 'No expiry';
+        try {
+          const d = new Date(Number(timestamp) * 1000);
+          if (isNaN(d.getTime())) return String(timestamp);
+          return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        } catch (e) {
+          return String(timestamp);
+        }
+      },
+
+      async fetchCustomerMembership(customerId) {
+        if (!customerId) { this.customerMembership = null; return; }
+        try {
+          const res = await fetch(`/api/customers/${customerId}/membership`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.has_membership && data.active_membership) {
+              this.customerMembership = data.active_membership;
+              // Auto-apply membership discounts upon customer selection
+              this.applyMembershipDiscounts(true);
+            } else {
+              this.customerMembership = null;
+            }
+          } else {
+            this.customerMembership = null;
+          }
+        } catch (e) {
+          this.customerMembership = null;
+        }
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      async fetchCustomerDues(phone) {
+        if (!phone) { this.customerDues = null; return; }
+        try {
+          const res = await fetch('/api/customers/' + encodeURIComponent(phone) + '/dues');
+          if (res.ok) {
+            const data = await res.json();
+            this.customerDues = data;
+          } else {
+            this.customerDues = null;
+          }
+        } catch (e) {
+          this.customerDues = null;
+        }
+      },
+
+      openSettleDuesModal() {
+        if (!this.customerDues || !this.customerDues.dues || this.customerDues.dues.length === 0) {
+          window.uiToast('No past due bills found for this customer.', 'info');
+          return;
+        }
+        this.selectDueBillToSettle(this.customerDues.dues[0]);
+        this.showSettleDuesModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      selectDueBillToSettle(bill) {
+        this.selectedDueBill = bill;
+        this.settlePaymentAmount = bill.due_amount;
+        this.settlePaymentNotes = '';
+        this.settlePaymentMode = 'Cash';
+      },
+
+      async recordSettlementPayment() {
+        if (!this.selectedDueBill || !this.settlePaymentAmount || this.settlePaymentAmount <= 0) return;
+        if (this.processingSettlement) return;
+        this.processingSettlement = true;
+        try {
+          const res = await fetch(`/api/bills/${this.selectedDueBill.id}/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: Number(this.settlePaymentAmount),
+              payment_mode: this.settlePaymentMode,
+              notes: this.settlePaymentNotes
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            window.uiToast(`Settlement of ₹${this.settlePaymentAmount} recorded for Bill #${this.selectedDueBill.id}!`, 'success');
+            await this.fetchCustomerDues(this.customer.phone);
+            if (this.customerDues && this.customerDues.dues && this.customerDues.dues.length > 0) {
+              this.selectDueBillToSettle(this.customerDues.dues[0]);
+            } else {
+              this.showSettleDuesModal = false;
+            }
+          } else {
+            window.uiToast((data && data.message) || 'Failed to record settlement.', 'error');
+          }
+        } catch (e) {
+          window.uiToast('Network error recording settlement.', 'error');
+        }
+        this.processingSettlement = false;
+      },
+
+
+      // ---------- New customer dialog ----------
+      openNewCustomerModal() {
+        this.newCustomer = { name: '', phone: '', email: '', notes: '', gender: '' };
+        const q = this.customerQuery.trim();
+        if (q) {
+          const digits = q.replace(/\D/g, '');
+          if (digits.length >= 6) this.newCustomer.phone = digits.slice(0, 10);
+          else this.newCustomer.name = q;
+        }
+        this.newCustomerError = '';
+        this.showCustomerResults = false;
+        this.showNewCustomerModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      sanitizeCustomerPhone() {
+        this.newCustomer.phone = this.newCustomer.phone.replace(/\D/g, '').slice(0, 10);
+      },
+
+      async createCustomer() {
+        const nc = this.newCustomer;
+        if (!nc.name.trim()) { this.newCustomerError = 'Please enter the customer\u2019s name.'; return; }
+        if (!/^\d{10}$/.test(nc.phone.trim())) { this.newCustomerError = 'Phone number must be exactly 10 digits.'; return; }
+        this.savingCustomer = true;
+        this.newCustomerError = '';
+        try {
+          const res = await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: nc.name, phone: nc.phone, email: nc.email, notes: nc.notes, gender: nc.gender })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            this.selectCustomer(data.customer);
+            this.showNewCustomerModal = false;
+          } else if (res.status === 409 && data.existing) {
+            this.selectCustomer(data.existing);
+            this.showNewCustomerModal = false;
+          } else {
+            this.newCustomerError = (data && data.message) || 'Could not save the customer. Please try again.';
+          }
+        } catch (e) {
+          this.newCustomerError = 'Network error — could not save the customer.';
+        }
+        this.savingCustomer = false;
+      },
+
+      services: [
+        { id: 1, name: "Executive Men's Haircut", category: "Haircuts", price: 400, duration: 30, description: "Includes shampoo, hair wash, precision taper, and styling." },
+        { id: 2, name: "Women's Signature Layer Cut", category: "Haircuts", price: 750, duration: 45, description: "Custom consultation, wash, blowdry, and texture finish." },
+        { id: 3, name: "Hydra-Dew Glow Facial", category: "Spa & Facial", price: 1500, duration: 60, description: "Deep ultrasonic pore cleansing and serum infusion." },
+        { id: 4, name: "Luxury Organic Hair Spa", category: "Treatments", price: 1200, duration: 50, description: "Argan oil mask, steam therapy, and scalp massage." },
+        { id: 5, name: "Full Balayage & Toning", category: "Color & Hair", price: 3200, duration: 120, description: "Hand-painted highlights with gloss finish & bond repair." },
+        { id: 6, name: "Root Touch-up (Ammonia-Free)", category: "Color & Hair", price: 1100, duration: 45, description: "100% grey coverage with nourishing oils." },
+        { id: 7, name: "Beard Styling & Razor Shave", category: "Grooming", price: 250, duration: 20, description: "Hot towel wrap, beard oil, and precision razor outline." },
+        { id: 8, name: "Keratin Smooth Treatment", category: "Treatments", price: 4500, duration: 150, description: "Frizz-free silky smooth keratin infusion lasts 4 months." },
+        { id: 9, name: "Party Hair Styling & Curls", category: "Styling", price: 850, duration: 40, description: "Hollywood waves, tong curls, or sleek pin-straight look." },
+        { id: 10, name: "Brightening Charcoal Clean-Up", category: "Spa & Facial", price: 650, duration: 30, description: "Removes tan, blackheads, and controls excess oil." },
+      ],
+
+      billItems: [
+        { cartId: 1, id: 2, name: "Women's Signature Layer Cut", price: 750, qty: 1, staff: 'Alex Rivera (Senior)' },
+        { cartId: 2, id: 3, name: "Hydra-Dew Glow Facial", price: 1500, qty: 1, staff: 'Sarah Jenkins (Skin Specialist)' }
+      ],
+
+      get filteredServices() {
+        return this.services.filter(s => {
+          const matchCat = this.selectedCategory === 'All' || s.category === this.selectedCategory;
+          const matchQuery = !this.searchQuery || s.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || (s.category && s.category.toLowerCase().includes(this.searchQuery.toLowerCase()));
+          return matchCat && matchQuery;
+        });
+      },
+
+      get filteredProducts() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.products.filter(p => {
+          if (!q) return true;
+          return (p.name && p.name.toLowerCase().includes(q)) ||
+                 (p.category && p.category.toLowerCase().includes(q)) ||
+                 (p.brand && p.brand.toLowerCase().includes(q)) ||
+                 (p.sku && p.sku.toLowerCase().includes(q));
+        });
+      },
+
+      get filteredMemberships() {
+        const q = (this.searchQuery || '').trim().toLowerCase();
+        return this.membershipTiers.filter(t => {
+          if (!q) return true;
+          return (t.name && t.name.toLowerCase().includes(q)) ||
+                 (t.description && t.description.toLowerCase().includes(q));
+        });
+      },
+
+      // Separate workspace bill demo items by active catalog tab without losing data across categories
+      get displayedBillItems() {
+        if (!this.billItems || this.billItems.length === 0) return [];
+        if (this.catalogType === 'services') {
+          return this.billItems.filter(i => !i.type || i.type === 'service');
+        } else if (this.catalogType === 'products') {
+          return this.billItems.filter(i => i.type === 'product');
+        } else if (this.catalogType === 'memberships') {
+          return this.billItems.filter(i => i.type === 'membership');
+        }
+        return this.billItems;
+      },
+
+      get otherCategoryItemsCount() {
+        return (this.billItems || []).length - (this.displayedBillItems || []).length;
+      },
+
+      removeCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.removeItem(idx);
+        }
+      },
+
+      decrementCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.decrementItem(idx);
+        }
+      },
+
+      incrementCartItem(item) {
+        const idx = this.billItems.findIndex(i => i.cartId === item.cartId);
+        if (idx !== -1) {
+          this.incrementItem(idx);
+        }
+      },
+
+      addToBill(service) {
+        let finalPrice = Number(service.price);
+        if (this.customerMembership && Number(this.customerMembership.service_discount_pct) > 0) {
+          finalPrice = Math.round(finalPrice * (1 - (Number(this.customerMembership.service_discount_pct) / 100)));
+        }
+        const existing = this.billItems.find(i => i.id === service.id && (!i.type || i.type === 'service'));
+        if (existing) {
+          existing.qty++;
+        } else {
+          this.billItems.push({
+            cartId: Date.now() + Math.random(),
+            id: service.id,
+            name: service.name,
+            catalogPrice: Number(service.price),
+            price: finalPrice,
+            qty: 1,
+            type: 'service',
+            staff: this.staffList[0] || 'Unassigned',
+            isSplitStaff: false,
+            staff2: this.staffList[1] || this.staffList[0] || 'Unassigned',
+            splitRatio1: 50,
+            splitRatio2: 50
+          });
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      addProductToBill(product) {
+        if (product.stock_quantity <= 0) {
+          window.uiToast('Product is currently out of stock.', 'warning');
+          return;
+        }
+        let finalPrice = Number(product.price);
+        if (this.customerMembership && Number(this.customerMembership.product_discount_pct) > 0) {
+          finalPrice = Math.round(finalPrice * (1 - (Number(this.customerMembership.product_discount_pct) / 100)));
+        }
+        const existing = this.billItems.find(i => i.id === product.id && i.type === 'product');
+        if (existing) {
+          if (existing.qty >= product.stock_quantity) {
+            window.uiToast(`Cannot add more: Only ${product.stock_quantity} available in stock.`, 'warning');
+            return;
+          }
+          existing.qty++;
+        } else {
+          this.billItems.push({
+            cartId: Date.now() + Math.random(),
+            id: product.id,
+            product_id: product.id,
+            name: product.name,
+            catalogPrice: Number(product.price),
+            price: finalPrice,
+            qty: 1,
+            type: 'product',
+            tax_rate: product.tax_rate != null ? Number(product.tax_rate) : 18,
+            sku: product.sku || '',
+            staff: this.staffList[0] || 'Unassigned',
+            isSplitStaff: false,
+            staff2: this.staffList[1] || this.staffList[0] || 'Unassigned',
+            splitRatio1: 50,
+            splitRatio2: 50
+          });
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      addMembershipToBill(tier) {
+        const existing = this.billItems.find(i => i.type === 'membership');
+        if (existing) {
+          window.uiToast('Only one membership tier can be sold per invoice.', 'info');
+          return;
+        }
+        this.billItems.push({
+          cartId: Date.now() + Math.random(),
+          id: tier.id,
+          tier_id: tier.id,
+          name: tier.name + ' Membership',
+          catalogPrice: Number(tier.price),
+          price: Number(tier.price),
+          qty: 1,
+          type: 'membership',
+          validity_days: tier.validity_days,
+          service_discount_pct: tier.service_discount_pct,
+          product_discount_pct: tier.product_discount_pct,
+          staff: 'Unassigned',
+          isSplitStaff: false,
+          staff2: 'Unassigned',
+          splitRatio1: 50,
+          splitRatio2: 50
+        });
+        window.uiToast(`Added ${tier.name} membership to invoice.`, 'success');
+        this.saveCurrentTerminalDraft();
+      },
+
+      applyMembershipDiscounts(silent = false) {
+        if (!this.customerMembership) {
+          if (!silent) window.uiToast('Selected customer has no active membership.', 'info');
+          return;
+        }
+        const svcPct = Number(this.customerMembership.service_discount_pct) || 0;
+        const prodPct = Number(this.customerMembership.product_discount_pct) || 0;
+        let appliedCount = 0;
+
+        this.billItems.forEach(item => {
+          const catPrice = Number(item.catalogPrice != null ? item.catalogPrice : item.price);
+          if ((!item.type || item.type === 'service') && svcPct > 0) {
+            item.price = Math.round(catPrice * (1 - (svcPct / 100)));
+            appliedCount++;
+          } else if (item.type === 'product' && prodPct > 0) {
+            item.price = Math.round(catPrice * (1 - (prodPct / 100)));
+            appliedCount++;
+          }
+        });
+
+        if (appliedCount > 0) {
+          window.uiToast(`Applied ${this.customerMembership.tier_name} member discounts to ${appliedCount} line item(s)!`, 'success');
+        } else if (!silent) {
+          window.uiToast('No eligible service or product items in cart to discount.', 'info');
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      getItemCount(itemId, itemType = 'service') {
+        const item = this.billItems.find(i => i.id === itemId && (itemType === 'service' ? (!i.type || i.type === 'service') : i.type === itemType));
+        return item ? item.qty : 0;
+      },
+
+      incrementItem(index) {
+        const item = this.billItems[index];
+        if (item && item.type === 'product') {
+          const prod = this.products.find(p => p.id === item.id);
+          if (prod && item.qty >= prod.stock_quantity) {
+            window.uiToast(`Max available stock (${prod.stock_quantity}) reached.`, 'warning');
+            return;
+          }
+        }
+        if (item && item.type === 'membership') {
+          window.uiToast('Memberships are sold in quantity of 1.', 'info');
+          return;
+        }
+        this.billItems[index].qty++;
+        this.saveCurrentTerminalDraft();
+      },
+
+      decrementItem(index) {
+        if (this.billItems[index].qty > 1) {
+          this.billItems[index].qty--;
+        } else {
+          this.removeItem(index);
+        }
+        this.saveCurrentTerminalDraft();
+      },
+
+      removeItem(index) {
+        this.billItems.splice(index, 1);
+        this.saveCurrentTerminalDraft();
+      },
+
+      async resetBill() {
+        const ok = await window.uiConfirm({
+          title: "Clear current invoice?",
+          message: "All items, the discount and the attached customer will be removed from this bill.",
+          confirmText: "Clear Bill",
+          cancelText: "Keep Editing",
+          danger: true
+        });
+        if (!ok) return;
+        this.billItems = [];
+        this.discountValue = 0;
+        this.customer = { name: '', phone: '' };
+        this.customerQuery = '';
+        this.showCustomerResults = false;
+        if (this.tier === 'studio') {
+          fetch(`/api/terminals/drafts/${this.activeTerminalId}`, { method: 'DELETE' }).catch(() => {});
+        } else if (this.tier === 'pro') {
+          document.cookie = `aurapos_draft_u${this.accountId}_t${this.activeTerminalId}=; path=/; max-age=0`;
+        }
+        this.saveCurrentTerminalDraft();
+        window.uiToast("Invoice cleared.", "info");
+      },
+
+      addCustomItem() {
+        if (!this.customItem.name || !this.customItem.price) {
+          window.uiToast("Please specify item name and price.", "warning");
+          return;
+        }
+        this.billItems.push({
+          cartId: Date.now(),
+          id: Date.now(),
+          name: this.customItem.name,
+          catalogPrice: Number(this.customItem.price),
+          price: Number(this.customItem.price),
+          qty: 1,
+          staff: this.customItem.staff || 'Unassigned',
+          isSplitStaff: false,
+          staff2: 'Unassigned',
+          splitRatio1: 50,
+          splitRatio2: 50
+        });
+        this.customItem.name = '';
+        this.showCustomItemModal = false;
+        this.saveCurrentTerminalDraft();
+      },
+
+
+      toggleDiscountMode() {
+        this.discountType = this.discountType === 'percent' ? 'flat' : 'percent';
+      },
+
+      get subtotal() {
+        return this.billItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+      },
+
+      get discountAmount() {
+        if (this.discountType === 'percent') {
+          return Math.round((this.subtotal * (this.discountValue || 0)) / 100);
+        }
+        return Math.min(this.subtotal, this.discountValue || 0);
+      },
+
+      get taxableAmount() {
+        return Math.max(0, this.subtotal - this.discountAmount);
+      },
+
+      get taxRate() {
+        if (!this.taxEnabled) return 0;
+        return Number(this.taxRateInput) || 0;
+      },
+
+      get taxLabel() {
+        if (!this.taxEnabled || this.taxRate === 0) {
+          return 'Tax (Exempt / 0%)';
+        }
+        const name = (this.taxSettings && this.taxSettings.tax_name) || 'GST';
+        const rate = this.taxRate;
+        const suffix = this.taxInclusive ? ' (Incl. in Total)' : '';
+        if (this.taxSettings && this.taxSettings.split_tax && name.toUpperCase().includes('GST')) {
+          const half = rate / 2;
+          const halfStr = Number.isInteger(half) ? half : half.toFixed(1);
+          return `${name} (${rate}% : CGST ${halfStr}% + SGST ${halfStr}%)${suffix}`;
+        }
+        return `${name} (${rate}%)${suffix}`;
+      },
+
+      get taxAmount() {
+        if (!this.taxEnabled) {
+          return 0;
+        }
+
+        const globalRate = this.taxRate;
+        const sub = this.subtotal;
+        const discRatio = sub > 0 ? (this.discountAmount / sub) : 0;
+
+        let totalTax = 0;
+        for (const item of this.billItems) {
+          // If product has its own tax_rate, use that rate; otherwise use global taxRate
+          const rate = (item.type === 'product' && item.tax_rate != null) ? Number(item.tax_rate) : globalRate;
+          if (rate <= 0) continue;
+
+          const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
+          const itemTaxable = Math.max(0, itemTotal * (1 - discRatio));
+
+          if (this.taxInclusive) {
+            const base = itemTaxable / (1 + (rate / 100));
+            totalTax += (itemTaxable - base);
+          } else {
+            totalTax += (itemTaxable * (rate / 100));
+          }
+        }
+
+        return Math.round(totalTax);
+      },
+
+      get grandTotal() {
+        if (!this.taxEnabled || this.taxInclusive) {
+          return this.taxableAmount;
+        }
+        return this.taxableAmount + this.taxAmount;
+      },
+
+      get paymentAmount() {
+        const received = Number(this.amountReceived) || 0;
+        return Math.max(0, Math.min(this.grandTotal, received));
+      },
+
+      get dueAmount() {
+        const rec = Number(this.amountReceived);
+        return Math.max(0, this.grandTotal - (isNaN(rec) ? 0 : rec));
+      },
+
+      get paymentStatus() {
+        const rec = Number(this.amountReceived) || 0;
+        if (rec >= this.grandTotal && this.grandTotal > 0) return 'PAID';
+        if (rec > 0) return 'PARTIALLY_PAID';
+        return 'UNPAID';
+      },
+
+      // Split Payment Calculations & Helpers
+      get splitTotal() {
+        return this.splitRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      },
+
+      get splitRemaining() {
+        return this.paymentAmount - this.splitTotal;
+      },
+
+      enableSplitMode() {
+        this.isSplitMode = true;
+        const half = Math.floor(this.paymentAmount / 2);
+        this.splitRows = [
+          { method: 'UPI', amount: half },
+          { method: 'Cash', amount: this.paymentAmount - half }
+        ];
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      addSplitRow() {
+        const unused = this.availableSplitMethods.find(m => !this.splitRows.some(r => r.method === m)) || 'Card';
+        this.splitRows.push({ method: unused, amount: Math.max(0, this.splitRemaining) });
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      removeSplitRow(index) {
+        if (this.splitRows.length <= 2) {
+          window.uiToast('At least 2 payment methods are required for split tender.', 'warning');
+          return;
+        }
+        this.splitRows.splice(index, 1);
+      },
+
+      fillSplitRemaining() {
+        if (this.splitRows.length > 0 && this.splitRemaining > 0) {
+          const last = this.splitRows[this.splitRows.length - 1];
+          last.amount = (Number(last.amount) || 0) + this.splitRemaining;
+        }
+      },
+
+      splitEqually() {
+        if (this.splitRows.length === 0) return;
+        const count = this.splitRows.length;
+        const base = Math.floor(this.paymentAmount / count);
+        let rem = this.paymentAmount - (base * count);
+        this.splitRows.forEach((r, idx) => {
+          r.amount = base + (idx === count - 1 ? rem : 0);
+        });
+      },
+
+      toggleSkeleton() {
+        this.isLoading = true;
+        setTimeout(() => {
+          this.isLoading = false;
+        }, 600);
+      },
+
+      openPaymentModal() {
+        this.amountReceived = this.grandTotal;
+        this.cashReceived = this.grandTotal;
+        const half = Math.floor(this.grandTotal / 2);
+        this.splitRows = [
+          { method: 'UPI', amount: half },
+          { method: 'Cash', amount: this.grandTotal - half }
+        ];
+        this.showPaymentModal = true;
+        this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+      },
+
+      async finalizePayment() {
+        if (this.billItems.length === 0) {
+          window.uiToast('Add at least one service before collecting payment.', 'warning');
+          return;
+        }
+        if (!this.isSplitMode && this.selectedPaymentMode === 'Cash' && this.amountReceived > 0 && (this.cashReceived < this.amountReceived)) {
+          window.uiToast('Cash received is less than the amount being paid today.', 'error');
+          return;
+        }
+        if (this.isSplitMode) {
+          if (this.splitRows.length < 2) {
+            window.uiToast('Split payment requires at least 2 payment methods.', 'error');
+            return;
+          }
+          if (this.splitRemaining !== 0) {
+            window.uiToast(`Split amount does not match today's payment (₹${this.splitRemaining} difference).`, 'error');
+            return;
+          }
+          if (this.splitRows.some(r => !r.amount || Number(r.amount) <= 0)) {
+            window.uiToast('Each split payment method must have an amount greater than 0.', 'error');
+            return;
+          }
+        }
+
+        if (this.processingPayment) return;
+        this.processingPayment = true;
+
+        try {
+          let modeString = this.selectedPaymentMode;
+          if (!this.isSplitMode && !['UPI', 'Cash', 'Card'].includes(this.selectedPaymentMode) && (this.customPaymentNote || '').trim()) {
+            modeString = `${this.selectedPaymentMode} (${this.customPaymentNote.trim()})`;
+          }
+          let splitsData = null;
+          if (this.isSplitMode) {
+            splitsData = this.splitRows.map(r => ({ method: r.method, amount: Number(r.amount) }));
+            modeString = `Split (${splitsData.map(s => s.method + ': ₹' + s.amount).join(', ')})`;
+          }
+
+          const payload = {
+            terminal_id: this.activeTerminalId,
+            client_name: (this.customer && this.customer.name) || 'Walk-in',
+            client_phone: (this.customer && this.customer.phone) || '',
+            subtotal: this.subtotal,
+            discount: this.discountAmount,
+            tax: this.taxAmount,
+            grand_total: this.grandTotal,
+            amount_paid: Number(this.amountReceived) || 0,
+            due_amount: this.dueAmount,
+            payment_status: this.paymentStatus,
+            tax_enabled: this.taxEnabled,
+            tax_inclusive: this.taxInclusive,
+            tax_rate: this.taxRate,
+            payment_mode: modeString,
+            splits: splitsData,
+            items: this.billItems.map(i => ({
+              name: i.name,
+              type: i.type || 'service',
+              id: i.id,
+              product_id: i.product_id || (i.type === 'product' ? i.id : null),
+              tier_id: i.tier_id || (i.type === 'membership' ? i.id : null),
+              tax_rate: i.tax_rate != null ? Number(i.tax_rate) : null,
+              catalog_price: Number(i.catalogPrice != null ? i.catalogPrice : i.price),
+              price: Number(i.price),
+              unit_price: Number(i.price),
+              qty: i.qty,
+              staff: i.staff || 'Unassigned',
+              staff2: i.isSplitStaff ? i.staff2 : null,
+              split_ratio: i.isSplitStaff ? i.splitRatio1 : null,
+              staff_split: i.isSplitStaff ? {
+                staff1: i.staff,
+                ratio1: i.splitRatio1,
+                staff2: i.staff2,
+                ratio2: i.splitRatio2
+              } : null
+            }))
+          };
+
+          const res = await fetch('/api/bills', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            const savedBill = {
+              bill_id: data.bill_id,
+              client_name: payload.client_name,
+              client_phone: payload.client_phone,
+              items: JSON.parse(JSON.stringify(this.billItems)),
+              subtotal: this.subtotal,
+              discount: this.discountAmount,
+              tax: this.taxAmount,
+              grand_total: this.grandTotal,
+              amount_paid: payload.amount_paid,
+              due_amount: payload.due_amount,
+              payment_status: payload.payment_status,
+              payment_mode: modeString,
+              splits: splitsData,
+              date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString()
+            };
+            this.lastSavedBill = savedBill;
+            this.lastBillId = data.bill_id;
+            this.showPaymentModal = false;
+            this.showBillSavedModal = true;
+            this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+
+            // Reset current cart & customer
+            this.billItems = [];
+            this.customer = { name: '', phone: '' };
+            this.customerQuery = '';
+            this.customerDues = null;
+            this.discountValue = 0;
+            this.customPaymentNote = '';
+            if (this.tier === 'studio') {
+              fetch(`/api/terminals/drafts/${this.activeTerminalId}`, { method: 'DELETE' }).catch(() => {});
+            } else if (this.tier === 'pro') {
+              document.cookie = `aurapos_draft_u${this.accountId}_t${this.activeTerminalId}=; path=/; max-age=0`;
+            }
+            this.saveCurrentTerminalDraft();
+            window.uiToast(`Bill #${data.bill_id} recorded!`, 'success');
+          } else {
+
+            window.uiToast((data && data.message) || 'Could not record payment. Please try again.', 'error');
+          }
+        } catch (e) {
+          window.uiToast('Network error — bill was not saved. Please retry.', 'error');
+        }
+        this.processingPayment = false;
+      },
+
+      printLastBill() {
+        if (!this.lastSavedBill && this.billItems.length === 0) {
+          window.uiToast('No bill available to print.', 'warning');
+          return;
+        }
+        this.$nextTick(() => {
+          window.print();
+        });
+      },
+
+      printReceipt() {
+        window.print();
+      },
+
+      // Receipt printing computed helpers
+      get printItems() {
+        if (this.billItems && this.billItems.length > 0) return this.billItems;
+        if (this.lastSavedBill && this.lastSavedBill.items) return this.lastSavedBill.items;
+        return [];
+      },
+      get printServiceItems() {
+        return this.printItems.filter(i => !i.type || i.type === 'service');
+      },
+      get printProductItems() {
+        return this.printItems.filter(i => i.type === 'product');
+      },
+      get printSubscriptionItems() {
+        return this.printItems.filter(i => i.type === 'membership');
+      },
+      get printSubtotal() {
+        if (this.billItems && this.billItems.length > 0) return this.subtotal;
+        return this.lastSavedBill ? this.lastSavedBill.subtotal : 0;
+      },
+      get printDiscount() {
+        if (this.billItems && this.billItems.length > 0) return this.discountAmount;
+        return this.lastSavedBill ? this.lastSavedBill.discount : 0;
+      },
+      get printTax() {
+        if (this.billItems && this.billItems.length > 0) return this.taxAmount;
+        return this.lastSavedBill ? this.lastSavedBill.tax : 0;
+      },
+      get printGrandTotal() {
+        if (this.billItems && this.billItems.length > 0) return this.grandTotal;
+        return this.lastSavedBill ? this.lastSavedBill.grand_total : 0;
+      },
+      get printAmountPaid() {
+        if (this.lastSavedBill && this.lastSavedBill.amount_paid != null) return this.lastSavedBill.amount_paid;
+        return Number(this.amountReceived) || 0;
+      },
+      get printDueAmount() {
+        if (this.lastSavedBill && this.lastSavedBill.due_amount != null) return this.lastSavedBill.due_amount;
+        return this.dueAmount;
+      },
+      get printCustomer() {
+        if (this.billItems && this.billItems.length > 0) return this.customer;
+        return this.lastSavedBill ? { name: this.lastSavedBill.client_name, phone: this.lastSavedBill.client_phone } : { name: 'Walk-in', phone: 'N/A' };
+      },
+      get printPaymentSummary() {
+        if (this.billItems && this.billItems.length > 0) {
+          if (this.isSplitMode) return 'Split Tender';
+          return this.selectedPaymentMode;
+        }
+        return this.lastSavedBill ? this.lastSavedBill.payment_mode : this.selectedPaymentMode;
+      },
+      get printSplits() {
+        if (this.billItems && this.billItems.length > 0 && this.isSplitMode) {
+          return this.splitRows;
+        }
+        return (this.lastSavedBill && this.lastSavedBill.splits) ? this.lastSavedBill.splits : null;
+      },
+      get printInvoiceId() {
+        return (this.lastSavedBill && this.lastSavedBill.bill_id) ? this.lastSavedBill.bill_id : (this.lastBillId || 'CURRENT');
+      },
+      get printDate() {
+        return (this.lastSavedBill && this.lastSavedBill.date) ? this.lastSavedBill.date : (new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString());
+      }
+    };
+  }
+</script>
+{% endblock %}

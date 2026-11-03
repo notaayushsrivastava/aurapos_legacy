@@ -884,9 +884,97 @@ class TestAllFeatures(unittest.TestCase):
         self.assertEqual(check2_data['active_membership']['tier_id'], tier_id)
         self.assertEqual(check2_data['active_membership']['tier_name'], tier_payload['name'])
 
+    def test_reports_csv_exports_and_staff_splits(self):
+        with self.client.session_transaction() as sess:
+            sess['id'] = 1
+            sess['username'] = 'admin'
+            sess['auth_level'] = 'admin'
+
+        # 1. Create a bill with split staff on service, product, and membership
+        split_items_bill = {
+            'client_name': 'Meera Kapoor',
+            'client_phone': '9812345678',
+            'subtotal': 4500,
+            'discount': 0,
+            'tax': 0,
+            'grand_total': 4500,
+            'amount_paid': 4500,
+            'payment_mode': 'UPI',
+            'items': [
+                {
+                    'name': 'Balayage Hair Color',
+                    'type': 'service',
+                    'price': 2000,
+                    'qty': 1,
+                    'staff': 'Rohan, Priya',
+                    'staff_split': {
+                        'enabled': True,
+                        'stylist1': 'Rohan',
+                        'ratio1': 60,
+                        'stylist2': 'Priya',
+                        'ratio2': 40
+                    }
+                },
+                {
+                    'name': 'Moroccan Argan Shampoo',
+                    'type': 'product',
+                    'price': 1000,
+                    'qty': 1,
+                    'staff': 'Rohan, Sonia',
+                    'staff_split': {
+                        'enabled': True,
+                        'stylist1': 'Rohan',
+                        'ratio1': 50,
+                        'stylist2': 'Sonia',
+                        'ratio2': 50
+                    }
+                },
+                {
+                    'name': 'Gold VIP Membership',
+                    'type': 'membership',
+                    'price': 1500,
+                    'qty': 1,
+                    'staff': 'Priya, Sonia',
+                    'staff_split': {
+                        'enabled': True,
+                        'stylist1': 'Priya',
+                        'ratio1': 70,
+                        'stylist2': 'Sonia',
+                        'ratio2': 30
+                    }
+                }
+            ]
+        }
+        res = self.client.post('/api/bills', json=split_items_bill)
+        self.assertEqual(res.status_code, 200)
+        b_data = res.get_json()
+        self.assertTrue(b_data['success'])
+
+        # 2. Test Invoices & Recoverables CSV Export
+        inv_res = self.client.get('/api/reports/export/invoices-csv')
+        self.assertEqual(inv_res.status_code, 200)
+        self.assertEqual(inv_res.mimetype, 'text/csv')
+        csv_text = inv_res.data.decode('utf-8')
+        lines = [line.strip() for line in csv_text.splitlines() if line.strip()]
+        self.assertTrue(len(lines) >= 2)
+        expected_header = 'sno,bill-id,product_name,price,staff(comma separated if mulitple),date,time'
+        self.assertEqual(lines[0].replace('"', ''), expected_header)
+        # Verify comma-separated staff appears in line items
+        self.assertTrue(any('Rohan, Priya' in line for line in lines))
+
+        # 3. Test Staff Data CSV Export
+        staff_res = self.client.get('/api/reports/export/staff-csv')
+        self.assertEqual(staff_res.status_code, 200)
+        self.assertEqual(staff_res.mimetype, 'text/csv')
+        staff_csv_text = staff_res.data.decode('utf-8')
+        # Verify per-staff sheet header and table headers
+        self.assertIn('sno,bill-id,service_name,contribution,date,time', staff_csv_text.replace('"', ''))
+        self.assertTrue('Sheet: Rohan' in staff_csv_text or 'Sheet:' in staff_csv_text)
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 
